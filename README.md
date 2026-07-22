@@ -51,6 +51,16 @@ For embedded distributions that need an explicit runtime home, also set `CHORDPI
 npm start
 ```
 
+## Unit tests
+
+Run the complete JavaScript and Python unit-test suite:
+
+```text
+npm test
+```
+
+Use `npm run test:unit` for the Electron/renderer tests or `npm run test:python` for the backend tests. The Python test launcher follows ChordPilot's interpreter rules and supports `CHORDPILOT_PYTHON` plus `CHORDPILOT_PYTHONHOME` when an explicit runtime is needed.
+
 ## Backend CLI
 
 Analyse audio:

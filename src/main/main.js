@@ -203,6 +203,7 @@ function httpsJson(url) {
 
 function cleanMetadataSearchText(value) {
   return String(value || "")
+    .trim()
     .replace(/\.[a-z0-9]{2,5}$/i, "")
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
@@ -415,10 +416,11 @@ function normalizeYoutubeUrl(rawUrl) {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    if (!host.includes("youtube.com") && !host.includes("youtu.be")) {
+    const isYoutubeHost = host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be";
+    if (!isYoutubeHost) {
       throw new Error("Only YouTube links are supported.");
     }
-    if (host.includes("youtu.be")) {
+    if (host === "youtu.be") {
       const id = url.pathname.replace(/^\/+|\/+$/g, "");
       return id ? `https://www.youtube.com/watch?v=${encodeURIComponent(id)}` : value;
     }

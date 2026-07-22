@@ -1,6 +1,6 @@
 function isTypingTarget(target) {
   const tag = target?.tagName?.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable;
+  return Boolean(tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable);
 }
 
 function togglePlayback() {

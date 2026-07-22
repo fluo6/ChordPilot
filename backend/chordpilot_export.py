@@ -119,12 +119,20 @@ def parse_chord_symbol(symbol: str) -> tuple[str, str]:
         suffix = clean[1:]
 
     suffix_lower = suffix.lower()
-    if suffix_lower.startswith("m") and not suffix_lower.startswith("maj"):
-        return root, "minor"
-    if "7" in suffix_lower:
-        return root, "dominant"
     if suffix_lower.startswith("dim"):
         return root, "diminished"
+    if suffix_lower.startswith("aug") or suffix_lower.startswith("+"):
+        return root, "augmented"
+    if suffix_lower.startswith("m") and not suffix_lower.startswith("maj"):
+        if "7" in suffix_lower:
+            return root, "minor-seventh"
+        return root, "minor"
+    if suffix_lower.startswith("maj7"):
+        return root, "major-seventh"
+    if "7" in suffix_lower:
+        return root, "dominant"
+    if suffix_lower.startswith("sus"):
+        return root, "suspended-fourth"
     return root, "major"
 
 def parse_time_signature(value: str) -> tuple[int, int]:
