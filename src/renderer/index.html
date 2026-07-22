@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChordPilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside id="leftPane" class="left-pane">
+        <button id="leftPaneToggle" class="left-pane-toggle" type="button" title="Collapse navigation">&lt;</button>
+        <div class="nav-brand">
+          <strong>ChordPilot</strong>
+          <span>Projects</span>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item active" type="button" data-view="home" title="Home">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h5v-6h4v6h5V9.5" /></svg>
+            </span>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-item project-nav" type="button" data-editor-view="arrange" title="Song">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
+            </span>
+            <span class="nav-label">Song</span>
+          </button>
+          <button class="nav-item project-nav" type="button" data-editor-view="analysis" title="Analysis">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>
+            </span>
+            <span class="nav-label">Analysis</span>
+          </button>
+          <button class="nav-item project-nav" type="button" data-editor-view="log" title="Log">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
+            </span>
+            <span class="nav-label">Log</span>
+          </button>
+          <button class="nav-item project-nav" type="button" data-editor-view="table" title="Table">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z" /><path d="M4 10h16" /><path d="M4 15h16" /><path d="M10 5v14" /><path d="M16 5v14" /></svg>
+            </span>
+            <span class="nav-label">Table</span>
+          </button>
+          <button class="nav-item" type="button" data-view="help" title="Help">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.8 2.8 0 0 1 5.2 1.4c0 2-2.7 2.3-2.7 4.1" /><path d="M12 18h.01" /></svg>
+            </span>
+            <span class="nav-label">Help</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main id="homeView" class="home-view app-view">
+        <section class="home-head">
+          <div>
+            <h1>ChordPilot</h1>
+            <p>Open a song project, resume a saved session, or start a new analysis job.</p>
+          </div>
+          <div class="home-actions">
+            <button id="homeNewProjectBtn" type="button">New Project</button>
+            <button id="homeOpenSessionBtn" type="button">Open Session</button>
+          </div>
+        </section>
+
+        <section class="home-grid">
+          <section class="home-panel">
+            <div class="home-panel-head">
+              <strong>Current Project</strong>
+              <button id="homeGoSongBtn" type="button" disabled>Open Song</button>
+            </div>
+            <div id="currentProjectCard" class="current-project-card">
+              <span>No project selected</span>
+            </div>
+          </section>
+
+          <section class="home-panel youtube-panel">
+            <div class="home-panel-head">
+              <strong>YouTube Source</strong>
+            </div>
+            <form id="youtubeStartForm" class="youtube-start-form">
+              <label>
+                Link
+                <input id="youtubeUrlInput" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+              </label>
+              <button id="youtubeStartBtn" type="submit">Start From Link</button>
+              <span id="youtubeSourceHint">Downloads audio as MP3, then opens it as a new project.</span>
+            </form>
+          </section>
+
+          <section class="home-panel">
+            <div class="home-panel-head">
+              <strong>Recent Sessions</strong>
+              <button id="clearRecentBtn" type="button">Clear</button>
+            </div>
+            <div id="recentSessionsList" class="recent-sessions-list"></div>
+          </section>
+
+          <section class="home-panel">
+            <div class="home-panel-head">
+              <strong>Jobs</strong>
+            </div>
+            <div id="jobList" class="job-list">
+              <span>No analysis jobs yet</span>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <main id="helpView" class="help-view app-view hidden">
+        <section class="help-paper">
+          <header class="help-head">
+            <div>
+              <h1>ChordPilot Help</h1>
+              <p>Usage notes and a compact technical map of the analysis pipeline.</p>
+            </div>
+          </header>
+
+          <section class="help-grid">
+            <article class="help-section">
+              <h2>Basic Usage</h2>
+              <ol>
+                <li>Choose an MP3 or WAV, then set up the tempo grid if the song needs manual alignment.</li>
+                <li>Preview the grid with the metronome, set the analysis range if needed, then run Analyze.</li>
+                <li>Use Song to adjust title, key, tempo, tuning, and playback speed.</li>
+                <li>Edit bars from the Arrangement lane, Bar Detail, or the Table view.</li>
+                <li>Use Arrangement Follow to keep the timeline on the playback cursor.</li>
+                <li>Export the cleaned chart as TXT, CSV, JSON, or MusicXML.</li>
+              </ol>
+            </article>
+
+            <article class="help-section">
+              <h2>Tempo Setup</h2>
+              <ol>
+                <li>Start playback near the first useful musical section.</li>
+                <li>Tap the downbeat key on beat 1 of each bar, and tap the beat key for the other beats.</li>
+                <li>Use the generated grid to confirm BPM, downbeat, and bar alignment before analysis.</li>
+                <li>Set an analysis start and end when intros, count-ins, silence, or outros should be skipped.</li>
+                <li>Keep full-timeline mode when playback should preserve the original song timing, or chart only the selected range for a trimmed chart.</li>
+              </ol>
+            </article>
+
+            <article class="help-section help-wide">
+              <h2>Hotkeys</h2>
+              <dl class="help-defs help-keys">
+                <dt><kbd>Space</kbd></dt>
+                <dd>Play or pause the source audio.</dd>
+                <dt><kbd>D</kbd></dt>
+                <dd>Tap a downbeat, usually beat 1 of the bar, while Tempo Setup is active.</dd>
+                <dt><kbd>F</kbd></dt>
+                <dd>Tap the other beats in the bar while Tempo Setup is active.</dd>
+                <dt><kbd>[</kbd></dt>
+                <dd>Set analysis start at the current playhead position.</dd>
+                <dt><kbd>]</kbd></dt>
+                <dd>Set analysis end at the current playhead position.</dd>
+                <dt><kbd>\</kbd></dt>
+                <dd>Clear the current analysis range.</dd>
+                <dt><kbd>Backspace</kbd></dt>
+                <dd>Undo the most recent tempo tap or range action.</dd>
+                <dt><kbd>Esc</kbd></dt>
+                <dd>Leave Tempo Setup or cancel the current setup action.</dd>
+              </dl>
+            </article>
+
+            <article class="help-section">
+              <h2>Views</h2>
+              <dl class="help-defs">
+                <dt>Song</dt>
+                <dd>Transport, arrangement lanes, chords, beats, lyrics, stems, and bar detail.</dd>
+                <dt>Analysis</dt>
+                <dd>Controls for tempo range, key hints, chord source, stems, cache, and lyrics.</dd>
+                <dt>Table</dt>
+                <dd>Dense editing plus chart renderers for grid, iReal-style, and ChordPro text.</dd>
+                <dt>Log</dt>
+                <dd>Backend progress and analysis diagnostics.</dd>
+              </dl>
+            </article>
+
+            <article class="help-section help-wide">
+              <h2>Tech Stack Map</h2>
+              <div class="stack-map" aria-label="ChordPilot technical stack map">
+                <div class="stack-stage">
+                  <strong>Desktop + Decode</strong>
+                  <div class="stack-libs">
+                    <a class="stack-lib" href="https://www.electronjs.org/" target="_blank" rel="noreferrer" title="Electron desktop shell">
+                      <img src="https://cdn.simpleicons.org/electron/9FEAF9" alt="" />
+                      <span>Electron</span>
+                    </a>
+                    <a class="stack-lib" href="https://ffmpeg.org/" target="_blank" rel="noreferrer" title="FFmpeg decode and preview rendering">
+                      <img src="https://cdn.simpleicons.org/ffmpeg/007808" alt="" />
+                      <span>FFmpeg</span>
+                    </a>
+                    <a class="stack-lib" href="https://www.python.org/" target="_blank" rel="noreferrer" title="Python backend">
+                      <img src="https://cdn.simpleicons.org/python/3776AB" alt="" />
+                      <span>Python</span>
+                    </a>
+                  </div>
+                </div>
+                <div class="stack-flow">></div>
+                <div class="stack-stage">
+                  <strong>Signal Analysis</strong>
+                  <div class="stack-libs">
+                    <a class="stack-lib" href="https://numpy.org/" target="_blank" rel="noreferrer" title="FFT, chroma arrays, numeric scoring">
+                      <img src="https://cdn.simpleicons.org/numpy/4D77CF" alt="" />
+                      <span>NumPy</span>
+                    </a>
+                    <a class="stack-lib" href="https://scipy.org/" target="_blank" rel="noreferrer" title="WAV I/O and signal helpers">
+                      <img src="https://cdn.simpleicons.org/scipy/8CAAE6" alt="" />
+                      <span>SciPy</span>
+                    </a>
+                    <a class="stack-lib" href="https://librosa.org/" target="_blank" rel="noreferrer" title="Optional beat tracking">
+                      <img src="https://librosa.org/doc/latest/_static/librosa_logo_text.svg" alt="" />
+                      <span>librosa</span>
+                    </a>
+                    <a class="stack-lib" href="https://essentia.upf.edu/" target="_blank" rel="noreferrer" title="Optional key extraction">
+                      <img src="https://essentia.upf.edu/_static/essentia_white_e.png" alt="" />
+                      <span>Essentia</span>
+                    </a>
+                  </div>
+                </div>
+                <div class="stack-flow">></div>
+                <div class="stack-stage">
+                  <strong>Chord + Stems</strong>
+                  <div class="stack-libs">
+                    <a class="stack-lib" href="https://pypi.org/project/pychord/" target="_blank" rel="noreferrer" title="Optional chord candidate generation">
+                      <img src="https://cdn.simpleicons.org/pypi/3775A9" alt="" />
+                      <span>pychord</span>
+                    </a>
+                    <a class="stack-lib" href="https://music21.org/" target="_blank" rel="noreferrer" title="Optional music theory chord naming">
+                      <img src="https://cdn.simpleicons.org/python/FFD43B" alt="" />
+                      <span>music21</span>
+                    </a>
+                    <a class="stack-lib" href="https://github.com/facebookresearch/demucs" target="_blank" rel="noreferrer" title="High-quality source separation">
+                      <img src="https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs.png" alt="" />
+                      <span>Demucs</span>
+                    </a>
+                    <a class="stack-lib" href="https://pytorch.org/" target="_blank" rel="noreferrer" title="Demucs tensor inference backend">
+                      <img src="https://cdn.simpleicons.org/pytorch/EE4C2C" alt="" />
+                      <span>PyTorch</span>
+                    </a>
+                  </div>
+                </div>
+                <div class="stack-flow">></div>
+                <div class="stack-stage">
+                  <strong>Lyrics + Export</strong>
+                  <div class="stack-libs">
+                    <a class="stack-lib" href="https://github.com/SYSTRAN/faster-whisper" target="_blank" rel="noreferrer" title="Preferred lyric transcription backend">
+                      <img src="https://cdn.simpleicons.org/github/FFFFFF" alt="" />
+                      <span>faster-whisper</span>
+                    </a>
+                    <a class="stack-lib" href="https://github.com/openai/whisper" target="_blank" rel="noreferrer" title="Fallback lyric transcription backend">
+                      <img src="https://cdn.simpleicons.org/openai/FFFFFF" alt="" />
+                      <span>Whisper</span>
+                    </a>
+                    <a class="stack-lib" href="https://docs.python.org/3/library/xml.etree.elementtree.html" target="_blank" rel="noreferrer" title="MusicXML output">
+                      <img src="https://cdn.simpleicons.org/python/3776AB" alt="" />
+                      <span>ElementTree</span>
+                    </a>
+                    <a class="stack-lib" href="https://www.json.org/json-en.html" target="_blank" rel="noreferrer" title="Session and analysis cache format">
+                      <img src="https://cdn.simpleicons.org/json/FFFFFF" alt="" />
+                      <span>JSON</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="help-section help-wide">
+              <h2>Technical Notes</h2>
+              <table class="help-tech-table">
+                <tbody>
+                  <tr>
+                    <th>Shell</th>
+                    <td>Electron provides the desktop window, file dialogs, preload bridge, audio preview UI, and packaged Windows app.</td>
+                  </tr>
+                  <tr>
+                    <th>Decode</th>
+                    <td>ffmpeg-static supplies FFmpeg for MP3/WAV conversion and preview rendering; scipy.io.wavfile reads generated WAV data.</td>
+                  </tr>
+                  <tr>
+                    <th>Tempo + beats</th>
+                    <td>Fast mode uses a NumPy FFT onset envelope and autocorrelation tempo estimate; librosa.beat can add an optional beat-track estimate.</td>
+                  </tr>
+                  <tr>
+                    <th>Pitch + key</th>
+                    <td>Bars use FFT-derived 12-bin chroma between configurable frequency limits; Essentia KeyExtractor is used for key when installed.</td>
+                  </tr>
+                  <tr>
+                    <th>Chords</th>
+                    <td>Chord candidates are ranked by template coverage, essential tones, key fit, continuity, bass evidence, and complexity; pychord/music21 add library candidates when present.</td>
+                  </tr>
+                  <tr>
+                    <th>Stems</th>
+                    <td>High Quality mode uses Demucs, usually htdemucs, via PyTorch or the demucs command; drums guide rhythm, other/accompaniment guides chords, bass guides slash/root evidence.</td>
+                  </tr>
+                  <tr>
+                    <th>Lyrics</th>
+                    <td>Optional transcription uses faster-whisper first, then openai-whisper, with tiny/base/small model choices and full-mix or vocals-stem input.</td>
+                  </tr>
+                  <tr>
+                    <th>Export + cache</th>
+                    <td>Sessions and analysis cache are JSON; MusicXML is rendered with Python ElementTree, while TXT/CSV/JSON use standard Python writers.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+        </section>
+      </main>
+
+      <main id="editorView" class="app-shell app-view hidden">
+      <header class="topbar">
+        <div class="topbar-identity">
+          <div id="topbarCover" class="topbar-cover hidden" aria-hidden="true"></div>
+          <h1 id="topbarTitle">ChordPilot</h1>
+          <p id="fileLabel">Choose an MP3 or WAV to begin.</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="chooseBtn" type="button">Choose Audio</button>
+          <button id="analyzeBtn" type="button" disabled>Analyze</button>
+          <button id="openSessionBtn" type="button">Open Session</button>
+          <button id="saveSessionBtn" type="button" disabled>Save Session</button>
+        </div>
+      </header>
+
+      <section class="source-panel editor-section arrange-section">
+        <div class="section-title">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Source</strong>
+        </div>
+        <div id="sourceInfoPanel" class="collapsible-content source-info-panel"></div>
+      </section>
+
+      <section class="transport editor-section arrange-section">
+        <div class="section-title">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Source Playback</strong>
+        </div>
+        <div class="collapsible-content transport-content">
+          <audio id="audioPlayer" controls></audio>
+          <label class="master-volume">
+            Master
+            <input id="masterVolumeInput" type="range" min="0" max="1" step="0.01" value="0.55" />
+            <span id="masterVolumeText">55%</span>
+          </label>
+          <label class="playback-speed">
+            Speed
+            <select id="playbackRateInput" title="Playback speed">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="0.85">0.85x</option>
+              <option value="0.9">0.9x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.1">1.1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2x</option>
+            </select>
+            <span id="playbackRateText">1x</span>
+          </label>
+          <div class="transport-info">
+            <div id="activeBarText" class="active-bar">Bar -</div>
+            <div id="statusText" class="status">Ready</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="chart-meta editor-section">
+        <div class="section-title">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Song</strong>
+        </div>
+        <div class="collapsible-content meta-grid">
+          <label>
+            Title
+            <input id="titleInput" type="text" />
+          </label>
+          <label class="key-label">
+            Transpose
+            <div class="key-control">
+              <select id="keyInput" title="Transpose chart and preview target key"></select>
+              <button id="keyNativeBtn" type="button" title="Restore original analysis key">Original</button>
+              <span id="keyOffsetText" class="key-offset" title="Transpose offset">0</span>
+            </div>
+          </label>
+          <label>
+            Tempo
+            <input id="tempoInput" type="number" min="30" max="260" />
+          </label>
+          <label>
+            Time
+            <input id="timeInput" type="text" />
+          </label>
+          <label>
+            Mode
+            <select id="analysisModeInput">
+              <option value="fast">Fast Mix</option>
+              <option value="high-quality">High Quality Stems</option>
+            </select>
+          </label>
+          <details class="tuning-control">
+            <summary>Advanced tuning</summary>
+            <div class="tuning-row">
+              <label>
+                A4 Hz
+                <input id="tuningReferenceInput" type="number" min="400" max="480" step="0.1" value="440" />
+              </label>
+              <button id="tuningResetBtn" type="button" title="Reset to A4 440 Hz">440</button>
+              <span id="tuningOffsetText">0 cents</span>
+            </div>
+          </details>
+          <div class="audio-preview-control">
+            <button id="applyAudioPreviewBtn" type="button" disabled>Apply Audio Preview</button>
+            <button id="resetAudioPreviewBtn" type="button" disabled>Original Audio</button>
+            <span id="audioPreviewText">Original audio</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="analysis-options editor-section analysis-section">
+        <div class="section-title">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Analysis Options</strong>
+        </div>
+        <div class="collapsible-content options-grid">
+          <fieldset class="option-group">
+            <legend>Timing + Key</legend>
+            <div class="option-group-grid">
+          <label>
+            Analysis Key
+            <select id="analysisKeyInput" title="Known key for chord analysis">
+              <option value="" selected>Auto</option>
+              <option value="C">C</option>
+              <option value="C#">C#</option>
+              <option value="D">D</option>
+              <option value="Eb">Eb</option>
+              <option value="E">E</option>
+              <option value="F">F</option>
+              <option value="F#">F#</option>
+              <option value="G">G</option>
+              <option value="Ab">Ab</option>
+              <option value="A">A</option>
+              <option value="Bb">Bb</option>
+              <option value="B">B</option>
+              <option value="Cm">Cm</option>
+              <option value="C#m">C#m</option>
+              <option value="Dm">Dm</option>
+              <option value="Ebm">Ebm</option>
+              <option value="Em">Em</option>
+              <option value="Fm">Fm</option>
+              <option value="F#m">F#m</option>
+              <option value="Gm">Gm</option>
+              <option value="Abm">Abm</option>
+              <option value="Am">Am</option>
+              <option value="Bbm">Bbm</option>
+              <option value="Bm">Bm</option>
+            </select>
+          </label>
+          <label>
+            BPM Min
+            <input id="minBpmInput" type="number" min="30" max="240" value="60" />
+          </label>
+          <label>
+            BPM Max
+            <input id="maxBpmInput" type="number" min="60" max="300" value="190" />
+          </label>
+          <label>
+            Beat Offset
+            <input id="beatOffsetInput" type="number" min="-2" max="2" step="0.01" value="0" />
+          </label>
+          <label>
+            Onset Frame
+            <select id="onsetFrameInput">
+              <option value="1024">1024</option>
+              <option value="2048" selected>2048</option>
+              <option value="4096">4096</option>
+            </select>
+          </label>
+          <label>
+            Onset Hop
+            <select id="onsetHopInput">
+              <option value="256">256</option>
+              <option value="512" selected>512</option>
+              <option value="1024">1024</option>
+            </select>
+          </label>
+            </div>
+          </fieldset>
+          <fieldset class="option-group" title="These controls tune how ChordPilot listens for notes that support each chord. The defaults are a good starting point for most songs.">
+            <legend>Chord Evidence</legend>
+            <div class="option-group-grid">
+          <label title="Lowest pitch ChordPilot should consider when detecting chord notes. Raise it to ignore bass rumble; lower it if low instruments carry the harmony.">
+            Chroma Low
+            <input id="chromaLowInput" type="number" min="20" max="500" value="65" />
+          </label>
+          <label title="Highest pitch ChordPilot should consider when detecting chord notes. Lower it to ignore bright vocals/cymbals; raise it when guitars, piano, or synths voice chords high up.">
+            Chroma High
+            <input id="chromaHighInput" type="number" min="500" max="5000" value="1800" />
+          </label>
+          <label title="How many alternate chord guesses to keep for each bar. More alternatives are useful for review; fewer alternatives keep suggestions simpler.">
+            Alternatives
+            <input id="alternativesInput" type="number" min="1" max="12" value="6" />
+          </label>
+          <label title="Which audio source ChordPilot should trust for chord notes. Auto Stem usually picks accompaniment; Full Mix uses the original song; Bass/Vocals are useful for tricky arrangements.">
+            Chord Source
+            <select id="chordSourceInput">
+              <option value="auto" selected>Auto Stem</option>
+              <option value="other">Other / Accomp</option>
+              <option value="full_mix">Full Mix</option>
+              <option value="vocals">Vocals</option>
+              <option value="bass">Bass</option>
+            </select>
+          </label>
+          <label title="Stem separation model used in high quality mode. htdemucs is balanced; htdemucs_ft can be more detailed but slower; mdx_extra can help on some dense mixes.">
+            Demucs Model
+            <select id="demucsModelInput">
+              <option value="htdemucs" selected>htdemucs</option>
+              <option value="htdemucs_ft">htdemucs_ft</option>
+              <option value="mdx_extra">mdx_extra</option>
+            </select>
+          </label>
+          <label class="checkbox-label" title="Reuse previous analysis for the same file and settings. Turn this off when you want to force a fresh analysis run.">
+            Cache
+            <input id="useCacheInput" type="checkbox" checked />
+          </label>
+          <label class="checkbox-label" title="Prefer cleaner chord names when the detailed analysis finds extensions or ambiguous color tones. Turn off if you want more complex chord spellings.">
+            Simplify Chords
+            <input id="simplifyChordsInput" type="checkbox" checked />
+          </label>
+            </div>
+          </fieldset>
+          <fieldset class="option-group">
+            <legend>Lyrics</legend>
+            <div class="option-group-grid">
+          <label class="checkbox-label">
+            Lyrics
+            <input id="lyricsEnabledInput" type="checkbox" />
+          </label>
+          <label>
+            Lyric Source
+            <select id="lyricsSourceInput">
+              <option value="auto" selected>Auto</option>
+              <option value="full_mix">Full Mix</option>
+              <option value="vocals">Vocals</option>
+            </select>
+          </label>
+          <label>
+            Lyric Model
+            <select id="lyricsModelInput">
+              <option value="tiny" selected>Tiny</option>
+              <option value="base">Base</option>
+              <option value="small">Small</option>
+            </select>
+          </label>
+          <label>
+            Lyric Language
+            <select id="lyricsLanguageInput">
+              <option value="" selected>Auto Detect</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="zh">🇨🇳 Chinese</option>
+              <option value="ja">🇯🇵 Japanese</option>
+              <option value="ko">🇰🇷 Korean</option>
+              <option value="es">🇪🇸 Spanish</option>
+              <option value="fr">🇫🇷 French</option>
+              <option value="de">🇩🇪 German</option>
+              <option value="it">🇮🇹 Italian</option>
+              <option value="pt">🇵🇹 Portuguese</option>
+              <option value="id">🇮🇩 Indonesian</option>
+              <option value="ms">🇲🇾 Malay</option>
+              <option value="th">🇹🇭 Thai</option>
+              <option value="vi">🇻🇳 Vietnamese</option>
+              <option value="hi">🇮🇳 Hindi</option>
+            </select>
+          </label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="collapsible-content reanalysis-actions">
+          <button id="reanalyzeChordsBtn" type="button" disabled>Reanalyse Chords</button>
+          <button id="reanalyzeLyricsBtn" type="button" disabled>Reanalyse Lyrics</button>
+          <button id="reanalyzeAllBtn" type="button" title="Reanalyse everything and require vocals, drums, bass, and other stems" disabled>Reanalyse All + Stems</button>
+        </div>
+      </section>
+
+      <section class="editor-toolbar editor-section">
+        <div class="section-title">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Edit</strong>
+        </div>
+        <div class="collapsible-content toolbar-content">
+          <button id="addBarBtn" type="button" disabled>Add Bar</button>
+          <button id="duplicateBarBtn" type="button" disabled>Duplicate</button>
+          <button id="splitBarBtn" type="button" disabled>Split</button>
+          <button id="mergeBarBtn" type="button" disabled>Merge With Next</button>
+          <button id="deleteBarBtn" type="button" disabled>Delete</button>
+          <div class="export-actions">
+            <button data-export="txt" type="button" disabled>TXT</button>
+            <button data-export="csv" type="button" disabled>CSV</button>
+            <button data-export="json" type="button" disabled>JSON</button>
+            <button data-export="musicxml" type="button" disabled>MusicXML</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="log-panel editor-section log-section">
+        <div class="log-header">
+          <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+          <strong>Analysis Log</strong>
+          <button id="clearLogBtn" type="button">Clear</button>
+        </div>
+        <div id="analysisLog" class="analysis-log collapsible-content"></div>
+      </section>
+
+      <section class="workspace editor-section analysis-section">
+        <section class="timeline-panel">
+          <div class="timeline-head">
+            <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+            <strong>Arrangement</strong>
+            <span id="timelineSummary">Analyze a song to show bars and chords.</span>
+            <div class="arrangement-playback-controls">
+              <label class="arrangement-key-control" title="Transpose chart and preview target key">
+                Transpose
+                <select id="arrangementKeyInput"></select>
+                <button id="arrangementKeyNativeBtn" type="button" title="Restore original analysis key">Original</button>
+                <span id="arrangementKeyOffsetText" title="Transpose offset">0</span>
+              </label>
+              <label class="arrangement-master-volume">
+                Master
+                <input id="arrangementMasterVolumeInput" type="range" min="0" max="1" step="0.01" value="0.55" />
+                <span id="arrangementMasterVolumeText">55%</span>
+              </label>
+              <label class="arrangement-playback-speed">
+                Speed
+                <select id="arrangementPlaybackRateInput" title="Playback speed">
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="0.85">0.85x</option>
+                  <option value="0.9">0.9x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.1">1.1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="1.75">1.75x</option>
+                  <option value="2">2x</option>
+                </select>
+                <span id="arrangementPlaybackRateText">1x</span>
+              </label>
+              <label class="arrangement-metronome-toggle" title="Play a click track with source playback">
+                Metronome
+                <input id="metronomeEnabledInput" type="checkbox" />
+              </label>
+              <label class="arrangement-metronome-volume" title="Metronome volume">
+                Click
+                <input id="metronomeVolumeInput" type="range" min="0" max="1" step="0.01" value="0.45" />
+                <span id="metronomeVolumeText">45%</span>
+              </label>
+            </div>
+            <label class="timeline-follow" title="Keep the arrangement scrolled to the playback cursor">
+              Follow
+              <input id="timelineFollowInput" type="checkbox" checked />
+            </label>
+            <div class="timeline-zoom">
+              <button id="zoomOutBtn" type="button" title="Zoom out">-</button>
+              <input id="timelineZoomInput" type="range" min="1" max="8" step="0.25" value="1" title="Timeline zoom" />
+              <button id="zoomInBtn" type="button" title="Zoom in">+</button>
+              <button id="zoomFitBtn" type="button" title="Fit timeline">Fit</button>
+            </div>
+          </div>
+          <div id="timelineViewport" class="timeline-viewport collapsible-content">
+            <div id="playhead" class="playhead"></div>
+            <div id="chordLane" class="timeline-lane chord-lane"></div>
+            <div id="lyricLane" class="timeline-lane lyric-lane"></div>
+            <div id="beatLane" class="timeline-lane beat-lane"></div>
+            <div id="visualStemLanes" class="visual-stem-lanes"></div>
+          </div>
+        </section>
+
+        <div id="arrangementResizeHandle" class="arrangement-resize-handle" title="Drag to resize Bar Detail"></div>
+
+        <aside class="detail-pane collapsible">
+          <div class="detail-title">
+            <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+            <strong>Bar Detail</strong>
+            <span id="detailBarLabel">No bar</span>
+          </div>
+          <div class="collapsible-content detail-content">
+            <label>
+              Section
+              <input id="detailSectionInput" type="text" />
+            </label>
+            <label>
+              Chord
+              <input id="detailChordInput" type="text" />
+            </label>
+            <label>
+              Start
+              <input id="detailStartInput" type="number" step="0.01" />
+            </label>
+            <label>
+              Repeat Start
+              <input id="detailRepeatStartInput" type="checkbox" />
+            </label>
+            <label>
+              Repeat End
+              <input id="detailRepeatEndInput" type="number" min="0" />
+            </label>
+            <label>
+              Lyrics
+              <textarea id="detailLyricsInput" rows="3"></textarea>
+            </label>
+            <label>
+              Notes
+              <input id="detailNotesInput" type="text" />
+            </label>
+            <div id="detailLyricsReference" class="detail-lyrics-reference"></div>
+            <div id="detailAlternatives" class="detail-alternatives"></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="table-workspace editor-section table-section">
+        <section class="bars-panel">
+          <div class="section-title table-title">
+            <div class="section-title-main">
+              <button class="collapse-toggle" type="button" title="Collapse section">v</button>
+              <strong>Chord Chart</strong>
+            </div>
+            <label class="renderer-picker" title="Switch chord chart renderer">
+              Renderer
+              <select id="chartRendererInput">
+                <option value="table" selected>Editable Table</option>
+                <option value="grid">Measure Grid</option>
+                <option value="ireal">iReal Style</option>
+                <option value="chordpro">ChordPro Text</option>
+              </select>
+            </label>
+          </div>
+          <div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div>
+          <div id="chartPreview" class="chart-preview collapsible-content hidden"></div>
+          <table id="barsTable" class="collapsible-content">
+            <thead>
+              <tr>
+                <th>Bar</th>
+                <th>Section</th>
+                <th>Chord</th>
+                <th>Conf</th>
+                <th>Repeat</th>
+                <th>Start</th>
+                <th>Lyrics</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="barsBody"></tbody>
+          </table>
+        </section>
+        <aside class="chart-reason-pane">
+          <div class="chart-reason-title">
+            <strong>Why This Chord</strong>
+            <span id="chartReasonLabel">No bar</span>
+          </div>
+          <div id="chartReasonPane" class="chart-reason-content"></div>
+        </aside>
+      </section>
+      </main>
+    </div>
+    <div id="chordSuggestion" class="chord-suggestion hidden"></div>
+    <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-busy="true">
+      <div class="loading-panel">
+        <div class="loading-spinner"></div>
+        <strong id="loadingText">Working...</strong>
+      </div>
+    </div>
+    <script src="./state.js"></script>
+    <script src="./transpose.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./formatters.js"></script>
+    <script src="./bars.js"></script>
+    <script src="./timeline.js"></script>
+    <script src="./stems.js"></script>
+    <script src="./metronome.js"></script>
+    <script src="./actions.js"></script>
+    <script src="./keyboard.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

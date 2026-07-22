@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+*.log
+.env
+.tool-cache/
+__pycache__/
+*.pyc
+Tools/
+.agents/
+.codex/
+*.lnk

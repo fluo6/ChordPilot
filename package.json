@@ -1,0 +1,57 @@
+{
+  "name": "chordpilot",
+  "version": "0.1.0",
+  "description": "Electron desktop app with a Python backend for drafting and cleaning up chord charts from audio.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win dir",
+    "check:python": "python backend/chordpilot.py --self-test"
+  },
+  "build": {
+    "appId": "com.chordpilot.app",
+    "productName": "ChordPilot",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "backend/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "Tools",
+        "to": "Tools",
+        "filter": [
+          "yt-dlp.exe",
+          "ffmpeg.exe",
+          "ffprobe.exe"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "dir"
+      ]
+    }
+  },
+  "keywords": [
+    "electron",
+    "music",
+    "chords",
+    "musicxml"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^39.8.5",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  }
+}
