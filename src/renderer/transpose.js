@@ -43,6 +43,10 @@ function transposePitchName(note, semitones) {
 }
 
 function keyOffsetBetween(sourceKey, targetKey) {
+  const validKey = /^[A-Ga-g][#b]?(?:m|minor|major)?$/;
+  if (!validKey.test(String(sourceKey || "").trim()) || !validKey.test(String(targetKey || "").trim())) {
+    return 0;
+  }
   const source = transposePitchIndex(sourceKey);
   const target = transposePitchIndex(targetKey);
   if (source < 0 || target < 0) {

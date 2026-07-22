@@ -76,7 +76,7 @@ def normalize_quality_suffix(value: str) -> str:
         return "maj7"
     if lower.startswith("m") and "7" in lower:
         return "m7"
-    if lower.startswith("m"):
+    if re.match(r"^m(?:$|\d|add|[#b(])", lower):
         return "m"
     if "7" in lower:
         return "7"
