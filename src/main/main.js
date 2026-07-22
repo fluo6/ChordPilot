@@ -72,6 +72,10 @@ function getBackendCandidates() {
     candidates.push({ command: "python", prefix: [backendScript] });
     candidates.push({ command: "python3", prefix: [backendScript] });
   } else {
+    if (process.platform === "darwin") {
+      candidates.push({ command: "/opt/homebrew/bin/python3", prefix: [backendScript] });
+      candidates.push({ command: "/usr/local/bin/python3", prefix: [backendScript] });
+    }
     candidates.push({ command: "python3", prefix: [backendScript] });
     candidates.push({ command: "python", prefix: [backendScript] });
   }
@@ -84,7 +88,10 @@ function getBundledFfmpegPath() {
   const candidates = [
     path.join(appRoot, "node_modules", "ffmpeg-static", packageBinary),
     path.join(appRoot, "node_modules", "ffmpeg-static", "ffmpeg.exe"),
-    path.join(appRoot, "node_modules", "ffmpeg-static", "ffmpeg")
+    path.join(appRoot, "node_modules", "ffmpeg-static", "ffmpeg"),
+    ...(process.platform === "darwin"
+      ? ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+      : [])
   ];
 
   for (const candidate of candidates) {
@@ -111,6 +118,9 @@ function getYtDlpPath() {
     path.join(appRoot, "Tools", binaryName),
     path.join(process.resourcesPath || appRoot, "Tools", binaryName),
     path.join(process.cwd(), "Tools", binaryName),
+    ...(process.platform === "darwin"
+      ? ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
+      : []),
     binaryName
   ];
 

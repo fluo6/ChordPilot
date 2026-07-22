@@ -51,6 +51,67 @@ For embedded distributions that need an explicit runtime home, also set `CHORDPI
 npm start
 ```
 
+## Build desktop apps
+
+Install dependencies once with `npm install` or `npm ci`, then build on the operating system you are targeting.
+
+Build an unpacked app for the current operating system:
+
+```text
+npm run build
+```
+
+Platform-specific commands are also available:
+
+```text
+npm run build:win
+npm run build:mac
+```
+
+Reusable build helpers perform dependency checks, select an architecture, run packaging, and verify the output:
+
+```powershell
+# Windows x64 unpacked app
+.\scripts\build-windows.ps1
+
+# Windows ARM64 distributable ZIP, installing dependencies first
+.\scripts\build-windows.ps1 -Mode distribution -Architecture arm64 -InstallDependencies
+```
+
+```bash
+# macOS unpacked app for the current Mac architecture
+bash scripts/build-macos.sh
+
+# Apple Silicon DMG + ZIP, installing dependencies first
+bash scripts/build-macos.sh --distribution --arch=arm64 --install
+```
+
+The same helpers can be launched through `npm run build:tool:win` and `npm run build:tool:mac`. Build verification can also be rerun independently with `npm run verify:build` and explicit `--platform`, `--architecture`, and `--mode` arguments.
+
+The Windows build creates `dist/win-unpacked/ChordPilot.exe` and refreshes the repository shortcut as `ChordPilot - Windows.lnk`. The macOS build creates `ChordPilot.app` under `dist/mac*` and refreshes `ChordPilot - macOS.app` as a local symlink to the newest app bundle.
+
+Create distributable archives or installers with:
+
+```text
+npm run dist:win
+npm run dist:mac
+```
+
+Distribution artifacts include a platform suffix, for example `ChordPilot-0.1.0-Windows-x64.zip` or `ChordPilot-0.1.0-macOS-arm64.dmg`.
+
+### macOS requirements
+
+Run macOS builds on a Mac. Install Node.js and Python 3, then install the optional command-line tools used by the full feature set:
+
+```bash
+brew install python yt-dlp ffmpeg
+python3 -m pip install demucs
+```
+
+ChordPilot checks the standard Apple Silicon and Intel Homebrew locations for Python, yt-dlp, and ffmpeg. An unsigned local build may need to be opened once with Finder's **Open** command. Public distribution should use an Apple Developer certificate and notarization.
+
+Repository maintainers can also run the manual **Build macOS** workflow from GitHub Actions and download the generated artifact without owning a Mac. Choose `arm64` for Apple Silicon or `x64` for Intel Macs.
+
 ## Unit tests
 
 Run the complete JavaScript and Python unit-test suite:
