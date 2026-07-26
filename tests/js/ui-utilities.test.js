@@ -119,6 +119,30 @@ test("stem playback keeps source audible when stems cannot start", async () => {
   assert.equal(audioPlayer.muted, true);
 });
 
+test("key changes trigger an audio preview and reject overlapping renders", () => {
+  const state = { audioPreviewBusy: false };
+  let changed = 0;
+  let previewed = 0;
+  let rendered = 0;
+  const { changeKeyWithAudioPreview } = loadScript("src/renderer/actions.js", ["changeKeyWithAudioPreview"], {
+    state,
+    renderMeta() { rendered += 1; },
+    setStatus(message) { state.status = message; },
+    showErrorDialog() {}
+  });
+
+  assert.equal(changeKeyWithAudioPreview(() => { changed += 1; return true; }, () => { previewed += 1; }), true);
+  assert.equal(changed, 1);
+  assert.equal(previewed, 1);
+
+  state.audioPreviewBusy = true;
+  assert.equal(changeKeyWithAudioPreview(() => { changed += 1; return true; }, () => { previewed += 1; }), false);
+  assert.equal(changed, 1);
+  assert.equal(previewed, 1);
+  assert.equal(rendered, 1);
+  assert.match(state.status, /finish/);
+});
+
 test("copying lyrics preserves manual edits and maps matching bars", () => {
   const { copyExistingLyricsToBars } = loadScript("src/renderer/actions.js", ["copyExistingLyricsToBars"], {});
   const target = [{ number: 1 }, { number: 2, lyrics: "new" }, { number: 3 }];

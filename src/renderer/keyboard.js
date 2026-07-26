@@ -90,12 +90,12 @@ function handleKeyboardShortcut(event) {
     selectRelativeBar(1);
   } else if ((key === "=" || key === "+") && !event.ctrlKey) {
     event.preventDefault();
-    if (!changeChartKey(1)) {
+    if (!changeKeyWithAudioPreview(() => changeChartKey(1))) {
       setTimelineZoom(state.timelineZoom + 0.5);
     }
   } else if ((key === "-" || key === "_") && !event.ctrlKey) {
     event.preventDefault();
-    if (!changeChartKey(-1)) {
+    if (!changeKeyWithAudioPreview(() => changeChartKey(-1))) {
       setTimelineZoom(state.timelineZoom - 0.5);
     }
   } else if (key === "0" && !event.ctrlKey) {
@@ -103,7 +103,7 @@ function handleKeyboardShortcut(event) {
     setTimelineZoom(1);
   } else if (key === "n" && hasChart()) {
     event.preventDefault();
-    resetChartKeyToDetected();
+    changeKeyWithAudioPreview(resetChartKeyToDetected);
   } else if (key === "a" && hasChart()) {
     event.preventDefault();
     addBar();

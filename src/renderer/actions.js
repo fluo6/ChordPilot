@@ -85,7 +85,6 @@ async function applyAudioPreview() {
     return;
   }
 
-  const currentTime = elements.audioPlayer.currentTime || 0;
   const finishLoading = beginLoading("Rendering audio preview...");
   state.audioPreviewBusy = true;
   updateAudioPreviewState();
@@ -97,14 +96,24 @@ async function applyAudioPreview() {
       semitones,
       tempoRate
     });
+    const previousPreviewTempo = Number(state.audioPreview?.tempoRate) || 1;
+    const sourceTime = (elements.audioPlayer.currentTime || 0) * previousPreviewTempo;
+    const resumePlayback = !elements.audioPlayer.paused;
     state.audioPreview = result;
     clearStems();
     elements.audioPlayer.src = result.url;
     setMediaPlaybackRate(elements.audioPlayer, 1);
     try {
-      elements.audioPlayer.currentTime = Math.max(0, currentTime / Math.max(0.001, tempoRate));
+      elements.audioPlayer.currentTime = Math.max(0, sourceTime / Math.max(0.001, tempoRate));
     } catch (_error) {
       // The audio element may not have metadata for the newly rendered file yet.
+    }
+    if (resumePlayback) {
+      try {
+        await elements.audioPlayer.play();
+      } catch (_error) {
+        // The preview is ready even if Electron requires another play gesture.
+      }
     }
     renderTimeline();
     updateAudioPreviewState();
@@ -127,6 +136,7 @@ function resetAudioPreview() {
   }
   const currentTime = elements.audioPlayer.currentTime || 0;
   const previewTempo = Number(state.audioPreview?.tempoRate) || 1;
+  const resumePlayback = !elements.audioPlayer.paused;
   state.audioPreview = null;
   elements.audioPlayer.src = state.audio.url;
   try {
@@ -134,10 +144,30 @@ function resetAudioPreview() {
   } catch (_error) {
     // The original audio may not have metadata loaded yet.
   }
+  if (resumePlayback) {
+    elements.audioPlayer.play().catch((error) => setStatus(error.message));
+  }
   renderStems(state.chart?.stems);
   applyPlaybackRate();
   updateAudioPreviewState();
   setStatus("Original audio restored");
+}
+
+function changeKeyWithAudioPreview(changeKey, previewAudio = applyAudioPreview) {
+  if (state.audioPreviewBusy) {
+    renderMeta();
+    setStatus("Wait for the current audio transpose to finish");
+    return false;
+  }
+  const changed = typeof changeKey === "function" && changeKey();
+  if (!changed) {
+    return false;
+  }
+  Promise.resolve(previewAudio()).catch((error) => {
+    setStatus(error.message);
+    showErrorDialog("Audio Preview Error", error.message);
+  });
+  return true;
 }
 
 async function lookupSourceMetadata() {

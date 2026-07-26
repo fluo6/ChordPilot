@@ -48,6 +48,8 @@ test("pitch and key transposition preserves suffixes and chooses shortest offset
   assert.equal(t.transposePitchName("H", 2), "H");
   assert.equal(t.keyOffsetBetween("C", "F#"), 6);
   assert.equal(t.keyOffsetBetween("C", "B"), -1);
+  assert.equal(t.keyOffsetBetween("Db major", "Eb major"), 2);
+  assert.equal(t.keyOffsetBetween("A minor", "C minor"), 3);
   assert.equal(t.keyOffsetBetween("bad", "C"), 0);
   assert.equal(t.transposeKeyName("Am", 2), "Bm");
   assert.equal(t.transposeKeyName("Db major", -1), "C major");

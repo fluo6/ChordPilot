@@ -90,8 +90,8 @@ elements.deleteBarBtn.addEventListener("click", deleteBar);
 elements.reanalyzeChordsBtn.addEventListener("click", () => reanalyzeSection("chords"));
 elements.reanalyzeLyricsBtn.addEventListener("click", () => reanalyzeSection("lyrics"));
 elements.reanalyzeAllBtn.addEventListener("click", () => reanalyzeSection("all"));
-elements.keyNativeBtn.addEventListener("click", resetChartKeyToDetected);
-elements.arrangementKeyNativeBtn.addEventListener("click", resetChartKeyToDetected);
+elements.keyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
+elements.arrangementKeyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
 elements.applyAudioPreviewBtn.addEventListener("click", applyAudioPreview);
 elements.resetAudioPreviewBtn.addEventListener("click", resetAudioPreview);
 elements.exportButtons.forEach((button) => {
@@ -107,10 +107,10 @@ elements.exportButtons.forEach((button) => {
   });
 });
 elements.keyInput.addEventListener("change", () => {
-  setChartTargetKey(elements.keyInput.value);
+  changeKeyWithAudioPreview(() => setChartTargetKey(elements.keyInput.value));
 });
 elements.arrangementKeyInput.addEventListener("change", () => {
-  setChartTargetKey(elements.arrangementKeyInput.value);
+  changeKeyWithAudioPreview(() => setChartTargetKey(elements.arrangementKeyInput.value));
 });
 elements.tuningReferenceInput.addEventListener("input", () => setTuningReferenceHz(elements.tuningReferenceInput.value));
 elements.tuningResetBtn.addEventListener("click", () => setTuningReferenceHz(440));
