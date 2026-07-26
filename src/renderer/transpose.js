@@ -43,12 +43,14 @@ function transposePitchName(note, semitones) {
 }
 
 function keyOffsetBetween(sourceKey, targetKey) {
-  const validKey = /^[A-Ga-g][#b]?(?:m|minor|major)?$/;
-  if (!validKey.test(String(sourceKey || "").trim()) || !validKey.test(String(targetKey || "").trim())) {
+  const keyRoot = (value) => String(value || "").trim().match(/^([A-Ga-g][#b]?)(?:\s*(?:m|minor|major))?$/)?.[1] || "";
+  const sourceRoot = keyRoot(sourceKey);
+  const targetRoot = keyRoot(targetKey);
+  if (!sourceRoot || !targetRoot) {
     return 0;
   }
-  const source = transposePitchIndex(sourceKey);
-  const target = transposePitchIndex(targetKey);
+  const source = transposePitchIndex(sourceRoot);
+  const target = transposePitchIndex(targetRoot);
   if (source < 0 || target < 0) {
     return 0;
   }
@@ -144,7 +146,7 @@ function updateKeyInputHint() {
   ensureChartTempoState(state.chart);
   const detected = state.chart.detected_key || state.chart.key || "C";
   [elements.keyInput, elements.arrangementKeyInput].filter(Boolean).forEach((select) => {
-    select.title = `Original analysis key: ${detected}. Choose a transpose target key, then apply audio preview to hear it.`;
+    select.title = `Original analysis key: ${detected}. Choose a transpose target key; the audio preview updates automatically.`;
   });
   const offset = Number(state.chart.key_offset) || 0;
   [elements.keyOffsetText, elements.arrangementKeyOffsetText].filter(Boolean).forEach((item) => {

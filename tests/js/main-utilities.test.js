@@ -52,7 +52,8 @@ test("numeric clamping and audio filters cover pitch and tempo combinations", ()
   assert.deepEqual(plain(m.chainAtempo(4)), ["atempo=2", "atempo=2.000000"]);
   assert.deepEqual(plain(m.chainAtempo(0.25)), ["atempo=0.5", "atempo=0.500000"]);
   assert.equal(m.buildAudioPreviewFilter(0, 1), "atempo=1.000000");
-  assert.match(m.buildAudioPreviewFilter(12, 1), /asetrate=/);
+  assert.equal(m.buildAudioPreviewFilter(12, 1), "aresample=48000,asetrate=96000.000,aresample=48000,atempo=0.500000");
+  assert.equal(m.buildAudioPreviewFilter(-12, 1), "aresample=48000,asetrate=24000.000,aresample=48000,atempo=2.000000");
   assert.match(m.buildAudioPreviewFilter(0, 1.5), /atempo=1.5/);
 });
 
