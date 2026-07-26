@@ -3,6 +3,18 @@ function isTypingTarget(target) {
   return Boolean(tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable);
 }
 
+function isSpaceTypingTarget(target) {
+  const tag = target?.tagName?.toLowerCase();
+  if (tag === "textarea" || target?.isContentEditable) {
+    return true;
+  }
+  if (tag !== "input") {
+    return false;
+  }
+  const type = String(target.type || "text").toLowerCase();
+  return ["text", "search", "email", "url", "tel", "password"].includes(type);
+}
+
 function togglePlayback() {
   if (!elements.audioPlayer.src) {
     return;
@@ -36,16 +48,26 @@ function selectRelativeBar(offset) {
 }
 
 function handleKeyboardShortcut(event) {
-  if (isTypingTarget(event.target) || event.altKey || event.metaKey) {
+  if (event.altKey || event.metaKey) {
     return;
   }
 
   const key = event.key.toLowerCase();
-  if (key === "escape") {
-    hideChordSuggestion();
-  } else if (event.code === "Space") {
+  if (event.code === "Space") {
+    if (isSpaceTypingTarget(event.target)) {
+      return;
+    }
     event.preventDefault();
     togglePlayback();
+    return;
+  }
+
+  if (isTypingTarget(event.target)) {
+    return;
+  }
+
+  if (key === "escape") {
+    hideChordSuggestion();
   } else if (key === "arrowleft") {
     event.preventDefault();
     if (event.shiftKey) {

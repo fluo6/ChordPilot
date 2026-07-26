@@ -1,4 +1,7 @@
+let stemPlaybackRequest = 0;
+
 function clearStems() {
+  stemPlaybackRequest += 1;
   state.stemPlayers.forEach((item) => {
     item.audio.pause();
     item.audio.src = "";
@@ -43,6 +46,7 @@ function renderStems(stemsResult) {
 }
 
 function applyStemMix() {
+  const request = ++stemPlaybackRequest;
   const solo = state.soloStem;
   const hasStems = state.stemPlayers.length > 0;
   if (isSourcePlaybackMode()) {
@@ -55,7 +59,7 @@ function applyStemMix() {
     return;
   }
 
-  elements.audioPlayer.muted = hasStems;
+  const audiblePlayers = [];
   state.stemPlayers.forEach((player) => {
     const selected = !solo || player.stem.name === solo;
     const audible = selected && !player.muted;
@@ -65,10 +69,39 @@ function applyStemMix() {
 
     if (!audible) {
       player.audio.pause();
-    } else if (!elements.audioPlayer.paused) {
-      syncStemTime(player);
-      player.audio.play().catch(() => {});
+    } else {
+      audiblePlayers.push(player);
     }
+  });
+
+  if (elements.audioPlayer.paused) {
+    elements.audioPlayer.muted = false;
+    return Promise.resolve(false);
+  }
+
+  if (!audiblePlayers.length) {
+    elements.audioPlayer.muted = hasStems;
+    return Promise.resolve(false);
+  }
+
+  // Keep the source audible until at least one stem has actually started.
+  // A rejected stem play request must not leave the Analysis tab silent.
+  elements.audioPlayer.muted = false;
+  return Promise.all(audiblePlayers.map(async (player) => {
+    syncStemTime(player);
+    try {
+      await player.audio.play();
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  })).then((results) => {
+    if (request !== stemPlaybackRequest || isSourcePlaybackMode() || elements.audioPlayer.paused) {
+      return false;
+    }
+    const stemStarted = results.some(Boolean);
+    elements.audioPlayer.muted = stemStarted;
+    return stemStarted;
   });
 }
 
@@ -93,23 +126,15 @@ function syncStemTimes() {
 
 function playStems() {
   if (!state.stemPlayers.length) {
-    return;
+    elements.audioPlayer.muted = false;
+    return Promise.resolve(false);
   }
   if (isSourcePlaybackMode()) {
     pauseStems();
     elements.audioPlayer.muted = false;
-    return;
+    return Promise.resolve(false);
   }
-  applyStemMix();
-  const solo = state.soloStem;
-  state.stemPlayers.forEach((player) => {
-    if ((!solo || player.stem.name === solo) && !player.muted) {
-      syncStemTime(player);
-      player.audio.play().catch(() => {});
-    } else {
-      player.audio.pause();
-    }
-  });
+  return applyStemMix();
 }
 
 function pauseStems() {
