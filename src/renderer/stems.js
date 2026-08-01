@@ -11,18 +11,88 @@ function clearStems() {
   elements.audioPlayer.muted = false;
 }
 
+function stemMixSnapshot() {
+  return {
+    soloStem: state.soloStem,
+    players: new Map(state.stemPlayers.map((player) => [player.stem.name, {
+      muted: player.muted,
+      volume: player.volume
+    }]))
+  };
+}
+
 function isSourcePlaybackMode() {
   return state.currentView === "song" && state.editorPanel === "arrange";
 }
 
-function renderStems(stemsResult) {
+function previewStemByName() {
+  const stems = state.audioPreview?.stems?.ok && Array.isArray(state.audioPreview.stems.stems)
+    ? state.audioPreview.stems.stems
+    : [];
+  return new Map(stems.map((stem) => [stem.name, stem]));
+}
+
+function hasCompletePreviewStems(stems, previewStems = previewStemByName()) {
+  if (!state.audioPreview || !stems.length) {
+    return true;
+  }
+  return stems.every((stem) => {
+    const preview = previewStems.get(stem.name);
+    return preview?.url && preview?.path;
+  });
+}
+
+function createStemPlayers(stemsResult, previousMix = stemMixSnapshot()) {
   clearStems();
+  if (!stemsResult || !stemsResult.ok) {
+    return false;
+  }
+
+  const stems = Array.isArray(stemsResult.stems) ? stemsResult.stems : [];
+  const previewStems = previewStemByName();
+  if (!hasCompletePreviewStems(stems, previewStems)) {
+    appendLog?.("stems: using transposed preview mix because matching preview stems are unavailable");
+    return false;
+  }
+
+  stems.forEach((sourceStem) => {
+    const previewStem = previewStems.get(sourceStem.name);
+    const stem = previewStem ? { ...sourceStem, ...previewStem } : sourceStem;
+    const previous = previousMix.players.get(stem.name);
+    const audio = new Audio(stem.url);
+    audio.preload = "metadata";
+    const player = {
+      stem,
+      audio,
+      soloBtn: null,
+      muteBtn: null,
+      muted: previous?.muted || false,
+      volume: Number.isFinite(Number(previous?.volume)) ? Number(previous.volume) : 0.8
+    };
+    state.stemPlayers.push(player);
+  });
+  if (previousMix.soloStem && state.stemPlayers.some((player) => player.stem.name === previousMix.soloStem)) {
+    state.soloStem = previousMix.soloStem;
+  }
+  return state.stemPlayers.length > 0;
+}
+
+function ensureStemPlayersForTimeline(stemsResult) {
+  if (state.stemPlayers.length || !stemsResult?.ok) {
+    return false;
+  }
+  return createStemPlayers(stemsResult);
+}
+
+function renderStems(stemsResult) {
   if (!stemsResult) {
+    clearStems();
     renderTimeline();
     return;
   }
 
   if (!stemsResult.ok) {
+    clearStems();
     appendLog(`stems: ${stemsResult.error || "Stem separation unavailable"}`);
     renderTimeline();
     return;
@@ -30,13 +100,7 @@ function renderStems(stemsResult) {
 
   const stems = Array.isArray(stemsResult.stems) ? stemsResult.stems : [];
   appendLog(`stems: ${stems.length} ready in arrangement lanes`);
-
-  stems.forEach((stem) => {
-    const audio = new Audio(stem.url);
-    audio.preload = "metadata";
-    const player = { stem, audio, soloBtn: null, muteBtn: null, muted: false, volume: 0.8 };
-    state.stemPlayers.push(player);
-  });
+  createStemPlayers(stemsResult);
 
   syncStemTimes();
   renderTimeline();

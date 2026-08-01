@@ -727,6 +727,7 @@ function updateRowState(options = {}) {
   elements.activeBarText.textContent = getBarLabel(state.activeIndex);
   updateDetailPane();
   updateTimelineSelection();
+  updateTimelineTransportInfo();
   updateButtons();
 
   if (options.scroll && state.activeIndex >= 0) {
@@ -785,7 +786,51 @@ function setTimelineFollow(value) {
   updatePlayhead();
 }
 
-function setTimelineZoom(value, anchorTime = elements.audioPlayer.currentTime || 0) {
+function formatTimelineTransportTime(value) {
+  const total = Math.max(0, Number(value) || 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = Math.floor(total % 60);
+  const centiseconds = Math.floor((total % 1) * 100);
+  const clock = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
+  return hours ? `${hours}:${clock}` : clock;
+}
+
+function timelineBeatLabel(bar, index, time) {
+  const beats = beatsPerBar();
+  const start = Number(bar?.start) || 0;
+  const tempo = Number(state.chart?.tempo) || 120;
+  const fallbackLength = (60 / tempo) * beats;
+  const end = Math.max(start, barEndTime(index) || start + fallbackLength);
+  const beatLength = (end - start) / Math.max(1, beats);
+  if (!Number.isFinite(beatLength) || beatLength <= 0) {
+    return "-";
+  }
+  const beat = Math.max(1, Math.min(beats, Math.floor((Math.max(0, time - start) / beatLength)) + 1));
+  return `${beat} / ${beats}`;
+}
+
+function updateTimelineTransportInfo() {
+  if (!elements.timelineTransportInfo) {
+    return;
+  }
+
+  const time = elements.audioPlayer.currentTime || 0;
+  const duration = Number(elements.audioPlayer.duration);
+  const playState = elements.audioPlayer.paused ? (time > 0 ? "Paused" : "Stopped") : "Playing";
+  elements.timelineTransportInfo.classList.toggle("playing", playState === "Playing");
+  elements.timelinePlayState.textContent = playState;
+  const displayDuration = Number.isFinite(duration) ? duration : (hasChart() ? getChartDuration() : 0);
+  elements.timelineTimeText.textContent = `${formatTimelineTransportTime(time)} / ${formatTimelineTransportTime(displayDuration)}`;
+
+  const index = findActiveBarIndex(time);
+  const bar = hasChart() && index >= 0 ? state.chart.bars[index] : null;
+  elements.timelineBarText.textContent = bar ? String(bar.number || index + 1) : "-";
+  elements.timelineBeatText.textContent = bar ? timelineBeatLabel(bar, index, time) : "-";
+  elements.timelineChordText.textContent = bar ? `${barChordText(bar)}${bar.section ? ` - ${bar.section}` : ""}` : "-";
+}
+
+function setTimelineZoom(value, anchorTime = elements.audioPlayer.currentTime || 0, anchorClientX = null) {
   const previous = state.timelineZoom;
   state.timelineZoom = Math.max(1, Math.min(8, Number(value) || 1));
   if (state.timelineZoom === previous) {
@@ -795,10 +840,28 @@ function setTimelineZoom(value, anchorTime = elements.audioPlayer.currentTime ||
   const body = elements.timelineViewport.querySelector(".lane-body");
   if (body) {
     const progress = Math.max(0, Math.min(1, Number(anchorTime || 0) / getChartDuration()));
-    const target = body.offsetLeft + (body.offsetWidth * progress) - (elements.timelineViewport.clientWidth / 2);
+    const viewportOffset = Number.isFinite(anchorClientX)
+      ? anchorClientX - elements.timelineViewport.getBoundingClientRect().left
+      : elements.timelineViewport.clientWidth / 2;
+    const target = body.offsetLeft + (body.offsetWidth * progress) - viewportOffset;
     elements.timelineViewport.scrollLeft = Math.max(0, target);
   }
   updatePlayhead();
+}
+
+function handleTimelineWheel(event) {
+  if (!event.ctrlKey) {
+    return;
+  }
+  event.preventDefault();
+  const body = elements.timelineViewport.querySelector(".lane-body");
+  const duration = getChartDuration();
+  const bodyRect = body?.getBoundingClientRect();
+  const anchorTime = bodyRect?.width
+    ? Math.max(0, Math.min(1, (event.clientX - bodyRect.left) / bodyRect.width)) * duration
+    : elements.audioPlayer.currentTime || 0;
+  const zoomStep = event.deltaY < 0 ? 0.25 : -0.25;
+  setTimelineZoom(state.timelineZoom + zoomStep, anchorTime, event.clientX);
 }
 
 function renderMeta() {

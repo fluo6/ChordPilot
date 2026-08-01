@@ -13,6 +13,9 @@ function renderTimeline() {
   }
 
   const stems = state.chart.stems?.ok && Array.isArray(state.chart.stems.stems) ? state.chart.stems.stems : [];
+  if (typeof ensureStemPlayersForTimeline === "function") {
+    ensureStemPlayersForTimeline(state.chart.stems);
+  }
   const stemText = stems.length ? ` - ${stems.length} stems` : "";
   const lyricCount = lyricEntries().length;
   const lyricText = lyricCount ? ` - ${lyricCount} lyric lines` : "";
@@ -402,6 +405,7 @@ function updatePlayhead() {
   const body = elements.timelineViewport.querySelector(".lane-body");
   if (!body) {
     elements.playhead.style.left = "80px";
+    updateTimelineTransportInfo();
     return;
   }
   const duration = getChartDuration();
@@ -410,6 +414,7 @@ function updatePlayhead() {
   elements.playhead.style.left = `${left}px`;
   followPlayhead(left, body);
   updateBeatHighlight();
+  updateTimelineTransportInfo();
 }
 
 function followPlayhead(left, body) {
