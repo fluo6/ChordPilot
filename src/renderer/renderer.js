@@ -67,6 +67,7 @@ elements.audioPlayer.addEventListener("loadedmetadata", () => {
   resetMetronomeSchedule();
 });
 elements.timelineViewport.addEventListener("scroll", updatePlayhead);
+elements.timelineViewport.addEventListener("wheel", handleTimelineWheel, { passive: false });
 elements.arrangementResizeHandle.addEventListener("pointerdown", startArrangementResize);
 window.addEventListener("resize", () => {
   applyDetailPaneWidth();
@@ -81,6 +82,7 @@ window.addEventListener("click", (event) => {
 elements.audioPlayer.addEventListener("pause", () => {
   pauseStems();
   stopMetronome();
+  updateTimelineTransportInfo();
 });
 elements.addBarBtn.addEventListener("click", addBar);
 elements.duplicateBarBtn.addEventListener("click", duplicateBar);
@@ -145,6 +147,7 @@ applyDetailPaneWidth();
 renderMeta();
 renderBars();
 setView("home");
+updateTimelineTransportInfo();
 
 window.chordPilot.onBackendLog((message) => {
   appendLog(message);

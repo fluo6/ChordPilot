@@ -66,9 +66,28 @@ async function startFromYoutubeLink(event) {
   }
 }
 
-async function applyAudioPreview() {
+async function relinkAudioSourceForPreview() {
+  const audio = await window.chordPilot.chooseAudio();
+  if (!audio) {
+    setStatus("Audio preview needs the original source file.");
+    return false;
+  }
+  state.audio = { ...(state.audio || {}), ...audio, exists: true };
+  state.audioPreview = null;
+  elements.audioPlayer.src = audio.url;
+  elements.analyzeBtn.disabled = false;
+  updateProjectIdentity("Source audio linked.");
+  renderSourceInfo();
+  return true;
+}
+
+async function applyAudioPreview(options = {}) {
+  if (options.silentMissingSource && (!state.audio?.path || state.audio.exists === false)) {
+    setStatus("Chart transposed; source audio is unavailable for preview.");
+    return;
+  }
   if (!state.audio?.path || !hasChart()) {
-    setStatus("Choose audio and analyze a chart first");
+    setStatus(hasChart() ? "Choose source audio before applying preview." : "Choose audio and analyze a chart first");
     return;
   }
 
@@ -91,23 +110,20 @@ async function applyAudioPreview() {
   setStatus("Rendering audio preview...");
 
   try {
-    const result = await window.chordPilot.processAudio({
-      audioPath: state.audio.path,
-      semitones,
-      tempoRate
-    });
+    const result = await processAudioPreviewBundle(state.audio.path, audioPreviewStemSources(), semitones, tempoRate);
     const previousPreviewTempo = Number(state.audioPreview?.tempoRate) || 1;
     const sourceTime = (elements.audioPlayer.currentTime || 0) * previousPreviewTempo;
     const resumePlayback = !elements.audioPlayer.paused;
     state.audioPreview = result;
-    clearStems();
     elements.audioPlayer.src = result.url;
+    elements.audioPlayer.load?.();
     setMediaPlaybackRate(elements.audioPlayer, 1);
     try {
       elements.audioPlayer.currentTime = Math.max(0, sourceTime / Math.max(0.001, tempoRate));
     } catch (_error) {
       // The audio element may not have metadata for the newly rendered file yet.
     }
+    renderStems(state.chart?.stems);
     if (resumePlayback) {
       try {
         await elements.audioPlayer.play();
@@ -115,12 +131,19 @@ async function applyAudioPreview() {
         // The preview is ready even if Electron requires another play gesture.
       }
     }
-    renderTimeline();
     updateAudioPreviewState();
     const cents = tuningCents();
     const tuningText = Math.abs(cents) < 0.05 ? "A4 440 Hz" : `A4 ${state.tuningReferenceHz} Hz (${formatCents(cents)})`;
     setStatus(`Audio preview applied: ${chartSemitones > 0 ? "+" : ""}${chartSemitones} semitones, ${tuningText}, ${tempoRate.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}x tempo`);
   } catch (error) {
+    if (options.silentMissingSource && isMissingAudioPreviewSourceError(error)) {
+      setStatus("Chart transposed; source audio is unavailable for preview.");
+      return;
+    }
+    if (!options.relinkAttempted && isMissingAudioPreviewSourceError(error) && await relinkAudioSourceForPreview()) {
+      await applyAudioPreview({ ...options, relinkAttempted: true });
+      return;
+    }
     setStatus(error.message);
     showErrorDialog("Audio Preview Error", error.message);
   } finally {
@@ -128,6 +151,46 @@ async function applyAudioPreview() {
     updateAudioPreviewState();
     finishLoading();
   }
+}
+
+function audioPreviewStemSources(chart = state.chart) {
+  const stems = chart?.stems?.ok && Array.isArray(chart.stems.stems) ? chart.stems.stems : [];
+  return stems
+    .filter((stem) => stem?.path)
+    .map((stem) => ({ ...stem }));
+}
+
+async function processAudioPreviewBundle(audioPath, stems, semitones, tempoRate) {
+  const previewInputs = Array.isArray(stems) ? stems.filter((stem) => stem?.path) : [];
+  const mixPromise = window.chordPilot.processAudio({ audioPath, semitones, tempoRate });
+  const stemPromises = previewInputs.map(async (stem) => {
+    try {
+      const result = await window.chordPilot.processAudio({
+        audioPath: stem.path,
+        semitones,
+        tempoRate
+      });
+      return {
+        ...stem,
+        path: result.path,
+        url: result.url,
+        source_path: stem.path,
+        semitones: result.semitones,
+        tempoRate: result.tempoRate
+      };
+    } catch (_error) {
+      return null;
+    }
+  });
+  const [mixResult, previewStems] = await Promise.all([mixPromise, Promise.all(stemPromises)]);
+  const completePreviewStems = previewStems.filter(Boolean);
+  if (completePreviewStems.length === previewInputs.length && completePreviewStems.length) {
+    mixResult.stems = {
+      ok: true,
+      stems: completePreviewStems
+    };
+  }
+  return mixResult;
 }
 
 function resetAudioPreview() {
@@ -153,6 +216,11 @@ function resetAudioPreview() {
   setStatus("Original audio restored");
 }
 
+function isMissingAudioPreviewSourceError(error) {
+  const message = String(error?.message || error || "");
+  return /Choose an audio file before applying audio preview/i.test(message);
+}
+
 function changeKeyWithAudioPreview(changeKey, previewAudio = applyAudioPreview) {
   if (state.audioPreviewBusy) {
     renderMeta();
@@ -163,7 +231,11 @@ function changeKeyWithAudioPreview(changeKey, previewAudio = applyAudioPreview) 
   if (!changed) {
     return false;
   }
-  Promise.resolve(previewAudio()).catch((error) => {
+  Promise.resolve(previewAudio({ silentMissingSource: true })).catch((error) => {
+    if (isMissingAudioPreviewSourceError(error)) {
+      setStatus("Chart transposed; source audio is unavailable for preview.");
+      return;
+    }
     setStatus(error.message);
     showErrorDialog("Audio Preview Error", error.message);
   });

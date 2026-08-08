@@ -13,6 +13,9 @@ function renderTimeline() {
   }
 
   const stems = state.chart.stems?.ok && Array.isArray(state.chart.stems.stems) ? state.chart.stems.stems : [];
+  if (typeof ensureStemPlayersForTimeline === "function") {
+    ensureStemPlayersForTimeline(state.chart.stems);
+  }
   const stemText = stems.length ? ` - ${stems.length} stems` : "";
   const lyricCount = lyricEntries().length;
   const lyricText = lyricCount ? ` - ${lyricCount} lyric lines` : "";
@@ -71,6 +74,7 @@ function buildLane(lane, options) {
       soloBtn.textContent = "S";
       soloBtn.title = `Solo ${options.name}`;
       soloBtn.addEventListener("click", () => {
+        enableStemMixPlayback();
         state.soloStem = state.soloStem === options.name ? null : options.name;
         applyStemMix();
       });
@@ -80,6 +84,7 @@ function buildLane(lane, options) {
       muteBtn.textContent = "M";
       muteBtn.title = `Mute ${options.name}`;
       muteBtn.addEventListener("click", () => {
+        enableStemMixPlayback();
         player.muted = !player.muted;
         applyStemMix();
       });
@@ -93,8 +98,7 @@ function buildLane(lane, options) {
       volume.value = String(player.volume);
       volume.title = `${options.name} volume`;
       volume.addEventListener("input", () => {
-        player.volume = Number(volume.value);
-        applyMasterVolume();
+        setStemVolume(player, volume.value);
       });
 
       player.soloBtn = soloBtn;
@@ -402,6 +406,7 @@ function updatePlayhead() {
   const body = elements.timelineViewport.querySelector(".lane-body");
   if (!body) {
     elements.playhead.style.left = "80px";
+    updateTimelineTransportInfo();
     return;
   }
   const duration = getChartDuration();
@@ -410,6 +415,7 @@ function updatePlayhead() {
   elements.playhead.style.left = `${left}px`;
   followPlayhead(left, body);
   updateBeatHighlight();
+  updateTimelineTransportInfo();
 }
 
 function followPlayhead(left, body) {

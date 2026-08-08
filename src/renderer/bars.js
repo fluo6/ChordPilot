@@ -33,6 +33,7 @@ function renderBars() {
 
   if (!hasChart()) {
     elements.activeBarText.textContent = "Bar -";
+    updateTimelineTransportInfo();
     renderChartPreview();
     renderChartReasonPane(null);
     renderTimeline();
