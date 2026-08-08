@@ -8,7 +8,12 @@ function clearStems() {
   });
   state.stemPlayers = [];
   state.soloStem = null;
+  state.useStemMixPlayback = false;
   elements.audioPlayer.muted = false;
+}
+
+function enableStemMixPlayback() {
+  state.useStemMixPlayback = true;
 }
 
 function stemMixSnapshot() {
@@ -22,7 +27,7 @@ function stemMixSnapshot() {
 }
 
 function isSourcePlaybackMode() {
-  return state.currentView === "song" && state.editorPanel === "arrange";
+  return state.currentView === "song" && state.editorPanel === "arrange" && !state.useStemMixPlayback;
 }
 
 function previewStemByName() {
@@ -109,6 +114,19 @@ function renderStems(stemsResult) {
   applyStemMix();
 }
 
+function setStemVolume(player, value) {
+  if (!player) {
+    return;
+  }
+  const volume = Number(value);
+  player.volume = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0;
+  enableStemMixPlayback();
+  applyMasterVolume();
+  if (!elements.audioPlayer.paused) {
+    return applyStemMix();
+  }
+}
+
 function applyStemMix() {
   const request = ++stemPlaybackRequest;
   const solo = state.soloStem;
@@ -149,8 +167,9 @@ function applyStemMix() {
   }
 
   // Keep the source audible until at least one stem has actually started.
-  // A rejected stem play request must not leave the Analysis tab silent.
-  elements.audioPlayer.muted = false;
+  // Once a stem control is used, switch to the stem mix immediately so changes are audible.
+  const forceStemMix = Boolean(state.useStemMixPlayback);
+  elements.audioPlayer.muted = forceStemMix;
   return Promise.all(audiblePlayers.map(async (player) => {
     syncStemTime(player);
     try {

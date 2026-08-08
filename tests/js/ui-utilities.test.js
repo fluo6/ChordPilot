@@ -80,6 +80,9 @@ test("stem source-playback mode depends on the active editor", () => {
   const state = { currentView: "song", editorPanel: "arrange" };
   const { isSourcePlaybackMode } = loadScript("src/renderer/stems.js", ["isSourcePlaybackMode"], { state, elements: {} });
   assert.equal(isSourcePlaybackMode(), true);
+  state.useStemMixPlayback = true;
+  assert.equal(isSourcePlaybackMode(), false);
+  state.useStemMixPlayback = false;
   state.editorPanel = "chart";
   assert.equal(isSourcePlaybackMode(), false);
   state.currentView = "home";
@@ -117,6 +120,62 @@ test("stem playback keeps source audible when stems cannot start", async () => {
   rejectedAudio.play = () => Promise.resolve();
   assert.equal(await applyStemMix(), true);
   assert.equal(audioPlayer.muted, true);
+});
+
+test("stem volume slider updates live stem playback", async () => {
+  const audioPlayer = { muted: false, paused: false };
+  let resolveStemPlay;
+  let playCalls = 0;
+  const player = {
+    stem: { name: "vocals" },
+    audio: {
+      currentTime: 0,
+      volume: 0.8,
+      pause() {},
+      play() {
+        playCalls += 1;
+        return new Promise((resolve) => { resolveStemPlay = resolve; });
+      }
+    },
+    volume: 0.8,
+    muted: false
+  };
+  const state = {
+    currentView: "song",
+    editorPanel: "arrange",
+    masterVolume: 0.5,
+    soloStem: null,
+    stemPlayers: [player]
+  };
+  let masterApplied = 0;
+
+  const { setStemVolume } = loadScript("src/renderer/stems.js", ["setStemVolume"], {
+    state,
+    elements: { audioPlayer },
+    applyMasterVolume() {
+      masterApplied += 1;
+      state.stemPlayers.forEach((stemPlayer) => {
+        stemPlayer.audio.volume = Math.max(0, Math.min(1, stemPlayer.volume * state.masterVolume));
+      });
+    }
+  });
+
+  const mixPromise = setStemVolume(player, "0.25");
+  assert.equal(player.volume, 0.25);
+  assert.equal(player.audio.volume, 0.125);
+  assert.equal(masterApplied, 1);
+  assert.equal(state.useStemMixPlayback, true);
+  assert.equal(playCalls, 1);
+  assert.equal(audioPlayer.muted, true);
+  resolveStemPlay();
+  assert.equal(await mixPromise, true);
+  assert.equal(audioPlayer.muted, true);
+
+  const secondMixPromise = setStemVolume(player, "0.5");
+  assert.equal(player.volume, 0.5);
+  assert.equal(player.audio.volume, 0.25);
+  resolveStemPlay();
+  assert.equal(await secondMixPromise, true);
 });
 
 test("rendered stems use transposed previews and preserve lane mix", () => {
@@ -298,6 +357,47 @@ test("key changes keep chart transpose when preview source is unavailable", asyn
   assert.match(state.status, /source audio is unavailable/);
 });
 
+test("automatic transpose never opens the audio picker for a missing source", async () => {
+  const state = {
+    audio: { path: "missing.wav", url: "file:///missing.wav", exists: true },
+    chart: { key: "D", detected_key: "C", key_offset: 2, tempo: 120, detected_tempo: 120, bars: [{ chord: "D" }] },
+    audioPreview: null,
+    audioPreviewBusy: false
+  };
+  const elements = {
+    audioPlayer: { currentTime: 0, paused: true },
+    loadingText: { textContent: "" }
+  };
+  let pickerCalls = 0;
+  let dialogs = 0;
+  const { applyAudioPreview } = loadScript("src/renderer/actions.js", ["applyAudioPreview"], {
+    state,
+    elements,
+    window: {
+      chordPilot: {
+        chooseAudio() { pickerCalls += 1; },
+        processAudio() { return Promise.reject(new Error("Choose an audio file before applying audio preview.")); }
+      }
+    },
+    hasChart() { return true; },
+    syncMetaToState() {},
+    ensureChartKeyState() {},
+    ensureChartTempoState() {},
+    tuningSemitones() { return 0; },
+    audioTempoRate() { return 1; },
+    beginLoading() { return () => {}; },
+    updateAudioPreviewState() {},
+    setStatus(message) { state.status = message; },
+    showErrorDialog() { dialogs += 1; }
+  });
+
+  await applyAudioPreview({ silentMissingSource: true });
+
+  assert.equal(pickerCalls, 0);
+  assert.equal(dialogs, 0);
+  assert.match(state.status, /source audio is unavailable/);
+});
+
 test("audio preview bundle renders available stems with the same transpose settings", async () => {
   const calls = [];
   const { processAudioPreviewBundle } = loadScript("src/renderer/actions.js", ["processAudioPreviewBundle"], {
@@ -337,6 +437,36 @@ test("audio preview bundle renders available stems with the same transpose setti
   }]);
 });
 
+test("audio preview still transposes the mix when a saved stem file is missing", async () => {
+  const { processAudioPreviewBundle } = loadScript("src/renderer/actions.js", ["processAudioPreviewBundle"], {
+    window: {
+      chordPilot: {
+        processAudio({ audioPath, semitones, tempoRate }) {
+          if (audioPath === "missing-vocals.wav") {
+            return Promise.reject(new Error("Choose an audio file before applying audio preview."));
+          }
+          return Promise.resolve({
+            path: `${audioPath}.preview.wav`,
+            url: `file:///${audioPath}.preview.wav`,
+            semitones,
+            tempoRate
+          });
+        }
+      }
+    }
+  });
+
+  const result = await processAudioPreviewBundle(
+    "mix.wav",
+    [{ name: "vocals", path: "missing-vocals.wav" }],
+    2,
+    1
+  );
+
+  assert.equal(result.path, "mix.wav.preview.wav");
+  assert.equal(result.stems, undefined);
+});
+
 test("manual audio preview relinks missing source and retries", async () => {
   const calls = [];
   const state = {
@@ -350,8 +480,7 @@ test("manual audio preview relinks missing source and retries", async () => {
     analyzeBtn: { disabled: true },
     loadingText: { textContent: "" }
   };
-  let cleared = 0;
-  let rendered = 0;
+  let renderedStems = null;
   const { applyAudioPreview } = loadScript("src/renderer/actions.js", ["applyAudioPreview"], {
     state,
     elements,
@@ -377,9 +506,8 @@ test("manual audio preview relinks missing source and retries", async () => {
     audioTempoRate() { return 1; },
     beginLoading() { return () => {}; },
     updateAudioPreviewState() {},
-    clearStems() { cleared += 1; },
     setMediaPlaybackRate() {},
-    renderTimeline() { rendered += 1; },
+    renderStems(stems) { renderedStems = stems; },
     tuningCents() { return 0; },
     formatCents() { return "0 cents"; },
     setStatus(message) { state.status = message; },
@@ -397,9 +525,86 @@ test("manual audio preview relinks missing source and retries", async () => {
   assert.equal(state.audio.path, "linked.wav");
   assert.equal(state.audioPreview.path, "preview.wav");
   assert.equal(elements.analyzeBtn.disabled, false);
-  assert.equal(cleared, 1);
-  assert.equal(rendered, 1);
+  assert.equal(renderedStems, state.chart.stems);
   assert.equal(state.dialog, undefined);
+});
+
+test("apply audio preview keeps transposed stem controls available", async () => {
+  const calls = [];
+  const state = {
+    audio: { path: "mix.wav", url: "file:///mix.wav", name: "Mix" },
+    chart: {
+      key: "D",
+      detected_key: "C",
+      key_offset: 2,
+      tempo: 120,
+      detected_tempo: 120,
+      stems: {
+        ok: true,
+        stems: [
+          { name: "vocals", path: "vocals.wav", url: "file:///vocals.wav" },
+          { name: "drums", path: "drums.wav", url: "file:///drums.wav" }
+        ]
+      },
+      bars: [{ chord: "D" }]
+    },
+    audioPreview: null,
+    audioPreviewBusy: false
+  };
+  const elements = {
+    audioPlayer: {
+      src: "file:///mix.wav",
+      currentTime: 8,
+      paused: true,
+      load() { this.loaded = true; }
+    },
+    loadingText: { textContent: "" }
+  };
+  let renderedStems = null;
+  const { applyAudioPreview } = loadScript("src/renderer/actions.js", ["applyAudioPreview"], {
+    state,
+    elements,
+    window: {
+      chordPilot: {
+        processAudio(payload) {
+          calls.push({ audioPath: payload.audioPath, semitones: payload.semitones, tempoRate: payload.tempoRate });
+          return Promise.resolve({
+            path: `${payload.audioPath}.preview.wav`,
+            url: `file:///${payload.audioPath}.preview.wav`,
+            semitones: payload.semitones,
+            tempoRate: payload.tempoRate
+          });
+        }
+      }
+    },
+    hasChart() { return true; },
+    syncMetaToState() {},
+    ensureChartKeyState() {},
+    ensureChartTempoState() {},
+    tuningSemitones() { return 0; },
+    audioTempoRate() { return 1; },
+    beginLoading() { return () => {}; },
+    updateAudioPreviewState() {},
+    setMediaPlaybackRate() {},
+    renderStems(stems) { renderedStems = stems; },
+    tuningCents() { return 0; },
+    formatCents() { return "0 cents"; },
+    setStatus(message) { state.status = message; },
+    showErrorDialog(error) { state.dialog = error; }
+  });
+
+  await applyAudioPreview();
+
+  assert.deepEqual(plain(calls), [
+    { audioPath: "mix.wav", semitones: 2, tempoRate: 1 },
+    { audioPath: "vocals.wav", semitones: 2, tempoRate: 1 },
+    { audioPath: "drums.wav", semitones: 2, tempoRate: 1 }
+  ]);
+  assert.equal(elements.audioPlayer.src, "file:///mix.wav.preview.wav");
+  assert.equal(elements.audioPlayer.loaded, true);
+  assert.equal(renderedStems, state.chart.stems);
+  assert.equal(state.audioPreview.stems.stems.length, 2);
+  assert.equal(state.audioPreview.stems.stems[0].path, "vocals.wav.preview.wav");
 });
 
 test("copying lyrics preserves manual edits and maps matching bars", () => {
