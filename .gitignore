@@ -9,5 +9,6 @@ __pycache__/
 Tools/
 .agents/
 .codex/
+.worktrees/
 *.lnk
 ChordPilot - macOS.app
