@@ -1,11 +1,9 @@
 from chordpilot_common import *
 
 def cache_root() -> Path:
-    root = Path(tempfile.gettempdir()) / "ChordPilot"
-    (root / "decoded").mkdir(parents=True, exist_ok=True)
-    (root / "analysis").mkdir(parents=True, exist_ok=True)
-    (root / "stems").mkdir(parents=True, exist_ok=True)
-    (root / "history").mkdir(parents=True, exist_ok=True)
+    configured = os.environ.get("CHORDPILOT_CACHE_DIR", "").strip()
+    root = Path(configured).expanduser() if configured else Path(tempfile.gettempdir()) / "ChordPilot"
+    root.mkdir(parents=True, exist_ok=True)
     return root
 
 def file_fingerprint(path: Path) -> dict[str, Any]:
