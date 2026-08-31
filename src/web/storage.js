@@ -87,18 +87,33 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     tmp: path.join(dataRoot, "tmp")
   };
 
+  function ensureDirectory(key) {
+    const directory = directories[key];
+    assertContained(dataRoot, directory);
+    try {
+      const stats = fs.lstatSync(directory);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error("invalid directory");
+      }
+    } catch (_error) {
+      throw new StorageError("INVALID_DATA_DIRECTORY", "Configured ChordPilot storage is invalid.");
+    }
+    return directory;
+  }
+
+  function directoryKeyForKind(kind) {
+    return kind === "source" ? "media" : "generated";
+  }
+
   function directoryForKind(kind) {
-    return kind === "source" ? directories.media : directories.generated;
+    return ensureDirectory(directoryKeyForKind(kind));
   }
 
   function initialize() {
     for (const directory of Object.values(directories)) {
       fs.mkdirSync(directory, { recursive: true });
-      const stats = fs.lstatSync(directory);
-      if (!stats.isDirectory() || stats.isSymbolicLink()) {
-        throw new StorageError("INVALID_DATA_DIRECTORY", "Configured ChordPilot storage is invalid.");
-      }
     }
+    Object.keys(directories).forEach(ensureDirectory);
   }
 
   function newId(label) {
@@ -106,9 +121,10 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   }
 
   function createTempPath(suffix = ".part") {
+    const tmpDirectory = ensureDirectory("tmp");
     const safeSuffix = String(suffix || ".part").replace(/[^a-zA-Z0-9._-]/g, "");
-    const tempPath = path.join(directories.tmp, `${newId("media")}${safeSuffix || ".part"}`);
-    assertContained(directories.tmp, tempPath);
+    const tempPath = path.join(tmpDirectory, `${newId("media")}${safeSuffix || ".part"}`);
+    assertContained(tmpDirectory, tempPath);
     return tempPath;
   }
 
@@ -121,10 +137,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     }
   }
 
-  function writeAtomicFile(destination, content) {
+  function writeAtomicFile(directoryKey, destination, content) {
+    const directory = ensureDirectory(directoryKey);
     const partPath = `${destination}.part`;
-    assertContained(dataRoot, destination);
-    assertContained(dataRoot, partPath);
+    assertContained(directory, destination);
+    assertContained(directory, partPath);
     let descriptor;
     try {
       descriptor = fs.openSync(partPath, "w", 0o600);
@@ -136,10 +153,17 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     fs.renameSync(partPath, destination);
   }
 
-  function writeMetadata(directory, record) {
+  function writeMetadata(directoryKey, record) {
+    const directory = ensureDirectory(directoryKey);
     const metadataPath = path.join(directory, `${record.id}.json`);
     assertContained(directory, metadataPath);
-    writeAtomicFile(metadataPath, `${JSON.stringify(record)}\n`);
+    writeAtomicFile(directoryKey, metadataPath, `${JSON.stringify(record)}\n`);
+  }
+
+  function removeOwnedFile(directoryKey, filePath) {
+    const directory = ensureDirectory(directoryKey);
+    assertContained(directory, filePath);
+    fs.rmSync(filePath, { force: true });
   }
 
   function publicRecord(record) {
@@ -152,7 +176,8 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     const mediaId = assertUuid(id, "media");
     let directory;
     let metadataPath;
-    for (const candidate of [directories.media, directories.generated]) {
+    for (const [directoryKey, candidate] of [["media", directories.media], ["generated", directories.generated]]) {
+      ensureDirectory(directoryKey);
       const possiblePath = path.join(candidate, `${mediaId}.json`);
       assertContained(candidate, possiblePath);
       if (fs.existsSync(possiblePath)) {
@@ -163,6 +188,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     }
     if (!metadataPath) return null;
 
+    ensureDirectory(directory === directories.media ? "media" : "generated");
     const metadataStats = fs.lstatSync(metadataPath);
     if (!metadataStats.isFile() || metadataStats.isSymbolicLink()) {
       throw new StorageError("INVALID_MEDIA_METADATA", "Stored media metadata is invalid.");
@@ -174,9 +200,17 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     } catch (_error) {
       throw new StorageError("INVALID_MEDIA_METADATA", "Stored media metadata is invalid.");
     }
-    if (stored.id !== mediaId || typeof stored.filename !== "string") {
+    const extension = normalizeExtension(stored.extension);
+    const expectedFilename = `${mediaId}.${extension}`;
+    if (
+      stored.id !== mediaId ||
+      typeof stored.filename !== "string" ||
+      path.basename(stored.filename) !== stored.filename ||
+      stored.filename !== expectedFilename
+    ) {
       throw new StorageError("INVALID_MEDIA_METADATA", "Stored media metadata is invalid.");
     }
+    ensureDirectory(directory === directories.media ? "media" : "generated");
     const filePath = path.resolve(directory, stored.filename);
     assertContained(directory, filePath);
     if (!fs.existsSync(filePath)) return null;
@@ -188,7 +222,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       id: mediaId,
       kind: String(stored.kind || "generated"),
       name: sanitizeName(stored.name, "media"),
-      extension: normalizeExtension(stored.extension, extensionFor(stored.filename)),
+      extension,
       size: Number(stored.size) || stats.size,
       url: `/api/media/${mediaId}`,
       createdAt: String(stored.createdAt || "")
@@ -207,12 +241,14 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     if (!tempPath) {
       throw new StorageError("TEMP_FILE_REQUIRED", "A temporary media file is required.");
     }
-    assertContained(directories.tmp, tempPath);
+    const tmpDirectory = ensureDirectory("tmp");
+    assertContained(tmpDirectory, tempPath);
     const sourcePath = path.resolve(tempPath);
     if (!fs.existsSync(sourcePath) || !fs.lstatSync(sourcePath).isFile()) {
       throw new StorageError("TEMP_FILE_MISSING", "The temporary media file is unavailable.");
     }
 
+    const directoryKey = directoryKeyForKind(kind);
     const directory = directoryForKind(kind);
     const id = newId("media");
     const name = sanitizeName(originalName, "media");
@@ -224,17 +260,25 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     assertContained(directory, destinationPart);
 
     try {
+      ensureDirectory(directoryKey);
       fs.copyFileSync(sourcePath, destinationPart, fs.constants.COPYFILE_EXCL);
+      ensureDirectory(directoryKey);
       fsyncFile(destinationPart);
+      ensureDirectory(directoryKey);
       fs.renameSync(destinationPart, destination);
+      ensureDirectory(directoryKey);
       const stats = fs.statSync(destination);
       const record = { id, kind: String(kind), name, extension, size: stats.size, filename, createdAt: String(now()) };
-      writeMetadata(directory, record);
-      fs.rmSync(sourcePath, { force: true });
+      writeMetadata(directoryKey, record);
+      removeOwnedFile("tmp", sourcePath);
       return privatePath({ ...publicRecord(record) }, destination);
     } catch (error) {
-      fs.rmSync(destinationPart, { force: true });
-      fs.rmSync(destination, { force: true });
+      try {
+        removeOwnedFile(directoryKey, destinationPart);
+        removeOwnedFile(directoryKey, destination);
+      } catch (_cleanupError) {
+        // The original storage error is more useful to the caller.
+      }
       if (error instanceof StorageError) throw error;
       throw new StorageError("MEDIA_COMMIT_FAILED", "Could not store media.");
     }
@@ -247,12 +291,15 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     const name = sanitizeName(originalName || path.basename(sourcePath), "media");
     const tempPath = createTempPath(`.${extensionFor(name)}.part`);
     if (copy) {
+      ensureDirectory("tmp");
       fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
     } else {
       try {
+        ensureDirectory("tmp");
         fs.renameSync(sourcePath, tempPath);
       } catch (error) {
         if (error.code !== "EXDEV") throw error;
+        ensureDirectory("tmp");
         fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
         fs.rmSync(sourcePath);
       }
@@ -345,7 +392,9 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     if (!Array.isArray(stems)) return stems;
     return stems.map((stem) => {
       const media = hydrateMedia(stem);
-      return media ? { ...media, ...(stem?.name ? { name: stem.name } : {}) } : media;
+      if (!media) return media;
+      const hydrated = { ...media, ...(stem?.name ? { name: stem.name } : {}) };
+      return Object.hasOwn(media, "path") ? privatePath(hydrated, media.path) : hydrated;
     });
   }
 
@@ -360,7 +409,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       }
     }
     if (session?.audioPreview) {
-      hydrated.audioPreview = { ...redactPaths(session.audioPreview), ...hydrateMedia(session.audioPreview) };
+      const preview = hydrateMedia(session.audioPreview);
+      hydrated.audioPreview = { ...redactPaths(session.audioPreview), ...preview };
+      if (preview && Object.hasOwn(preview, "path")) {
+        privatePath(hydrated.audioPreview, preview.path);
+      }
       if (session.audioPreview.stems && typeof session.audioPreview.stems === "object") {
         hydrated.audioPreview.stems = {
           ...redactPaths(session.audioPreview.stems),
@@ -386,9 +439,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
 
   function readStoredSession(id) {
     const sessionId = assertUuid(id, "session");
-    const sessionPath = path.join(directories.sessions, `${sessionId}.json`);
-    assertContained(directories.sessions, sessionPath);
+    const sessionsDirectory = ensureDirectory("sessions");
+    const sessionPath = path.join(sessionsDirectory, `${sessionId}.json`);
+    assertContained(sessionsDirectory, sessionPath);
     if (!fs.existsSync(sessionPath)) return null;
+    ensureDirectory("sessions");
     const sessionStats = fs.lstatSync(sessionPath);
     if (!sessionStats.isFile() || sessionStats.isSymbolicLink()) {
       throw new StorageError("INVALID_SESSION", "Stored session data is invalid.");
@@ -407,12 +462,14 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   async function saveSession(session) {
     const id = newId("session");
     const record = { id, createdAt: String(now()), session: await normalizeSessionForStorage(session) };
-    writeAtomicFile(path.join(directories.sessions, `${id}.json`), `${JSON.stringify(record)}\n`);
+    const sessionsDirectory = ensureDirectory("sessions");
+    writeAtomicFile("sessions", path.join(sessionsDirectory, `${id}.json`), `${JSON.stringify(record)}\n`);
     return { id, createdAt: record.createdAt, session: publicSession(record.session) };
   }
 
   function listSessions() {
-    return fs.readdirSync(directories.sessions, { withFileTypes: true })
+    const sessionsDirectory = ensureDirectory("sessions");
+    return fs.readdirSync(sessionsDirectory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && UUID_PATTERN.test(path.basename(entry.name, ".json")) && entry.name.endsWith(".json"))
       .map((entry) => readStoredSession(path.basename(entry.name, ".json")))
       .filter(Boolean)
@@ -426,8 +483,14 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   }
 
   async function importSession(tempPath) {
-    assertContained(directories.tmp, tempPath);
+    const tmpDirectory = ensureDirectory("tmp");
+    assertContained(tmpDirectory, tempPath);
     try {
+      ensureDirectory("tmp");
+      const stats = fs.lstatSync(tempPath);
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        throw new StorageError("INVALID_SESSION", "Imported session data is invalid.");
+      }
       const imported = JSON.parse(fs.readFileSync(tempPath, "utf8"));
       const session = imported?.session && typeof imported.session === "object" ? imported.session : imported;
       if (!session || typeof session !== "object") {
@@ -438,7 +501,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       if (error instanceof StorageError) throw error;
       throw new StorageError("INVALID_SESSION", "Imported session data is invalid.");
     } finally {
-      fs.rmSync(tempPath, { force: true });
+      try {
+        removeOwnedFile("tmp", tempPath);
+      } catch (_cleanupError) {
+        // The temporary directory may have been replaced after validation.
+      }
     }
   }
 

@@ -69,7 +69,7 @@ test("resolveMedia rejects metadata whose basename escapes the typed directory",
     createdAt: "2026-08-31T12:00:00.000Z"
   }));
 
-  assert.throws(() => storage.resolveMedia(id), /outside the ChordPilot data root/);
+  assert.throws(() => storage.resolveMedia(id), /Stored media metadata is invalid/);
 });
 
 test("resolveMedia refuses symlinked metadata records", async (t) => {
@@ -134,6 +134,29 @@ test("hydration keeps server paths non-enumerable and openSession redacts them",
   assert.equal((await storage.openSession(saved.id)).session.audio.path, undefined);
 });
 
+test("hydration keeps private paths for preview and stem service inputs without serializing them", async (t) => {
+  const { storage, root } = await makeStorage(t);
+  const previewTemp = path.join(root, "tmp", "preview.wav.part");
+  const stemTemp = path.join(root, "tmp", "vocals.wav.part");
+  fs.writeFileSync(previewTemp, "RIFF");
+  fs.writeFileSync(stemTemp, "RIFF");
+  const preview = await storage.commitMedia({ tempPath: previewTemp, originalName: "preview.wav", kind: "preview" });
+  const stem = await storage.commitMedia({ tempPath: stemTemp, originalName: "vocals.wav", kind: "stem" });
+
+  const hydrated = storage.hydrateSession(await storage.normalizeSessionForStorage({
+    app: "ChordPilot",
+    version: 1,
+    audioPreview: { ...preview, stems: { ok: true, stems: [{ ...stem, name: "vocals" }] } },
+    chart: { stems: { ok: true, stems: [{ ...stem, name: "vocals" }] } }
+  }));
+
+  assert.equal(hydrated.audioPreview.path, preview.path);
+  assert.equal(hydrated.audioPreview.stems.stems[0].path, stem.path);
+  assert.equal(hydrated.chart.stems.stems[0].path, stem.path);
+  assert.equal(JSON.stringify(hydrated).includes(preview.path), false);
+  assert.equal(JSON.stringify(hydrated).includes(stem.path), false);
+});
+
 test("hydration marks a missing media reference without exposing a path", async (t) => {
   const { storage } = await makeStorage(t);
   const session = await storage.hydrateSession({
@@ -155,4 +178,53 @@ test("importSession saves a portable session document", async (t) => {
   const imported = await storage.importSession(tempPath);
   assert.match(imported.id, /^[a-f0-9-]{36}$/);
   assert.equal((await storage.openSession(imported.id)).session.app, "ChordPilot");
+});
+
+test("storage operations reject typed directories replaced by symlinks after initialization", async (t) => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-storage-outside-"));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  const validId = "44444444-4444-4444-8444-444444444444";
+
+  for (const directory of ["media", "generated", "sessions", "tmp"]) {
+    const { root, storage } = await makeStorage(t);
+    const target = path.join(root, directory);
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.symlinkSync(outside, target);
+
+    if (directory === "sessions") {
+      assert.throws(() => storage.listSessions(), /Configured ChordPilot storage is invalid/);
+    } else if (directory === "tmp") {
+      assert.throws(() => storage.createTempPath(".wav.part"), /Configured ChordPilot storage is invalid/);
+    } else {
+      assert.throws(() => storage.resolveMedia(validId), /Configured ChordPilot storage is invalid/);
+    }
+  }
+});
+
+test("importSession rejects a symlinked temporary file", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-storage-outside-"));
+  t.after(() => fs.rmSync(outsideRoot, { recursive: true, force: true }));
+  const outside = path.join(outsideRoot, "session.json");
+  const tempPath = path.join(root, "tmp", "import.json.part");
+  fs.writeFileSync(outside, JSON.stringify({ app: "ChordPilot", version: 1 }));
+  fs.symlinkSync(outside, tempPath);
+
+  await assert.rejects(() => storage.importSession(tempPath), /Imported session data is invalid/);
+});
+
+test("resolveMedia rejects metadata that maps an ID to another stored file", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const firstTemp = path.join(root, "tmp", "first.wav.part");
+  const secondTemp = path.join(root, "tmp", "second.wav.part");
+  fs.writeFileSync(firstTemp, "RIFF");
+  fs.writeFileSync(secondTemp, "WAVE");
+  const first = await storage.commitMedia({ tempPath: firstTemp, originalName: "first.wav", kind: "source" });
+  const second = await storage.commitMedia({ tempPath: secondTemp, originalName: "second.wav", kind: "source" });
+  const metadataPath = path.join(root, "media", `${first.id}.json`);
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  metadata.filename = path.basename(second.path);
+  fs.writeFileSync(metadataPath, JSON.stringify(metadata));
+
+  assert.throws(() => storage.resolveMedia(first.id), /Stored media metadata is invalid/);
 });
