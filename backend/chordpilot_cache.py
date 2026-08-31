@@ -4,6 +4,8 @@ def cache_root() -> Path:
     configured = os.environ.get("CHORDPILOT_CACHE_DIR", "").strip()
     root = Path(configured).expanduser() if configured else Path(tempfile.gettempdir()) / "ChordPilot"
     root.mkdir(parents=True, exist_ok=True)
+    for child in ("decoded", "analysis", "stems", "history"):
+        (root / child).mkdir(parents=True, exist_ok=True)
     return root
 
 def file_fingerprint(path: Path) -> dict[str, Any]:

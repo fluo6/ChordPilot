@@ -24,6 +24,14 @@ class CacheTests(unittest.TestCase):
                 self.assertEqual(cache.cache_root(), configured)
                 self.assertTrue(configured.is_dir())
 
+    def test_cache_root_creates_child_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            configured = Path(directory) / "persistent-cache"
+            with patch.dict(os.environ, {"CHORDPILOT_CACHE_DIR": str(configured)}):
+                cache.cache_root()
+            for child in ("decoded", "analysis", "stems", "history"):
+                self.assertTrue((configured / child).is_dir())
+
     def test_cache_root_keeps_temp_default_without_environment(self):
         with patch.dict(os.environ, {}, clear=True):
             root = cache.cache_root()
