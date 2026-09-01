@@ -4,8 +4,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { EventEmitter } = require("node:events");
 
 const { createWebApp } = require("../../src/web/app");
+const { createWebRuntime, parseWebEnvironment } = require("../../src/web/server");
 const { createStorage } = require("../../src/web/storage");
 const { createLogBroker, createSerialQueue } = require("../../src/web/work-queue");
 
@@ -56,6 +58,27 @@ async function uploadFixture(runtime, name = "song.wav", contents = "RIFF") {
   const response = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: form });
   assert.equal(response.status, 200);
   return (await response.json()).audio;
+}
+
+function completedChild(stdout = "{}") {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = { write() {}, end() {} };
+  child.kill = () => true;
+  queueMicrotask(() => {
+    child.stdout.emit("data", Buffer.from(stdout));
+    child.emit("close", 0);
+  });
+  return child;
+}
+
+async function unusedTcpPort() {
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return port;
 }
 
 function openSse(url) {
@@ -745,4 +768,145 @@ test("audio export removes a failed generated part file and redacts its service 
   });
   assert.equal(JSON.stringify(response.body).includes(runtime.root), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
+});
+
+test("environment defaults parse without starting the HTTP server", () => {
+  const config = parseWebEnvironment({});
+
+  assert.deepEqual(config, {
+    host: "0.0.0.0",
+    port: 3000,
+    dataRoot: path.resolve(".chordpilot-data"),
+    cacheDir: path.resolve(".chordpilot-data", "cache"),
+    uploadLimitBytes: 512 * 1024 * 1024,
+    pythonPath: "python3",
+    ffmpegPath: "ffmpeg",
+    ytDlpPath: "yt-dlp"
+  });
+});
+
+test("runtime composition applies custom environment and shares backend logs", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-runtime-"));
+  const dataRoot = path.join(root, "persistent-data");
+  const calls = [];
+  const runtime = createWebRuntime({
+    HOST: "127.0.0.1",
+    PORT: "43123",
+    CHORDPILOT_DATA_ROOT: dataRoot,
+    CHORDPILOT_UPLOAD_LIMIT_BYTES: "4096",
+    CHORDPILOT_PYTHON: "configured-python",
+    CHORDPILOT_FFMPEG: "configured-ffmpeg",
+    CHORDPILOT_YTDLP: "configured-yt-dlp",
+    CHORDPILOT_CACHE_DIR: path.join(dataRoot, "analysis-cache"),
+    CHORDPILOT_AUTO_INSTALL_DEMUCS: "0"
+  }, {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return completedChild(JSON.stringify({ title: "Composed" }));
+    }
+  });
+  t.after(async () => {
+    await runtime.stop();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  assert.equal(runtime.server.listening, false);
+  assert.deepEqual(runtime.config, {
+    host: "127.0.0.1",
+    port: 43123,
+    dataRoot: path.resolve(dataRoot),
+    cacheDir: path.resolve(dataRoot, "analysis-cache"),
+    uploadLimitBytes: 4096,
+    pythonPath: "configured-python",
+    ffmpegPath: "configured-ffmpeg",
+    ytDlpPath: "configured-yt-dlp"
+  });
+  for (const directory of ["media", "generated", "sessions", "cache", "tmp"]) {
+    assert.equal(fs.statSync(path.join(dataRoot, directory)).isDirectory(), true);
+  }
+
+  const messages = [];
+  const unsubscribe = runtime.logBroker.subscribe((message) => messages.push(message));
+  const chart = await runtime.services.analyze({ audioPath: "/opaque/private/audio.wav", mode: "fast" });
+  unsubscribe();
+
+  assert.equal(chart.title, "Composed");
+  assert.deepEqual(messages, ["backend: trying configured-python", "backend: complete"]);
+  assert.equal(calls[0].command, "configured-python");
+  assert.equal(calls[0].options.env.CHORDPILOT_CACHE_DIR, path.join(dataRoot, "analysis-cache"));
+  assert.equal(calls[0].options.env.CHORDPILOT_AUTO_INSTALL_DEMUCS, "0");
+  assert.equal(calls[0].options.env.CHORDPILOT_FFMPEG, "configured-ffmpeg");
+  assert.equal(calls[0].options.env.TORCH_HOME, path.join(dataRoot, "analysis-cache", "torch"));
+});
+
+test("environment rejects invalid numeric values", () => {
+  for (const [name, value] of [
+    ["PORT", "0"],
+    ["PORT", "65536"],
+    ["PORT", "not-a-number"],
+    ["CHORDPILOT_UPLOAD_LIMIT_BYTES", "-1"],
+    ["CHORDPILOT_UPLOAD_LIMIT_BYTES", "1.5"]
+  ]) {
+    assert.throws(() => parseWebEnvironment({ [name]: value }), new RegExp(`${name} must be a positive integer`));
+  }
+});
+
+test("shutdown is idempotent, closes the queue before HTTP, terminates children, and closes SSE", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-shutdown-"));
+  const port = await unusedTcpPort();
+  let childKillCount = 0;
+  let child;
+  const runtime = createWebRuntime({
+    HOST: "127.0.0.1",
+    PORT: String(port),
+    CHORDPILOT_DATA_ROOT: path.join(root, "data"),
+    CHORDPILOT_YTDLP: "managed-yt-dlp"
+  }, {
+    spawnImpl() {
+      child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { write() {}, end() {} };
+      child.kill = () => {
+        childKillCount += 1;
+        queueMicrotask(() => child.emit("close", 143));
+        return true;
+      };
+      return child;
+    }
+  });
+  t.after(async () => {
+    await runtime.stop();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  await runtime.start();
+  const connection = openSse(`http://127.0.0.1:${port}/api/events`);
+  await connection.connected;
+  const childResult = runtime.services.downloadYoutubeAudio("https://youtu.be/managed-child").catch((error) => error);
+
+  const lifecycle = [];
+  const closeQueue = runtime.queue.close.bind(runtime.queue);
+  runtime.queue.close = () => {
+    lifecycle.push("queue");
+    return closeQueue();
+  };
+  const closeServer = runtime.server.close.bind(runtime.server);
+  runtime.server.close = (callback) => {
+    lifecycle.push("server");
+    return closeServer(callback);
+  };
+
+  const stopping = runtime.stop();
+  assert.equal(runtime.stop(), stopping);
+  await stopping;
+  await connection.closed;
+  const childError = await childResult;
+  await runtime.stop();
+
+  assert.deepEqual(lifecycle, ["queue", "server"]);
+  assert.equal(childKillCount, 1);
+  assert.equal(childError instanceof Error, true);
+  assert.equal(runtime.queue.state().closing, true);
+  assert.equal(runtime.server.listening, false);
 });
