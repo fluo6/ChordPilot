@@ -185,10 +185,13 @@ test("session storage strips location metadata while retaining opaque media URLs
     audio: media,
     chart: {
       title: "Keep this title",
+      lyrics: { source: "manual transcription" },
+      bars: [{ evidence: { source: "confidence-model" } }],
       previewSourceUri: fileUri,
       src: relativePath,
       pathToAudio: absolutePath,
-      fileLocation: relativePath
+      fileLocation: relativePath,
+      stems: { directory: absolutePath, stems: [] }
     }
   });
   const opened = await storage.openSession(saved.id);
@@ -196,6 +199,8 @@ test("session storage strips location metadata while retaining opaque media URLs
 
   for (const payload of [saved.session, opened.session, portable]) {
     assert.equal(payload.chart.title, "Keep this title");
+    assert.equal(payload.chart.lyrics.source, "manual transcription");
+    assert.equal(payload.chart.bars[0].evidence.source, "confidence-model");
     assert.equal(JSON.stringify(payload).includes(absolutePath), false);
     assert.equal(JSON.stringify(payload).includes(relativePath), false);
     assert.equal(JSON.stringify(payload).includes(fileUri), false);

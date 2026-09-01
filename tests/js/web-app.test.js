@@ -358,7 +358,16 @@ test("analysis serializes jobs and hides registered stem paths", async (t) => {
         }
         const stemPath = path.join(runtime.root, `stem-${started.length}.wav`);
         fs.writeFileSync(stemPath, "RIFF");
-        return { title: "Song", bars: [], path: "/never-public", stems: { ok: true, stems: [{ name: "bass", path: stemPath }] } };
+        return {
+          title: "Song",
+          bars: [],
+          path: "/never-public",
+          stems: {
+            ok: true,
+            directory: path.join(runtime.root, "analysis-cache"),
+            stems: [{ name: "bass", path: stemPath }]
+          }
+        };
       }
     }
   });
@@ -378,6 +387,8 @@ test("analysis serializes jobs and hides registered stem paths", async (t) => {
   for (const response of [firstResponse, secondResponse]) {
     assert.equal(response.status, 200);
     assert.equal(response.body.chart.path, undefined);
+    assert.equal(response.body.chart.stems.directory, undefined);
+    assert.equal(JSON.stringify(response.body).includes(path.join(runtime.root, "analysis-cache")), false);
     assert.equal(response.body.chart.stems.stems[0].path, undefined);
     assert.match(response.body.chart.stems.stems[0].url, /^\/api\/media\//);
   }
@@ -508,9 +519,12 @@ test("session save strips client filesystem paths while retaining opaque media r
       path: outsidePath,
       stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
     },
+    analysis: { source: outsidePath },
+    ui: { file: fileUri },
     chart: {
-      bars: [],
-      source: outsidePath,
+      bars: [{ evidence: { source: "confidence-model" } }],
+      lyrics: { source: "manual transcription" },
+      source: fileUri,
       file: relativePath,
       previewSourceUri: fileUri,
       src: relativePath,
@@ -528,6 +542,8 @@ test("session save strips client filesystem paths while retaining opaque media r
   assert.equal(response.body.session.audioPreview.id, unknownId);
   assert.equal(response.body.session.audioPreview.exists, false);
   assert.equal(response.body.session.chart.stems.stems[0].exists, false);
+  assert.equal(response.body.session.chart.lyrics.source, "manual transcription");
+  assert.equal(response.body.session.chart.bars[0].evidence.source, "confidence-model");
   assert.equal(response.body.session.chart.source, undefined);
   assert.equal(response.body.session.chart.file, undefined);
   assert.equal(response.body.session.chart.previewSourceUri, undefined);
@@ -536,16 +552,24 @@ test("session save strips client filesystem paths while retaining opaque media r
   assert.equal(response.body.session.chart.fileLocation, undefined);
   assert.equal(JSON.stringify(response.body).includes(outsidePath), false);
   assert.equal(JSON.stringify(response.body).includes(relativePath), false);
+  assert.equal(JSON.stringify(response.body).includes(fileUri), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
   assert.equal((await fetch(`${runtime.url}/api/media/${known.id}`)).status, 200);
   assert.equal(await (await fetch(`${runtime.url}/api/media/${known.id}`)).text(), "KNOWN");
   const list = await fetch(`${runtime.url}/api/sessions`);
   const opened = await fetch(`${runtime.url}/api/sessions/${response.body.id}`);
   const downloaded = await fetch(`${runtime.url}${response.body.downloadUrl}`);
-  for (const payload of [await list.json(), await opened.json(), await downloaded.json()]) {
+  const listBody = await list.json();
+  const openedBody = await opened.json();
+  const downloadedBody = await downloaded.json();
+  for (const payload of [listBody, openedBody, downloadedBody]) {
     assert.equal(JSON.stringify(payload).includes(outsidePath), false);
     assert.equal(JSON.stringify(payload).includes(relativePath), false);
     assert.equal(JSON.stringify(payload).includes(fileUri), false);
+  }
+  for (const session of [openedBody.session, downloadedBody]) {
+    assert.equal(session.chart.lyrics.source, "manual transcription");
+    assert.equal(session.chart.bars[0].evidence.source, "confidence-model");
   }
 });
 
@@ -561,10 +585,13 @@ test("session import strips relative filesystem paths without importing their co
     version: 1,
     audio: { path: outsidePath, source_path: relativePath, coverPath: outsidePath },
     audioPreview: { path: outsidePath, source_path: relativePath, stems: { stems: [{ path: outsidePath, source_path: relativePath }] } },
+    analysis: { source: outsidePath },
+    ui: { file: fileUri },
     chart: {
-      bars: [],
+      bars: [{ evidence: { source: "confidence-model" } }],
+      lyrics: { source: "manual transcription" },
       path: outsidePath,
-      source: outsidePath,
+      source: fileUri,
       file: relativePath,
       previewSourceUri: fileUri,
       src: relativePath,
@@ -579,6 +606,8 @@ test("session import strips relative filesystem paths without importing their co
   assert.equal(imported.session.audio, null);
   assert.equal(imported.session.audioPreview.id, undefined);
   assert.equal(imported.session.chart.stems.stems[0].path, undefined);
+  assert.equal(imported.session.chart.lyrics.source, "manual transcription");
+  assert.equal(imported.session.chart.bars[0].evidence.source, "confidence-model");
   assert.equal(imported.session.chart.source, undefined);
   assert.equal(imported.session.chart.file, undefined);
   assert.equal(imported.session.chart.previewSourceUri, undefined);
@@ -592,10 +621,17 @@ test("session import strips relative filesystem paths without importing their co
   const list = await fetch(`${runtime.url}/api/sessions`);
   const opened = await fetch(`${runtime.url}/api/sessions/${imported.id}`);
   const downloaded = await fetch(`${runtime.url}${imported.downloadUrl}`);
-  for (const payload of [await list.json(), await opened.json(), await downloaded.json()]) {
+  const listBody = await list.json();
+  const openedBody = await opened.json();
+  const downloadedBody = await downloaded.json();
+  for (const payload of [listBody, openedBody, downloadedBody]) {
     assert.equal(JSON.stringify(payload).includes(outsidePath), false);
     assert.equal(JSON.stringify(payload).includes(relativePath), false);
     assert.equal(JSON.stringify(payload).includes(fileUri), false);
+  }
+  for (const session of [openedBody.session, downloadedBody]) {
+    assert.equal(session.chart.lyrics.source, "manual transcription");
+    assert.equal(session.chart.bars[0].evidence.source, "confidence-model");
   }
 });
 

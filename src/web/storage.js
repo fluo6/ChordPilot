@@ -54,13 +54,35 @@ function privatePath(record, filePath) {
 
 function isLocationMetadataKey(key) {
   const normalized = String(key).replace(/[_-]/g, "").toLowerCase();
-  return ["path", "url", "uri", "src", "source", "file", "location", "audiofile", "coverfile", "sourcefile"].includes(normalized)
+  return ["path", "url", "uri", "src", "location", "directory"].includes(normalized)
     || normalized.startsWith("path")
     || normalized.endsWith("path")
     || normalized.endsWith("src")
     || normalized.endsWith("uri")
     || normalized.endsWith("url")
-    || normalized.endsWith("location");
+    || normalized.endsWith("location")
+    || normalized.endsWith("directory");
+}
+
+function isFilesystemLocation(value) {
+  if (typeof value !== "string") return false;
+  const location = value.trim();
+  if (!location) return false;
+  return /^file:/i.test(location)
+    || path.isAbsolute(location)
+    || /^[a-z]:[\\/]/i.test(location)
+    || /^\\\\/.test(location)
+    || /^~[\\/]/.test(location)
+    || /^\.{1,2}(?:[\\/]|$)/.test(location)
+    || location.includes("/")
+    || location.includes("\\")
+    || Boolean(path.extname(location));
+}
+
+function shouldRedactLocationMetadata(key, value) {
+  const normalized = String(key).replace(/[_-]/g, "").toLowerCase();
+  return isLocationMetadataKey(key)
+    || (["source", "file"].includes(normalized) && isFilesystemLocation(value));
 }
 
 function isOpaqueMediaUrl(key, value, record) {
@@ -77,7 +99,7 @@ function redactLocationMetadata(value, { preserveOpaqueMediaUrls = false } = {})
     return value;
   }
   return Object.fromEntries(Object.entries(value)
-    .filter(([key, child]) => !isLocationMetadataKey(key)
+    .filter(([key, child]) => !shouldRedactLocationMetadata(key, child)
       || (preserveOpaqueMediaUrls && isOpaqueMediaUrl(key, child, value)))
     .map(([key, child]) => [key, redactLocationMetadata(child, { preserveOpaqueMediaUrls })]));
 }
