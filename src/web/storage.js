@@ -70,7 +70,7 @@ function isFilesystemLocation(value) {
   if (!location) return false;
   return /^file:/i.test(location)
     || path.isAbsolute(location)
-    || /^[a-z]:[\\/]/i.test(location)
+    || /^[a-z]:/i.test(location)
     || /^\\\\/.test(location)
     || /^~[\\/]/.test(location)
     || /^\.{1,2}(?:[\\/]|$)/.test(location)

@@ -500,6 +500,8 @@ test("session save strips client filesystem paths while retaining opaque media r
   const outsidePath = path.join(runtime.root, "outside.wav");
   const relativePath = path.relative(process.cwd(), outsidePath);
   const fileUri = `file://${outsidePath}`;
+  const driveRelativeSource = "C:private";
+  const driveRelativeFile = "D:secret";
   const unknownId = "11111111-1111-4111-8111-111111111111";
   const unknownCoverId = "22222222-2222-4222-8222-222222222222";
   fs.writeFileSync(outsidePath, "PRIVATE");
@@ -519,8 +521,8 @@ test("session save strips client filesystem paths while retaining opaque media r
       path: outsidePath,
       stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
     },
-    analysis: { source: outsidePath },
-    ui: { file: fileUri },
+    analysis: { source: driveRelativeSource },
+    ui: { file: driveRelativeFile },
     chart: {
       bars: [{ evidence: { source: "confidence-model" } }],
       lyrics: { source: "manual transcription" },
@@ -553,6 +555,8 @@ test("session save strips client filesystem paths while retaining opaque media r
   assert.equal(JSON.stringify(response.body).includes(outsidePath), false);
   assert.equal(JSON.stringify(response.body).includes(relativePath), false);
   assert.equal(JSON.stringify(response.body).includes(fileUri), false);
+  assert.equal(JSON.stringify(response.body).includes(driveRelativeSource), false);
+  assert.equal(JSON.stringify(response.body).includes(driveRelativeFile), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
   assert.equal((await fetch(`${runtime.url}/api/media/${known.id}`)).status, 200);
   assert.equal(await (await fetch(`${runtime.url}/api/media/${known.id}`)).text(), "KNOWN");
@@ -566,6 +570,8 @@ test("session save strips client filesystem paths while retaining opaque media r
     assert.equal(JSON.stringify(payload).includes(outsidePath), false);
     assert.equal(JSON.stringify(payload).includes(relativePath), false);
     assert.equal(JSON.stringify(payload).includes(fileUri), false);
+    assert.equal(JSON.stringify(payload).includes(driveRelativeSource), false);
+    assert.equal(JSON.stringify(payload).includes(driveRelativeFile), false);
   }
   for (const session of [openedBody.session, downloadedBody]) {
     assert.equal(session.chart.lyrics.source, "manual transcription");
@@ -578,6 +584,8 @@ test("session import strips relative filesystem paths without importing their co
   const outsidePath = path.join(runtime.root, "outside.wav");
   const relativePath = path.relative(process.cwd(), outsidePath);
   const fileUri = `file://${outsidePath}`;
+  const driveRelativeSource = "C:private";
+  const driveRelativeFile = "D:secret";
   fs.writeFileSync(outsidePath, "PRIVATE");
 
   const response = await importSessionFixture(runtime, {
@@ -585,8 +593,8 @@ test("session import strips relative filesystem paths without importing their co
     version: 1,
     audio: { path: outsidePath, source_path: relativePath, coverPath: outsidePath },
     audioPreview: { path: outsidePath, source_path: relativePath, stems: { stems: [{ path: outsidePath, source_path: relativePath }] } },
-    analysis: { source: outsidePath },
-    ui: { file: fileUri },
+    analysis: { source: driveRelativeSource },
+    ui: { file: driveRelativeFile },
     chart: {
       bars: [{ evidence: { source: "confidence-model" } }],
       lyrics: { source: "manual transcription" },
@@ -616,6 +624,8 @@ test("session import strips relative filesystem paths without importing their co
   assert.equal(imported.session.chart.fileLocation, undefined);
   assert.equal(JSON.stringify(imported).includes(relativePath), false);
   assert.equal(JSON.stringify(imported).includes(outsidePath), false);
+  assert.equal(JSON.stringify(imported).includes(driveRelativeSource), false);
+  assert.equal(JSON.stringify(imported).includes(driveRelativeFile), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "media")), []);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
   const list = await fetch(`${runtime.url}/api/sessions`);
@@ -628,6 +638,8 @@ test("session import strips relative filesystem paths without importing their co
     assert.equal(JSON.stringify(payload).includes(outsidePath), false);
     assert.equal(JSON.stringify(payload).includes(relativePath), false);
     assert.equal(JSON.stringify(payload).includes(fileUri), false);
+    assert.equal(JSON.stringify(payload).includes(driveRelativeSource), false);
+    assert.equal(JSON.stringify(payload).includes(driveRelativeFile), false);
   }
   for (const session of [openedBody.session, downloadedBody]) {
     assert.equal(session.chart.lyrics.source, "manual transcription");
