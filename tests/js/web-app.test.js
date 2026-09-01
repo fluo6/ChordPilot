@@ -38,7 +38,24 @@ async function startTestServer(t, overrides = {}) {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  return { url: `http://127.0.0.1:${port}`, storage, logBroker };
+  return { root, url: `http://127.0.0.1:${port}`, storage, queue, logBroker };
+}
+
+async function postJson(runtime, route, payload) {
+  const response = await fetch(`${runtime.url}${route}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+async function uploadFixture(runtime, name = "song.wav", contents = "RIFF") {
+  const form = new FormData();
+  form.append("audio", new Blob([contents], { type: "audio/wav" }), name);
+  const response = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: form });
+  assert.equal(response.status, 200);
+  return (await response.json()).audio;
 }
 
 function openSse(url) {
@@ -204,4 +221,146 @@ test("events unsubscribe the log listener when the client disconnects", async (t
   await connection.closed;
   await new Promise((resolve) => setTimeout(resolve, 25));
   assert.equal(listeners.size, 0);
+});
+
+test("upload rejects unsupported audio extensions and files over the configured limit", async (t) => {
+  const runtime = await startTestServer(t, { uploadLimitBytes: 4 });
+  const unsupported = new FormData();
+  unsupported.append("audio", new Blob(["RIFF"]), "song.txt");
+  const unsupportedResponse = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: unsupported });
+  assert.equal(unsupportedResponse.status, 400);
+  assert.deepEqual(await unsupportedResponse.json(), {
+    error: { code: "UNSUPPORTED_AUDIO_FORMAT", message: "Upload an MP3, WAV, FLAC, M4A, AAC, or OGG audio file." }
+  });
+
+  const oversized = new FormData();
+  oversized.append("audio", new Blob(["RIFF!"]), "song.wav");
+  const oversizedResponse = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: oversized });
+  assert.equal(oversizedResponse.status, 413);
+  assert.deepEqual(await oversizedResponse.json(), {
+    error: { code: "FILE_TOO_LARGE", message: "Uploaded file is too large." }
+  });
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
+});
+
+test("upload commits audio before building a public audio response", async (t) => {
+  const calls = [];
+  const runtime = await startTestServer(t, {
+    services: {
+      buildAudioPayload: async (audioPath) => {
+        calls.push(audioPath);
+        return { path: audioPath, title: "Uploaded Song" };
+      }
+    }
+  });
+
+  const audio = await uploadFixture(runtime, "song.wav");
+  assert.equal(calls[0], runtime.storage.resolveMedia(audio.id).path);
+  assert.equal(audio.title, "Uploaded Song");
+  assert.equal(audio.path, undefined);
+  assert.match(audio.url, /^\/api\/media\//);
+});
+
+test("metadata resolves an audio ID to a private service record", async (t) => {
+  const calls = [];
+  const runtime = await startTestServer(t, {
+    services: {
+      lookupAudioMetadata: async (audio) => {
+        calls.push(audio);
+        return { title: "Found Song", path: "/not-for-the-browser" };
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime);
+
+  const response = await postJson(runtime, "/api/metadata", { audio: { id: audio.id, title: "Client title" } });
+  assert.equal(response.status, 200);
+  assert.equal(calls[0].path, runtime.storage.resolveMedia(audio.id).path);
+  assert.equal(response.body.metadata.title, "Found Song");
+  assert.equal(response.body.metadata.path, undefined);
+});
+
+test("YouTube import queues the service result and registers cover media", async (t) => {
+  const runtime = await startTestServer(t, {
+    services: {
+      downloadYoutubeAudio: async () => {
+        const audioPath = path.join(runtime.root, "download.mp3");
+        const coverPath = path.join(runtime.root, "cover.jpg");
+        fs.writeFileSync(audioPath, "ID3");
+        fs.writeFileSync(coverPath, "JPEG");
+        return { path: audioPath, name: "download.mp3", title: "Downloaded", coverPath };
+      }
+    }
+  });
+
+  const response = await postJson(runtime, "/api/youtube", { url: "https://www.youtube.com/watch?v=abc" });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.audio.title, "Downloaded");
+  assert.equal(response.body.audio.path, undefined);
+  assert.equal(response.body.audio.cover.path, undefined);
+  assert.match(response.body.audio.cover.url, /^\/api\/media\//);
+});
+
+test("preview resolves its input media and registers the generated result", async (t) => {
+  const calls = [];
+  const runtime = await startTestServer(t, {
+    services: {
+      processAudioPreview: async (payload) => {
+        calls.push(payload);
+        const previewPath = path.join(runtime.root, "preview.wav");
+        fs.writeFileSync(previewPath, "RIFF");
+        return { path: previewPath, semitones: 3, tempoRate: 1.2 };
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime);
+
+  const response = await postJson(runtime, "/api/preview", { mediaId: audio.id, semitones: 3, tempoRate: 1.2 });
+  assert.equal(response.status, 200);
+  assert.equal(calls[0].audioPath, runtime.storage.resolveMedia(audio.id).path);
+  assert.equal(response.body.preview.path, undefined);
+  assert.equal(response.body.preview.semitones, 3);
+  assert.equal(response.body.preview.tempoRate, 1.2);
+  assert.match(response.body.preview.url, /^\/api\/media\//);
+});
+
+test("analysis serializes jobs and hides registered stem paths", async (t) => {
+  const started = [];
+  let releaseFirst;
+  let markFirstStarted;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const firstStarted = new Promise((resolve) => { markFirstStarted = resolve; });
+  const runtime = await startTestServer(t, {
+    services: {
+      analyze: async (payload) => {
+        started.push(payload);
+        if (started.length === 1) {
+          markFirstStarted();
+          await firstGate;
+        }
+        const stemPath = path.join(runtime.root, `stem-${started.length}.wav`);
+        fs.writeFileSync(stemPath, "RIFF");
+        return { title: "Song", bars: [], path: "/never-public", stems: { ok: true, stems: [{ name: "bass", path: stemPath }] } };
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime);
+  const first = postJson(runtime, "/api/analyze", { mediaId: audio.id, mode: "fast", options: {} });
+  await firstStarted;
+  const second = postJson(runtime, "/api/analyze", { mediaId: audio.id, mode: "fast", options: {} });
+  while (runtime.queue.state().queued !== 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(started.length, 1);
+  releaseFirst();
+
+  const [firstResponse, secondResponse] = await Promise.all([first, second]);
+  assert.equal(started[0].audioPath, runtime.storage.resolveMedia(audio.id).path);
+  assert.equal(started.length, 2);
+  for (const response of [firstResponse, secondResponse]) {
+    assert.equal(response.status, 200);
+    assert.equal(response.body.chart.path, undefined);
+    assert.equal(response.body.chart.stems.stems[0].path, undefined);
+    assert.match(response.body.chart.stems.stems[0].url, /^\/api\/media\//);
+  }
 });

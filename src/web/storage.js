@@ -60,7 +60,7 @@ function redactPaths(value) {
     return value;
   }
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => key !== "path" && key !== "coverPath")
+    .filter(([key]) => key !== "path" && key !== "coverPath" && key !== "coverUrl")
     .map(([key, child]) => [key, redactPaths(child)]));
 }
 
@@ -308,10 +308,10 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     return commitMedia({ tempPath, originalName: name, kind });
   }
 
-  async function normalizeMedia(value, kind) {
+  async function normalizeMedia(value, kind, { copy = true } = {}) {
     if (!value) return null;
     if (typeof value === "string") {
-      return publicRecord(await registerExisting({ sourcePath: value, originalName: path.basename(value), kind, copy: true }));
+      return publicRecord(await registerExisting({ sourcePath: value, originalName: path.basename(value), kind, copy }));
     }
     if (value.id) {
       const known = publicMedia(value.id);
@@ -322,26 +322,26 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
         sourcePath: value.path,
         originalName: value.name || path.basename(value.path),
         kind: value.kind || kind,
-        copy: true
+        copy
       }));
     }
     return null;
   }
 
-  async function normalizeStems(stems) {
+  async function normalizeStems(stems, options) {
     if (!Array.isArray(stems)) return stems;
     return Promise.all(stems.map(async (stem) => {
-      const media = await normalizeMedia(stem, "stem");
+      const media = await normalizeMedia(stem, "stem", options);
       if (!media) return redactPaths(stem);
       return { ...media, ...(stem?.name ? { name: stem.name } : {}) };
     }));
   }
 
-  async function normalizeChart(chart) {
+  async function normalizeChart(chart, options) {
     if (!chart || typeof chart !== "object") return chart;
     const normalized = redactPaths(chart);
     if (chart.stems && typeof chart.stems === "object") {
-      normalized.stems = { ...redactPaths(chart.stems), stems: await normalizeStems(chart.stems.stems) };
+      normalized.stems = { ...redactPaths(chart.stems), stems: await normalizeStems(chart.stems.stems, options) };
     }
     return normalized;
   }
@@ -516,6 +516,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     registerExisting,
     resolveMedia,
     publicMedia,
+    normalizeMedia,
     normalizeChart,
     normalizeSessionForStorage,
     hydrateSession,
