@@ -171,7 +171,7 @@
     async showMessage(payload = {}) {
       const text = [payload.title || "ChordPilot", payload.message || "An error occurred.", payload.detail || ""].filter(Boolean).join("\n\n");
       browserWindow.alert(text);
-      return { response: 0 };
+      return { response: 0, checkboxChecked: false };
     },
 
     async analyze(audioPath, mode = "fast", options = {}) {

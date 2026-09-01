@@ -309,9 +309,10 @@ test("openSession selects a stored session and imports an uploaded session", asy
 
 test("showMessage falls back to the browser alert dialog", async () => {
   const { bridge, window } = bridgeEnvironment();
-  await bridge.showMessage({ title: "Problem", message: "Something happened", detail: "Details" });
+  const result = await bridge.showMessage({ title: "Problem", message: "Something happened", detail: "Details" });
   assert.match(window.alerts[0], /Problem/);
   assert.match(window.alerts[0], /Something happened/);
+  assert.deepEqual(plain(result), { response: 0, checkboxChecked: false });
 });
 
 test("onBackendLog shares one source until the final listener unsubscribes", () => {
