@@ -2,7 +2,14 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
   let active = 0;
   let queued = 0;
   let closing = false;
+  let cancelPending = false;
   let tail = Promise.resolve();
+
+  function shutdownError() {
+    const error = new Error("The server is shutting down.");
+    error.code = "SERVER_SHUTTING_DOWN";
+    return error;
+  }
 
   function state() {
     return { active, queued, closing };
@@ -18,34 +25,43 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
 
   function enqueue(_label, work) {
     if (closing) {
-      const error = new Error("The server is shutting down.");
-      error.code = "SERVER_SHUTTING_DOWN";
-      return Promise.reject(error);
+      return Promise.reject(shutdownError());
     }
 
     queued += 1;
     notify();
     const job = tail.then(async () => {
       queued -= 1;
+      if (cancelPending) {
+        notify();
+        throw shutdownError();
+      }
       active += 1;
       notify();
-      return work();
+      try {
+        return await work();
+      } finally {
+        active -= 1;
+        notify();
+      }
     });
-    const result = job.finally(() => {
-      active -= 1;
-      notify();
-    });
-    tail = result.catch(() => undefined);
-    return result;
+    tail = job.catch(() => undefined);
+    return job;
   }
 
-  function close() {
-    if (closing) return;
+  function close(options = {}) {
+    const shouldCancelPending = options.cancelPending === true;
+    if (closing && (!shouldCancelPending || cancelPending)) return;
     closing = true;
+    cancelPending = cancelPending || shouldCancelPending;
     notify();
   }
 
-  return { enqueue, close, state };
+  function idle() {
+    return tail.then(() => undefined);
+  }
+
+  return { enqueue, close, idle, state };
 }
 
 function createLogBroker() {

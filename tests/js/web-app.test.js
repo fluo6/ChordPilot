@@ -910,3 +910,78 @@ test("shutdown is idempotent, closes the queue before HTTP, terminates children,
   assert.equal(runtime.queue.state().closing, true);
   assert.equal(runtime.server.listening, false);
 });
+
+test("shutdown synchronizes with an in-flight start before it resolves", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-start-stop-"));
+  const port = await unusedTcpPort();
+  const runtime = createWebRuntime({
+    HOST: "127.0.0.1",
+    PORT: String(port),
+    CHORDPILOT_DATA_ROOT: path.join(root, "data")
+  });
+  const listen = runtime.server.listen.bind(runtime.server);
+  let releaseBind;
+  runtime.server.listen = (...args) => {
+    releaseBind = () => listen(...args);
+    return runtime.server;
+  };
+  t.after(async () => {
+    if (runtime.server.listening) {
+      await new Promise((resolve) => runtime.server.close(resolve));
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const starting = runtime.start();
+  const stopping = runtime.stop();
+  releaseBind();
+  await Promise.all([starting, stopping]);
+
+  assert.equal(runtime.server.listening, false);
+});
+
+test("shutdown cancels queued work and blocks delayed active work from spawning children", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-queued-shutdown-"));
+  let spawnCount = 0;
+  const runtime = createWebRuntime({
+    CHORDPILOT_DATA_ROOT: path.join(root, "data"),
+    CHORDPILOT_YTDLP: "managed-yt-dlp"
+  }, {
+    spawnImpl() {
+      spawnCount += 1;
+      return completedChild("");
+    }
+  });
+  t.after(async () => {
+    await runtime.stop();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  let releaseActive;
+  const activeGate = new Promise((resolve) => { releaseActive = resolve; });
+  const active = runtime.queue.enqueue("active", async () => {
+    await activeGate;
+    return runtime.services.downloadYoutubeAudio("https://youtu.be/active-child");
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const pending = runtime.queue.enqueue(
+    "pending",
+    () => runtime.services.downloadYoutubeAudio("https://youtu.be/pending-child")
+  );
+
+  let stopResolved = false;
+  const stopping = runtime.stop().then(() => { stopResolved = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  const resolvedBeforeActiveSettled = stopResolved;
+  releaseActive();
+  const [activeResult, pendingResult, stopResult] = await Promise.allSettled([active, pending, stopping]);
+
+  assert.equal(resolvedBeforeActiveSettled, false);
+  assert.equal(activeResult.status, "rejected");
+  assert.equal(activeResult.reason.code, "SERVER_SHUTTING_DOWN");
+  assert.equal(pendingResult.status, "rejected");
+  assert.equal(pendingResult.reason.code, "SERVER_SHUTTING_DOWN");
+  assert.equal(stopResult.status, "fulfilled");
+  assert.equal(spawnCount, 0);
+  assert.deepEqual(runtime.queue.state(), { active: 0, queued: 0, closing: true });
+});

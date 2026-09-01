@@ -55,6 +55,28 @@ test("queue reports transitions and rejects new work after close", async () => {
   ]);
 });
 
+test("queue close can cancel pending work without interrupting the active job", async () => {
+  const queue = createSerialQueue();
+  const runs = [];
+  let releaseActive;
+  const active = queue.enqueue("active", async () => {
+    runs.push("active");
+    await new Promise((resolve) => { releaseActive = resolve; });
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const pending = queue.enqueue("pending", async () => runs.push("pending"));
+
+  queue.close({ cancelPending: true });
+  releaseActive();
+  const [activeResult, pendingResult] = await Promise.allSettled([active, pending]);
+
+  assert.equal(activeResult.status, "fulfilled");
+  assert.equal(pendingResult.status, "rejected");
+  assert.equal(pendingResult.reason.code, "SERVER_SHUTTING_DOWN");
+  assert.deepEqual(runs, ["active"]);
+  assert.deepEqual(queue.state(), { active: 0, queued: 0, closing: true });
+});
+
 test("log broker unsubscribe stops delivery", () => {
   const broker = createLogBroker();
   const rows = [];

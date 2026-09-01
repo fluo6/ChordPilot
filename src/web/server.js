@@ -48,14 +48,31 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
   const queue = createSerialQueue();
   const logBroker = createLogBroker();
   const activeChildren = new Set();
+  const childExits = new Map();
   const sockets = new Set();
+  let shuttingDown = false;
 
   function trackedSpawn(...args) {
+    if (shuttingDown) {
+      const error = new Error("The server is shutting down.");
+      error.code = "SERVER_SHUTTING_DOWN";
+      throw error;
+    }
     const child = spawnImpl(...args);
     activeChildren.add(child);
-    const forget = () => activeChildren.delete(child);
-    child.once("close", forget);
-    child.once("error", forget);
+    const exit = new Promise((resolve) => {
+      let settled = false;
+      const forget = () => {
+        if (settled) return;
+        settled = true;
+        activeChildren.delete(child);
+        childExits.delete(child);
+        resolve();
+      };
+      child.once("close", forget);
+      child.once("error", forget);
+    });
+    childExits.set(child, exit);
     return child;
   }
 
@@ -104,6 +121,37 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
   let startPromise;
   let stopPromise;
 
+  async function closeHttpServer() {
+    const pendingStart = startPromise;
+    if (pendingStart) {
+      try {
+        await pendingStart;
+      } catch (_error) {
+        // A failed bind leaves no listening server to close.
+      }
+    }
+    if (!server.listening) return;
+    await new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  async function terminateActiveChildren() {
+    const children = [...activeChildren];
+    const exits = children.map((child) => childExits.get(child)).filter(Boolean);
+    for (const child of children) {
+      try {
+        child.kill("SIGTERM");
+      } catch (_error) {
+        activeChildren.delete(child);
+      }
+    }
+    await Promise.all(exits);
+  }
+
   function start() {
     if (stopPromise) {
       const error = new Error("The server is shutting down.");
@@ -131,24 +179,12 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
 
   function stop() {
     if (stopPromise) return stopPromise;
+    shuttingDown = true;
+    queue.close({ cancelPending: true });
     stopPromise = (async () => {
-      queue.close();
-      const serverClosed = server.listening
-        ? new Promise((resolve, reject) => {
-          server.close((error) => {
-            if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error);
-            else resolve();
-          });
-        })
-        : Promise.resolve();
-
-      for (const child of activeChildren) {
-        try {
-          child.kill("SIGTERM");
-        } catch (_error) {
-          activeChildren.delete(child);
-        }
-      }
+      const serverClosed = closeHttpServer();
+      await terminateActiveChildren();
+      await queue.idle();
       services.cleanup();
       logBroker.close();
       for (const socket of sockets) socket.destroy();
