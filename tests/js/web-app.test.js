@@ -911,6 +911,48 @@ test("shutdown is idempotent, closes the queue before HTTP, terminates children,
   assert.equal(runtime.server.listening, false);
 });
 
+test("shutdown escalates an uncooperative child from SIGTERM to SIGKILL", { timeout: 1_000 }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-child-escalation-"));
+  const signals = [];
+  let markSpawned;
+  const spawned = new Promise((resolve) => { markSpawned = resolve; });
+  const runtime = createWebRuntime({
+    CHORDPILOT_DATA_ROOT: path.join(root, "data"),
+    CHORDPILOT_YTDLP: "uncooperative-yt-dlp"
+  }, {
+    childShutdownGraceMs: 10,
+    childShutdownKillWaitMs: 10,
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { write() {}, end() {} };
+      child.kill = (signal) => {
+        signals.push(signal);
+        return true;
+      };
+      markSpawned();
+      return child;
+    }
+  });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const childWork = runtime.queue.enqueue(
+    "uncooperative-child",
+    () => runtime.services.downloadYoutubeAudio("https://youtu.be/uncooperative-child")
+  );
+  await spawned;
+  const stopping = runtime.stop();
+  const [childResult, stopResult] = await Promise.allSettled([childWork, stopping]);
+
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(childResult.status, "rejected");
+  assert.equal(childResult.reason instanceof Error, true);
+  assert.equal(stopResult.status, "fulfilled");
+  assert.equal(runtime.stop(), stopping);
+  assert.deepEqual(runtime.queue.state(), { active: 0, queued: 0, closing: true });
+});
+
 test("shutdown synchronizes with an in-flight start before it resolves", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-start-stop-"));
   const port = await unusedTcpPort();

@@ -9,6 +9,8 @@ const { createStorage } = require("./storage");
 const { createLogBroker, createSerialQueue } = require("./work-queue");
 
 const DEFAULT_UPLOAD_LIMIT_BYTES = 512 * 1024 * 1024;
+const DEFAULT_CHILD_SHUTDOWN_GRACE_MS = 2_000;
+const DEFAULT_CHILD_KILL_WAIT_MS = 250;
 
 function positiveInteger(value, fallback, name, maximum = Number.MAX_SAFE_INTEGER) {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -37,7 +39,11 @@ function parseWebEnvironment(env = process.env) {
   };
 }
 
-function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } = {}) {
+function createWebRuntime(env = process.env, {
+  spawnImpl = childProcess.spawn,
+  childShutdownGraceMs = DEFAULT_CHILD_SHUTDOWN_GRACE_MS,
+  childShutdownKillWaitMs = DEFAULT_CHILD_KILL_WAIT_MS
+} = {}) {
   const config = parseWebEnvironment(env);
   const appRoot = path.resolve(__dirname, "../..");
   const storage = createStorage({ root: config.dataRoot });
@@ -48,9 +54,15 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
   const queue = createSerialQueue();
   const logBroker = createLogBroker();
   const activeChildren = new Set();
-  const childExits = new Map();
+  const childRecords = new Map();
   const sockets = new Set();
   let shuttingDown = false;
+  const gracefulChildWait = Number.isFinite(childShutdownGraceMs) && childShutdownGraceMs >= 0
+    ? childShutdownGraceMs
+    : DEFAULT_CHILD_SHUTDOWN_GRACE_MS;
+  const forcedChildWait = Number.isFinite(childShutdownKillWaitMs) && childShutdownKillWaitMs >= 0
+    ? childShutdownKillWaitMs
+    : DEFAULT_CHILD_KILL_WAIT_MS;
 
   function trackedSpawn(...args) {
     if (shuttingDown) {
@@ -60,19 +72,20 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
     }
     const child = spawnImpl(...args);
     activeChildren.add(child);
+    let settleExit;
     const exit = new Promise((resolve) => {
       let settled = false;
-      const forget = () => {
+      settleExit = () => {
         if (settled) return;
         settled = true;
         activeChildren.delete(child);
-        childExits.delete(child);
+        childRecords.delete(child);
         resolve();
       };
-      child.once("close", forget);
-      child.once("error", forget);
+      child.once("close", settleExit);
+      child.once("error", settleExit);
     });
-    childExits.set(child, exit);
+    childRecords.set(child, { child, exit, settleExit });
     return child;
   }
 
@@ -139,17 +152,49 @@ function createWebRuntime(env = process.env, { spawnImpl = childProcess.spawn } 
     });
   }
 
-  async function terminateActiveChildren() {
-    const children = [...activeChildren];
-    const exits = children.map((child) => childExits.get(child)).filter(Boolean);
-    for (const child of children) {
+  async function waitForChildExits(records, timeoutMs) {
+    if (!records.length) return;
+    let timer;
+    try {
+      await Promise.race([
+        Promise.all(records.map((record) => record.exit)),
+        new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function signalChildren(records, signal) {
+    for (const record of records) {
+      if (!activeChildren.has(record.child)) continue;
       try {
-        child.kill("SIGTERM");
+        record.child.kill(signal);
       } catch (_error) {
-        activeChildren.delete(child);
+        record.settleExit();
       }
     }
-    await Promise.all(exits);
+  }
+
+  async function terminateActiveChildren() {
+    const records = [...activeChildren].map((child) => childRecords.get(child)).filter(Boolean);
+    signalChildren(records, "SIGTERM");
+    await waitForChildExits(records, gracefulChildWait);
+
+    const remaining = records.filter((record) => activeChildren.has(record.child));
+    signalChildren(remaining, "SIGKILL");
+    await waitForChildExits(remaining, forcedChildWait);
+    for (const record of remaining.filter((candidate) => activeChildren.has(candidate.child))) {
+      const error = new Error("Child process did not exit during server shutdown.");
+      error.code = "SERVER_SHUTTING_DOWN";
+      try {
+        record.child.emit("error", error);
+      } catch (_error) {
+        // Tracking still has to settle if a child listener throws during forced release.
+      } finally {
+        record.settleExit();
+      }
+    }
   }
 
   function start() {
