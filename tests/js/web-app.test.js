@@ -280,6 +280,24 @@ test("metadata resolves an audio ID to a private service record", async (t) => {
   assert.equal(response.body.metadata.path, undefined);
 });
 
+test("internal API errors use a stable envelope without filesystem paths", async (t) => {
+  const runtime = await startTestServer(t, {
+    services: {
+      lookupAudioMetadata: async () => {
+        throw new Error("Could not read /data/chordpilot/media/private-song.wav");
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime);
+
+  const response = await postJson(runtime, "/api/metadata", { audio: { id: audio.id } });
+  assert.equal(response.status, 500);
+  assert.deepEqual(response.body, {
+    error: { code: "INTERNAL_ERROR", message: "An unexpected server error occurred." }
+  });
+  assert.equal(JSON.stringify(response.body).includes("/data/chordpilot"), false);
+});
+
 test("YouTube import queues the service result and registers cover media", async (t) => {
   const runtime = await startTestServer(t, {
     services: {

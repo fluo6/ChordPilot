@@ -30,9 +30,9 @@ function apiError(error) {
     return new HttpError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
   }
   if (error.code === "INVALID_MEDIA_ID") {
-    return new HttpError(400, error.code, error.message);
+    return new HttpError(400, "INVALID_MEDIA_ID", "Invalid media ID.");
   }
-  return new HttpError(error.status || 500, error.code || "INTERNAL_ERROR", error.message || "An unexpected server error occurred.");
+  return new HttpError(500, "INTERNAL_ERROR", "An unexpected server error occurred.");
 }
 
 function removeTempFile(filePath) {
