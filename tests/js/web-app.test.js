@@ -483,6 +483,75 @@ test("session import validates portable JSON before saving and removes the tempo
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
 });
 
+test("session save strips client filesystem paths while retaining opaque media references", async (t) => {
+  const runtime = await startTestServer(t);
+  const known = await uploadFixture(runtime, "known.wav", "KNOWN");
+  const outsidePath = path.join(runtime.root, "outside.wav");
+  const unknownId = "11111111-1111-4111-8111-111111111111";
+  fs.writeFileSync(outsidePath, "PRIVATE");
+
+  const response = await postJson(runtime, "/api/sessions", {
+    app: "ChordPilot",
+    version: 1,
+    audio: { id: known.id, path: outsidePath, coverPath: outsidePath },
+    audioPreview: {
+      id: unknownId,
+      path: outsidePath,
+      stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
+    },
+    chart: { bars: [], stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] } }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.session.audio.id, known.id);
+  assert.equal(response.body.session.audio.url, `/api/media/${known.id}`);
+  assert.equal(response.body.session.audioPreview.id, unknownId);
+  assert.equal(response.body.session.audioPreview.exists, false);
+  assert.equal(response.body.session.chart.stems.stems[0].exists, false);
+  assert.equal(JSON.stringify(response.body).includes(outsidePath), false);
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
+  assert.equal((await fetch(`${runtime.url}/api/media/${known.id}`)).status, 200);
+  assert.equal(await (await fetch(`${runtime.url}/api/media/${known.id}`)).text(), "KNOWN");
+});
+
+test("session import strips relative filesystem paths without importing their contents", async (t) => {
+  const runtime = await startTestServer(t);
+  const outsidePath = path.join(runtime.root, "outside.wav");
+  const relativePath = path.relative(process.cwd(), outsidePath);
+  fs.writeFileSync(outsidePath, "PRIVATE");
+
+  const response = await importSessionFixture(runtime, {
+    app: "ChordPilot",
+    version: 1,
+    audio: { path: relativePath, coverPath: relativePath },
+    audioPreview: { path: relativePath, stems: { stems: [{ path: relativePath, source_path: relativePath }] } },
+    chart: { bars: [], stems: { stems: [{ path: relativePath, source_path: relativePath }] } }
+  });
+
+  assert.equal(response.status, 200);
+  const imported = await response.json();
+  assert.equal(imported.session.audio, null);
+  assert.equal(imported.session.audioPreview.id, undefined);
+  assert.equal(imported.session.chart.stems.stems[0].path, undefined);
+  assert.equal(JSON.stringify(imported).includes(relativePath), false);
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "media")), []);
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
+});
+
+test("session import rejects extra multipart fields with a stable session-upload error", async (t) => {
+  const runtime = await startTestServer(t);
+  const form = new FormData();
+  form.append("session", new Blob([JSON.stringify({ app: "ChordPilot", version: 1 })]), "session.json");
+  form.append("extra", "x".repeat(1024 * 1024));
+
+  const response = await fetch(`${runtime.url}/api/sessions/import`, { method: "POST", body: form });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: { code: "INVALID_SESSION_UPLOAD", message: "Upload exactly one session file in the session field." }
+  });
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
+});
+
 test("chart export permits supported formats, queues generation, and returns an opaque download", async (t) => {
   const calls = [];
   const runtime = await startTestServer(t, {

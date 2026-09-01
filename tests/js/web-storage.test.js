@@ -228,3 +228,25 @@ test("resolveMedia rejects metadata that maps an ID to another stored file", asy
 
   assert.throws(() => storage.resolveMedia(first.id), /Stored media metadata is invalid/);
 });
+
+test("registerExisting removes its staging file when media registration fails", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-storage-register-failure-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const temporaryId = "11111111-1111-4111-8111-111111111111";
+  const destinationId = "22222222-2222-4222-8222-222222222222";
+  let calls = 0;
+  const storage = createStorage({
+    root,
+    randomUUID: () => (++calls === 1 ? temporaryId : destinationId)
+  });
+  await storage.initialize();
+  const sourcePath = path.join(root, "source.wav");
+  fs.writeFileSync(sourcePath, "RIFF");
+  fs.writeFileSync(path.join(root, "generated", `${destinationId}.wav.part`), "occupied");
+
+  await assert.rejects(
+    () => storage.registerExisting({ sourcePath, originalName: "export.wav", kind: "export", copy: false }),
+    /Could not store media/
+  );
+  assert.deepEqual(fs.readdirSync(path.join(root, "tmp")), []);
+});

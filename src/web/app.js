@@ -70,6 +70,14 @@ function withoutMediaPaths(value) {
     .map(([key, child]) => [key, withoutMediaPaths(child)]));
 }
 
+function sanitizeSessionPaths(value) {
+  if (Array.isArray(value)) return value.map(sanitizeSessionPaths);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !String(key).toLowerCase().endsWith("path") && !["url", "coverurl"].includes(String(key).toLowerCase()))
+    .map(([key, child]) => [key, sanitizeSessionPaths(child)]));
+}
+
 function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploadLimitBytes }) {
   const app = express();
   const indexPath = path.join(rendererRoot, "index.html");
@@ -116,7 +124,7 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
         }
       }
     }),
-    limits: { fileSize: SESSION_UPLOAD_LIMIT_BYTES, files: 1 }
+    limits: { fileSize: SESSION_UPLOAD_LIMIT_BYTES, files: 1, fields: 0, parts: 2 }
   });
 
   async function resolveMedia(id) {
@@ -284,8 +292,9 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
   }));
 
   app.post("/api/sessions", asyncRoute(async (req, res) => {
-    storage.assertSessionSchema(req.body);
-    res.json(sessionResponse(await storage.saveSession(req.body)));
+    const session = sanitizeSessionPaths(req.body);
+    storage.assertSessionSchema(session);
+    res.json(sessionResponse(await storage.saveSession(session)));
   }));
 
   app.get("/api/sessions", asyncRoute(async (_req, res) => {
@@ -320,7 +329,11 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
     sessionUpload.single("session")(req, res, (error) => {
       if (error) {
         removeTempFile(req.file?.path);
-        next(error);
+        next(new HttpError(
+          error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
+          "INVALID_SESSION_UPLOAD",
+          "Upload exactly one session file in the session field."
+        ));
         return;
       }
       next();
@@ -329,7 +342,7 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
     if (!req.file) {
       throw new HttpError(400, "SESSION_REQUIRED", "Upload one session file in the session field.");
     }
-    const imported = await storage.importSession(req.file.path);
+    const imported = await storage.importSession(req.file.path, { sanitize: sanitizeSessionPaths });
     res.json(sessionResponse(imported));
   }));
 

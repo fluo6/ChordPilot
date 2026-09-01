@@ -60,7 +60,7 @@ function redactPaths(value) {
     return value;
   }
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => key !== "path" && key !== "coverPath" && key !== "coverUrl")
+    .filter(([key]) => !String(key).toLowerCase().endsWith("path") && String(key).toLowerCase() !== "coverurl")
     .map(([key, child]) => [key, redactPaths(child)]));
 }
 
@@ -314,22 +314,31 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     }
     const name = sanitizeName(originalName || path.basename(sourcePath), "media");
     const tempPath = createTempPath(`.${extensionFor(name)}.part`);
-    if (copy) {
-      ensureDirectory("tmp");
-      fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
-    } else {
-      try {
-        ensureDirectory("tmp");
-        fs.renameSync(sourcePath, tempPath);
-      } catch (error) {
-        if (error.code !== "EXDEV") throw error;
+    try {
+      if (copy) {
         ensureDirectory("tmp");
         fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
-        fs.rmSync(sourcePath);
+      } else {
+        try {
+          ensureDirectory("tmp");
+          fs.renameSync(sourcePath, tempPath);
+        } catch (error) {
+          if (error.code !== "EXDEV") throw error;
+          ensureDirectory("tmp");
+          fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
+          fs.rmSync(sourcePath);
+        }
       }
+      fsyncFile(tempPath);
+      return await commitMedia({ tempPath, originalName: name, kind });
+    } catch (error) {
+      try {
+        removeOwnedFile("tmp", tempPath);
+      } catch (_cleanupError) {
+        // The original media registration error is more useful to the caller.
+      }
+      throw error;
     }
-    fsyncFile(tempPath);
-    return commitMedia({ tempPath, originalName: name, kind });
   }
 
   async function normalizeMedia(value, kind, { copy = true } = {}) {
@@ -370,20 +379,29 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     return normalized;
   }
 
+  async function normalizeSessionMedia(value, kind) {
+    if (!value?.id) return null;
+    return normalizeMedia(referenceFrom(value), kind);
+  }
+
+  async function normalizeSessionStems(stems) {
+    if (!Array.isArray(stems)) return stems;
+    return Promise.all(stems.map(async (stem) => {
+      const media = await normalizeSessionMedia(stem, "stem");
+      return media ? referenceFrom(media) : referenceFrom(stem) || redactPaths(stem);
+    }));
+  }
+
   async function normalizeSessionForStorage(session) {
     const normalized = redactPaths(session || {});
     if (session?.audio) {
-      const audio = await normalizeMedia(session.audio, "source");
+      const audio = await normalizeSessionMedia(session.audio, "source");
       normalized.audio = audio ? referenceFrom(audio) : referenceFrom(session.audio);
-      const cover = await normalizeMedia(session.audio.cover || (session.audio.coverPath ? {
-        path: session.audio.coverPath,
-        name: path.basename(session.audio.coverPath),
-        kind: "cover"
-      } : null), "cover");
+      const cover = await normalizeSessionMedia(session.audio.cover, "cover");
       if (cover) normalized.audio.cover = referenceFrom(cover);
     }
     if (session?.audioPreview) {
-      const preview = await normalizeMedia(session.audioPreview, "preview");
+      const preview = await normalizeSessionMedia(session.audioPreview, "preview");
       const { path: _path, url: _url, id: _id, name: _name, extension: _extension, kind: _kind, size: _size, createdAt: _createdAt, ...previewFields } = redactPaths(session.audioPreview);
       normalized.audioPreview = {
         ...previewFields,
@@ -392,14 +410,14 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       if (session.audioPreview.stems && typeof session.audioPreview.stems === "object") {
         normalized.audioPreview.stems = {
           ...redactPaths(session.audioPreview.stems),
-          stems: (await normalizeStems(session.audioPreview.stems.stems)).map((stem) => referenceFrom(stem) || stem)
+          stems: await normalizeSessionStems(session.audioPreview.stems.stems)
         };
       }
     }
     if (session?.chart) {
-      normalized.chart = await normalizeChart(session.chart);
+      normalized.chart = redactPaths(session.chart);
       if (normalized.chart?.stems && Array.isArray(normalized.chart.stems.stems)) {
-        normalized.chart.stems.stems = normalized.chart.stems.stems.map((stem) => referenceFrom(stem) || stem);
+        normalized.chart.stems.stems = await normalizeSessionStems(session.chart.stems.stems);
       }
     }
     return normalized;
@@ -512,7 +530,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     return record && redactPaths(record.session);
   }
 
-  async function importSession(tempPath) {
+  async function importSession(tempPath, { sanitize = (session) => session } = {}) {
     const tmpDirectory = ensureDirectory("tmp");
     assertContained(tmpDirectory, tempPath);
     try {
@@ -522,7 +540,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
         throw new StorageError("INVALID_SESSION", "Imported session data is invalid.");
       }
       const imported = JSON.parse(fs.readFileSync(tempPath, "utf8"));
-      const session = imported?.session && typeof imported.session === "object" ? imported.session : imported;
+      const session = sanitize(imported?.session && typeof imported.session === "object" ? imported.session : imported);
       assertSessionSchema(session);
       return saveSession(session);
     } catch (error) {
