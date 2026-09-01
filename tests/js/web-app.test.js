@@ -487,28 +487,46 @@ test("session save strips client filesystem paths while retaining opaque media r
   const runtime = await startTestServer(t);
   const known = await uploadFixture(runtime, "known.wav", "KNOWN");
   const outsidePath = path.join(runtime.root, "outside.wav");
+  const relativePath = path.relative(process.cwd(), outsidePath);
   const unknownId = "11111111-1111-4111-8111-111111111111";
+  const unknownCoverId = "22222222-2222-4222-8222-222222222222";
   fs.writeFileSync(outsidePath, "PRIVATE");
 
   const response = await postJson(runtime, "/api/sessions", {
     app: "ChordPilot",
     version: 1,
-    audio: { id: known.id, path: outsidePath, coverPath: outsidePath },
+    audio: {
+      id: known.id,
+      path: outsidePath,
+      source_path: relativePath,
+      cover: { id: unknownCoverId, path: outsidePath, source_path: relativePath },
+      coverPath: outsidePath
+    },
     audioPreview: {
       id: unknownId,
       path: outsidePath,
       stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
     },
-    chart: { bars: [], stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] } }
+    chart: {
+      bars: [],
+      source: outsidePath,
+      file: relativePath,
+      stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
+    }
   });
 
   assert.equal(response.status, 200);
   assert.equal(response.body.session.audio.id, known.id);
   assert.equal(response.body.session.audio.url, `/api/media/${known.id}`);
+  assert.equal(response.body.session.audio.cover.id, unknownCoverId);
+  assert.equal(response.body.session.audio.cover.exists, false);
   assert.equal(response.body.session.audioPreview.id, unknownId);
   assert.equal(response.body.session.audioPreview.exists, false);
   assert.equal(response.body.session.chart.stems.stems[0].exists, false);
+  assert.equal(response.body.session.chart.source, undefined);
+  assert.equal(response.body.session.chart.file, undefined);
   assert.equal(JSON.stringify(response.body).includes(outsidePath), false);
+  assert.equal(JSON.stringify(response.body).includes(relativePath), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
   assert.equal((await fetch(`${runtime.url}/api/media/${known.id}`)).status, 200);
   assert.equal(await (await fetch(`${runtime.url}/api/media/${known.id}`)).text(), "KNOWN");
@@ -523,9 +541,15 @@ test("session import strips relative filesystem paths without importing their co
   const response = await importSessionFixture(runtime, {
     app: "ChordPilot",
     version: 1,
-    audio: { path: relativePath, coverPath: relativePath },
-    audioPreview: { path: relativePath, stems: { stems: [{ path: relativePath, source_path: relativePath }] } },
-    chart: { bars: [], stems: { stems: [{ path: relativePath, source_path: relativePath }] } }
+    audio: { path: outsidePath, source_path: relativePath, coverPath: outsidePath },
+    audioPreview: { path: outsidePath, source_path: relativePath, stems: { stems: [{ path: outsidePath, source_path: relativePath }] } },
+    chart: {
+      bars: [],
+      path: outsidePath,
+      source: outsidePath,
+      file: relativePath,
+      stems: { stems: [{ path: outsidePath, source_path: relativePath }] }
+    }
   });
 
   assert.equal(response.status, 200);
@@ -533,7 +557,10 @@ test("session import strips relative filesystem paths without importing their co
   assert.equal(imported.session.audio, null);
   assert.equal(imported.session.audioPreview.id, undefined);
   assert.equal(imported.session.chart.stems.stems[0].path, undefined);
+  assert.equal(imported.session.chart.source, undefined);
+  assert.equal(imported.session.chart.file, undefined);
   assert.equal(JSON.stringify(imported).includes(relativePath), false);
+  assert.equal(JSON.stringify(imported).includes(outsidePath), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "media")), []);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
 });
