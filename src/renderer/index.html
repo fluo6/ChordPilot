@@ -793,6 +793,23 @@
         <strong id="loadingText">Working...</strong>
       </div>
     </div>
+    <dialog id="webSessionDialog" class="web-session-dialog" aria-labelledby="webSessionDialogTitle">
+      <form method="dialog" class="web-session-dialog-content">
+        <header>
+          <h2 id="webSessionDialogTitle">Open Session</h2>
+          <p>Choose a saved session from this ChordPilot server or import a portable session file.</p>
+        </header>
+        <div id="webSessionList" class="web-session-list" aria-label="Saved sessions"></div>
+        <p id="webSessionEmpty" class="web-session-empty">No saved sessions are available yet.</p>
+        <input id="webSessionImport" type="file" accept=".json,.chordpilot-session.json,application/json" hidden />
+        <footer>
+          <button id="webSessionImportButton" type="button">Import Session</button>
+          <button id="webSessionCancel" type="button">Cancel</button>
+        </footer>
+      </form>
+    </dialog>
+    <script src="./web-session-dialog.js"></script>
+    <script src="./web-bridge.js"></script>
     <script src="./state.js"></script>
     <script src="./transpose.js"></script>
     <script src="./shell.js"></script>

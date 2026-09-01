@@ -19,6 +19,66 @@ body.loading {
   cursor: wait;
 }
 
+.web-session-dialog {
+  background: #151a21;
+  border: 1px solid #303947;
+  border-radius: 8px;
+  color: #d8dee9;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 0;
+  width: 100%;
+}
+
+.web-session-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.web-session-dialog-content {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.web-session-dialog h2,
+.web-session-dialog p {
+  margin: 0;
+}
+
+.web-session-dialog p {
+  color: #aeb8c5;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.web-session-list {
+  display: grid;
+  gap: 7px;
+  max-height: min(45vh, 340px);
+  overflow: auto;
+}
+
+.web-session-choice {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.web-session-choice strong {
+  color: #eef3f7;
+}
+
+.web-session-choice span,
+.web-session-empty {
+  color: #8f9aaa;
+  font-size: 12px;
+}
+
+.web-session-dialog footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .app-frame {
   display: grid;
   grid-template-columns: 156px minmax(0, 1fr);
