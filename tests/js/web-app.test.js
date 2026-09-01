@@ -147,6 +147,22 @@ test("media resolves opaque IDs and supports byte ranges", async (t) => {
   assert.equal(await response.text(), "IF");
 });
 
+test("media with a Unicode filename uses an ASCII-safe inline disposition", async (t) => {
+  const runtime = await startTestServer(t);
+  const tempPath = runtime.storage.createTempPath(".wav.part");
+  fs.writeFileSync(tempPath, "RIFF");
+  const media = await runtime.storage.commitMedia({
+    tempPath,
+    originalName: "song-🎸.wav",
+    kind: "source"
+  });
+
+  const response = await fetch(`${runtime.url}/api/media/${media.id}`, { signal: AbortSignal.timeout(1_000) });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-disposition"), "inline; filename=\"song--.wav\"");
+  assert.equal(await response.text(), "RIFF");
+});
+
 test("invalid media IDs use the stable JSON error shape", async (t) => {
   const runtime = await startTestServer(t);
   const response = await fetch(`${runtime.url}/api/media/not-an-id`);

@@ -7,6 +7,7 @@ const { HttpError, asyncRoute } = require("./http-errors");
 function inlineFilename(name) {
   return path.basename(String(name || "media"))
     .replace(/[<>:"/\\|?*\x00-\x1f]+/g, "-")
+    .replace(/[^\x20-\x7e]+/g, "-")
     .replace(/"/g, "-") || "media";
 }
 
