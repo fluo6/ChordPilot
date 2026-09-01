@@ -52,17 +52,37 @@ function privatePath(record, filePath) {
   return record;
 }
 
-function redactPaths(value) {
+function isLocationMetadataKey(key) {
+  const normalized = String(key).replace(/[_-]/g, "").toLowerCase();
+  return ["path", "url", "uri", "src", "source", "file", "location", "audiofile", "coverfile", "sourcefile"].includes(normalized)
+    || normalized.startsWith("path")
+    || normalized.endsWith("path")
+    || normalized.endsWith("src")
+    || normalized.endsWith("uri")
+    || normalized.endsWith("url")
+    || normalized.endsWith("location");
+}
+
+function isOpaqueMediaUrl(key, value, record) {
+  return String(key).toLowerCase() === "url"
+    && UUID_PATTERN.test(String(record?.id || ""))
+    && value === `/api/media/${record.id}`;
+}
+
+function redactLocationMetadata(value, { preserveOpaqueMediaUrls = false } = {}) {
   if (Array.isArray(value)) {
-    return value.map(redactPaths);
+    return value.map((child) => redactLocationMetadata(child, { preserveOpaqueMediaUrls }));
   }
   if (!value || typeof value !== "object") {
     return value;
   }
   return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !String(key).toLowerCase().endsWith("path") && String(key).toLowerCase() !== "coverurl")
-    .map(([key, child]) => [key, redactPaths(child)]));
+    .filter(([key, child]) => !isLocationMetadataKey(key)
+      || (preserveOpaqueMediaUrls && isOpaqueMediaUrl(key, child, value)))
+    .map(([key, child]) => [key, redactLocationMetadata(child, { preserveOpaqueMediaUrls })]));
 }
+
+const redactPaths = redactLocationMetadata;
 
 function referenceFrom(value) {
   if (!value || typeof value !== "object" || !value.id) {
@@ -476,7 +496,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   }
 
   function publicSession(session) {
-    return redactPaths(hydrateSession(session));
+    return redactLocationMetadata(hydrateSession(session), { preserveOpaqueMediaUrls: true });
   }
 
   function readStoredSession(id) {
@@ -576,4 +596,4 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   };
 }
 
-module.exports = { StorageError, assertContained, createStorage };
+module.exports = { StorageError, assertContained, createStorage, redactLocationMetadata };

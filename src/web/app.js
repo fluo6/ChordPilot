@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { HttpError, asyncRoute } = require("./http-errors");
+const { redactLocationMetadata } = require("./storage");
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "flac", "m4a", "aac", "ogg"]);
 const AUDIO_FORMAT_MESSAGE = "Upload an MP3, WAV, FLAC, M4A, AAC, or OGG audio file.";
@@ -70,19 +71,8 @@ function withoutMediaPaths(value) {
     .map(([key, child]) => [key, withoutMediaPaths(child)]));
 }
 
-function isClientSuppliedPathField(key) {
-  const normalized = String(key).replace(/[_-]/g, "").toLowerCase();
-  return normalized.endsWith("path")
-    || normalized.endsWith("url")
-    || ["file", "source", "audiofile", "coverfile", "sourcefile"].includes(normalized);
-}
-
 function sanitizeSessionPaths(value) {
-  if (Array.isArray(value)) return value.map(sanitizeSessionPaths);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !isClientSuppliedPathField(key))
-    .map(([key, child]) => [key, sanitizeSessionPaths(child)]));
+  return redactLocationMetadata(value);
 }
 
 function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploadLimitBytes }) {

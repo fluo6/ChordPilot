@@ -488,6 +488,7 @@ test("session save strips client filesystem paths while retaining opaque media r
   const known = await uploadFixture(runtime, "known.wav", "KNOWN");
   const outsidePath = path.join(runtime.root, "outside.wav");
   const relativePath = path.relative(process.cwd(), outsidePath);
+  const fileUri = `file://${outsidePath}`;
   const unknownId = "11111111-1111-4111-8111-111111111111";
   const unknownCoverId = "22222222-2222-4222-8222-222222222222";
   fs.writeFileSync(outsidePath, "PRIVATE");
@@ -511,6 +512,10 @@ test("session save strips client filesystem paths while retaining opaque media r
       bars: [],
       source: outsidePath,
       file: relativePath,
+      previewSourceUri: fileUri,
+      src: relativePath,
+      pathToAudio: outsidePath,
+      fileLocation: relativePath,
       stems: { stems: [{ id: unknownId, path: outsidePath, source_path: outsidePath }] }
     }
   });
@@ -525,17 +530,30 @@ test("session save strips client filesystem paths while retaining opaque media r
   assert.equal(response.body.session.chart.stems.stems[0].exists, false);
   assert.equal(response.body.session.chart.source, undefined);
   assert.equal(response.body.session.chart.file, undefined);
+  assert.equal(response.body.session.chart.previewSourceUri, undefined);
+  assert.equal(response.body.session.chart.src, undefined);
+  assert.equal(response.body.session.chart.pathToAudio, undefined);
+  assert.equal(response.body.session.chart.fileLocation, undefined);
   assert.equal(JSON.stringify(response.body).includes(outsidePath), false);
   assert.equal(JSON.stringify(response.body).includes(relativePath), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
   assert.equal((await fetch(`${runtime.url}/api/media/${known.id}`)).status, 200);
   assert.equal(await (await fetch(`${runtime.url}/api/media/${known.id}`)).text(), "KNOWN");
+  const list = await fetch(`${runtime.url}/api/sessions`);
+  const opened = await fetch(`${runtime.url}/api/sessions/${response.body.id}`);
+  const downloaded = await fetch(`${runtime.url}${response.body.downloadUrl}`);
+  for (const payload of [await list.json(), await opened.json(), await downloaded.json()]) {
+    assert.equal(JSON.stringify(payload).includes(outsidePath), false);
+    assert.equal(JSON.stringify(payload).includes(relativePath), false);
+    assert.equal(JSON.stringify(payload).includes(fileUri), false);
+  }
 });
 
 test("session import strips relative filesystem paths without importing their contents", async (t) => {
   const runtime = await startTestServer(t);
   const outsidePath = path.join(runtime.root, "outside.wav");
   const relativePath = path.relative(process.cwd(), outsidePath);
+  const fileUri = `file://${outsidePath}`;
   fs.writeFileSync(outsidePath, "PRIVATE");
 
   const response = await importSessionFixture(runtime, {
@@ -548,6 +566,10 @@ test("session import strips relative filesystem paths without importing their co
       path: outsidePath,
       source: outsidePath,
       file: relativePath,
+      previewSourceUri: fileUri,
+      src: relativePath,
+      pathToAudio: outsidePath,
+      fileLocation: relativePath,
       stems: { stems: [{ path: outsidePath, source_path: relativePath }] }
     }
   });
@@ -559,10 +581,22 @@ test("session import strips relative filesystem paths without importing their co
   assert.equal(imported.session.chart.stems.stems[0].path, undefined);
   assert.equal(imported.session.chart.source, undefined);
   assert.equal(imported.session.chart.file, undefined);
+  assert.equal(imported.session.chart.previewSourceUri, undefined);
+  assert.equal(imported.session.chart.src, undefined);
+  assert.equal(imported.session.chart.pathToAudio, undefined);
+  assert.equal(imported.session.chart.fileLocation, undefined);
   assert.equal(JSON.stringify(imported).includes(relativePath), false);
   assert.equal(JSON.stringify(imported).includes(outsidePath), false);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "media")), []);
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
+  const list = await fetch(`${runtime.url}/api/sessions`);
+  const opened = await fetch(`${runtime.url}/api/sessions/${imported.id}`);
+  const downloaded = await fetch(`${runtime.url}${imported.downloadUrl}`);
+  for (const payload of [await list.json(), await opened.json(), await downloaded.json()]) {
+    assert.equal(JSON.stringify(payload).includes(outsidePath), false);
+    assert.equal(JSON.stringify(payload).includes(relativePath), false);
+    assert.equal(JSON.stringify(payload).includes(fileUri), false);
+  }
 });
 
 test("session import rejects extra multipart fields with a stable session-upload error", async (t) => {

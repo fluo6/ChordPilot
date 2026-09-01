@@ -170,6 +170,39 @@ test("hydration marks a missing media reference without exposing a path", async 
   assert.equal(session.audio.url, undefined);
 });
 
+test("session storage strips location metadata while retaining opaque media URLs", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const tempPath = path.join(root, "tmp", "song.wav.part");
+  const absolutePath = path.join(root, "outside.wav");
+  const relativePath = "../outside.wav";
+  const fileUri = `file://${absolutePath}`;
+  fs.writeFileSync(tempPath, "RIFF");
+  const media = await storage.commitMedia({ tempPath, originalName: "song.wav", kind: "source" });
+
+  const saved = await storage.saveSession({
+    app: "ChordPilot",
+    version: 1,
+    audio: media,
+    chart: {
+      title: "Keep this title",
+      previewSourceUri: fileUri,
+      src: relativePath,
+      pathToAudio: absolutePath,
+      fileLocation: relativePath
+    }
+  });
+  const opened = await storage.openSession(saved.id);
+  const portable = storage.portableSession(saved.id);
+
+  for (const payload of [saved.session, opened.session, portable]) {
+    assert.equal(payload.chart.title, "Keep this title");
+    assert.equal(JSON.stringify(payload).includes(absolutePath), false);
+    assert.equal(JSON.stringify(payload).includes(relativePath), false);
+    assert.equal(JSON.stringify(payload).includes(fileUri), false);
+  }
+  assert.equal(opened.session.audio.url, `/api/media/${media.id}`);
+});
+
 test("importSession saves a portable session document", async (t) => {
   const { root, storage } = await makeStorage(t);
   const tempPath = storage.createTempPath(".json.part");
