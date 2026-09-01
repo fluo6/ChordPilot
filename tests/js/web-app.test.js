@@ -382,3 +382,189 @@ test("analysis serializes jobs and hides registered stem paths", async (t) => {
     assert.match(response.body.chart.stems.stems[0].url, /^\/api\/media\//);
   }
 });
+
+async function importSessionFixture(runtime, session, name = "session.chordpilot-session.json") {
+  const form = new FormData();
+  form.append("session", new Blob([JSON.stringify(session)], { type: "application/json" }), name);
+  return fetch(`${runtime.url}/api/sessions/import`, { method: "POST", body: form });
+}
+
+test("session save rejects an incompatible portable session schema", async (t) => {
+  const runtime = await startTestServer(t);
+
+  for (const session of [
+    { app: "Not ChordPilot", version: 1 },
+    { app: "ChordPilot", version: 2 },
+    { app: "ChordPilot", version: 1, chart: [] },
+    { app: "ChordPilot", version: 1, audio: [] },
+    { app: "ChordPilot", version: 1, analysis: [] },
+    { app: "ChordPilot", version: 1, ui: [] }
+  ]) {
+    const response = await postJson(runtime, "/api/sessions", session);
+    assert.equal(response.status, 400);
+    assert.deepEqual(response.body, {
+      error: { code: "INVALID_SESSION", message: "Session data is invalid." }
+    });
+  }
+});
+
+test("session save returns an opaque recent-session path and portable download", async (t) => {
+  const runtime = await startTestServer(t);
+  const response = await postJson(runtime, "/api/sessions", {
+    app: "ChordPilot",
+    version: 1,
+    audio: null,
+    chart: { title: "LAN Song", bars: [], path: "/private/chart.json" }
+  });
+
+  assert.equal(response.status, 200);
+  const saved = response.body;
+  assert.match(saved.path, /^[a-f0-9-]{36}$/);
+  assert.equal(saved.path, saved.id);
+  assert.match(saved.downloadUrl, new RegExp(`/api/sessions/${saved.id}/download$`));
+  assert.equal(JSON.stringify(saved).includes("/private/chart.json"), false);
+
+  const download = await fetch(`${runtime.url}${saved.downloadUrl}`);
+  assert.equal(download.status, 200);
+  assert.equal(download.headers.get("content-disposition"), "attachment; filename=\"LAN Song.chordpilot-session.json\"");
+  assert.equal((await download.json()).chart.path, undefined);
+});
+
+test("stored sessions list newest first and opening hydrates a missing source safely", async (t) => {
+  let tick = 0;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-session-order-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const storage = createStorage({
+    root: path.join(root, "data"),
+    now: () => `2026-09-01T00:00:0${++tick}.000Z`
+  });
+  const runtime = await startTestServer(t, { storage });
+  const missingId = "11111111-1111-4111-8111-111111111111";
+  const first = await postJson(runtime, "/api/sessions", {
+    app: "ChordPilot", version: 1, chart: { title: "First", bars: [] }
+  });
+  const second = await postJson(runtime, "/api/sessions", {
+    app: "ChordPilot", version: 1,
+    audio: { id: missingId, name: "gone.wav", extension: "wav", kind: "source" },
+    chart: { title: "Second", bars: [] }
+  });
+
+  const list = await fetch(`${runtime.url}/api/sessions`);
+  assert.equal(list.status, 200);
+  assert.deepEqual((await list.json()).sessions.map((item) => item.title), ["Second", "First"]);
+
+  const opened = await fetch(`${runtime.url}/api/sessions/${second.body.id}`);
+  assert.equal(opened.status, 200);
+  const payload = await opened.json();
+  assert.equal(payload.path, second.body.id);
+  assert.equal(payload.session.audio.exists, false);
+  assert.equal(payload.session.audio.path, undefined);
+  assert.equal(JSON.stringify(payload).includes(path.join(root, "data")), false);
+  assert.equal(first.status, 200);
+});
+
+test("session import validates portable JSON before saving and removes the temporary upload", async (t) => {
+  const runtime = await startTestServer(t);
+  const importedResponse = await importSessionFixture(runtime, {
+    app: "ChordPilot", version: 1, chart: { title: "Imported", bars: [] }
+  });
+  assert.equal(importedResponse.status, 200);
+  const imported = await importedResponse.json();
+  assert.equal(imported.session.chart.title, "Imported");
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
+
+  const malformed = new FormData();
+  malformed.append("session", new Blob(["{"], { type: "application/json" }), "broken.json");
+  const malformedResponse = await fetch(`${runtime.url}/api/sessions/import`, { method: "POST", body: malformed });
+  assert.equal(malformedResponse.status, 400);
+  assert.deepEqual(await malformedResponse.json(), {
+    error: { code: "INVALID_SESSION", message: "Session data is invalid." }
+  });
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
+});
+
+test("chart export permits supported formats, queues generation, and returns an opaque download", async (t) => {
+  const calls = [];
+  const runtime = await startTestServer(t, {
+    services: {
+      exportChart: async ({ chart, format, outputPath }) => {
+        calls.push({ chart, format, outputPath });
+        fs.writeFileSync(outputPath, `chart:${format}`);
+        return { path: outputPath, format };
+      }
+    }
+  });
+
+  for (const format of ["txt", "csv", "json", "musicxml"]) {
+    const response = await postJson(runtime, "/api/exports/chart", {
+      chart: { title: "Export Song", bars: [], path: "/private/chart.json" }, format
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.format, format);
+    assert.match(response.body.downloadUrl, /^\/api\/media\/[a-f0-9-]{36}$/);
+    assert.match(response.body.filename, new RegExp(`\\.${format}$`));
+    assert.equal(JSON.stringify(response.body).includes("/private/chart.json"), false);
+  }
+  assert.equal(calls.length, 4);
+  assert.equal(calls.every((call) => call.outputPath.startsWith(path.join(runtime.root, "data", "generated"))), true);
+  assert.equal(calls.every((call) => call.outputPath.includes(".part.") && call.outputPath.endsWith(`.${call.format}`)), true);
+
+  const unsupported = await postJson(runtime, "/api/exports/chart", { chart: { bars: [] }, format: "pdf" });
+  assert.equal(unsupported.status, 400);
+  assert.deepEqual(unsupported.body, {
+    error: { code: "UNSUPPORTED_CHART_FORMAT", message: "Unsupported chart export format." }
+  });
+});
+
+test("audio export resolves opaque sources and rejects unsupported formats without exposing paths", async (t) => {
+  const calls = [];
+  const runtime = await startTestServer(t, {
+    services: {
+      exportAudioTrack: async ({ sourcePath, outputPath, format }) => {
+        calls.push({ sourcePath, outputPath, format });
+        fs.writeFileSync(outputPath, `audio:${format}`);
+        return { path: outputPath, format };
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime, "source.wav");
+
+  for (const format of ["wav", "mp3", "flac", "m4a"]) {
+    const response = await postJson(runtime, "/api/exports/audio", { mediaId: audio.id, format });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.format, format);
+    assert.match(response.body.downloadUrl, /^\/api\/media\/[a-f0-9-]{36}$/);
+    assert.match(response.body.filename, new RegExp(`\\.${format}$`));
+    assert.equal(JSON.stringify(response.body).includes(runtime.root), false);
+  }
+  assert.equal(calls.length, 4);
+  assert.equal(calls.every((call) => call.sourcePath === runtime.storage.resolveMedia(audio.id).path), true);
+  assert.equal(calls.every((call) => call.outputPath.startsWith(path.join(runtime.root, "data", "generated"))), true);
+  assert.equal(calls.every((call) => call.outputPath.includes(".part.") && call.outputPath.endsWith(`.${call.format}`)), true);
+
+  const unsupported = await postJson(runtime, "/api/exports/audio", { mediaId: audio.id, format: "ogg" });
+  assert.equal(unsupported.status, 400);
+  assert.deepEqual(unsupported.body, {
+    error: { code: "UNSUPPORTED_AUDIO_FORMAT", message: "Unsupported audio export format." }
+  });
+});
+
+test("audio export removes a failed generated part file and redacts its service error", async (t) => {
+  const runtime = await startTestServer(t, {
+    services: {
+      exportAudioTrack: async ({ outputPath }) => {
+        fs.writeFileSync(outputPath, "partial audio");
+        throw new Error(`ffmpeg could not write ${outputPath}`);
+      }
+    }
+  });
+  const audio = await uploadFixture(runtime, "source.wav");
+
+  const response = await postJson(runtime, "/api/exports/audio", { mediaId: audio.id, format: "wav" });
+  assert.equal(response.status, 500);
+  assert.deepEqual(response.body, {
+    error: { code: "INTERNAL_ERROR", message: "An unexpected server error occurred." }
+  });
+  assert.equal(JSON.stringify(response.body).includes(runtime.root), false);
+  assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "generated")), []);
+});

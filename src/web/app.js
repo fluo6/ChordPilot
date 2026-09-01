@@ -7,6 +7,9 @@ const { HttpError, asyncRoute } = require("./http-errors");
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "flac", "m4a", "aac", "ogg"]);
 const AUDIO_FORMAT_MESSAGE = "Upload an MP3, WAV, FLAC, M4A, AAC, or OGG audio file.";
+const CHART_EXPORT_FORMATS = new Set(["txt", "csv", "json", "musicxml"]);
+const AUDIO_EXPORT_FORMATS = new Set(["wav", "mp3", "flac", "m4a"]);
+const SESSION_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
 
 function inlineFilename(name) {
   return path.basename(String(name || "media"))
@@ -32,6 +35,12 @@ function apiError(error) {
   if (error.code === "INVALID_MEDIA_ID") {
     return new HttpError(400, "INVALID_MEDIA_ID", "Invalid media ID.");
   }
+  if (error.code === "INVALID_SESSION_ID") {
+    return new HttpError(400, "INVALID_SESSION_ID", "Invalid session ID.");
+  }
+  if (error.code === "INVALID_SESSION") {
+    return new HttpError(400, "INVALID_SESSION", "Session data is invalid.");
+  }
   return new HttpError(500, "INTERNAL_ERROR", "An unexpected server error occurred.");
 }
 
@@ -46,6 +55,11 @@ function removeTempFile(filePath) {
 
 function audioExtension(name) {
   return path.extname(String(name || "")).slice(1).toLowerCase();
+}
+
+function exportFilename(name, format) {
+  const stem = path.basename(inlineFilename(name || "chordpilot-export"), path.extname(inlineFilename(name || "chordpilot-export")));
+  return `${stem || "chordpilot-export"}.${format}`;
 }
 
 function withoutMediaPaths(value) {
@@ -85,6 +99,25 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
       callback(null, true);
     }
   });
+  const sessionUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, callback) => {
+        try {
+          callback(null, path.dirname(storage.createTempPath(".part")));
+        } catch (error) {
+          callback(error);
+        }
+      },
+      filename: (_req, _file, callback) => {
+        try {
+          callback(null, path.basename(storage.createTempPath(".json.part")));
+        } catch (error) {
+          callback(error);
+        }
+      }
+    }),
+    limits: { fileSize: SESSION_UPLOAD_LIMIT_BYTES, files: 1 }
+  });
 
   async function resolveMedia(id) {
     const media = await storage.resolveMedia(id);
@@ -117,6 +150,25 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
       ...withoutMediaPaths(payload || {}),
       ...media
     };
+  }
+
+  function sessionResponse(saved) {
+    return {
+      id: saved.id,
+      path: saved.id,
+      session: saved.session,
+      downloadUrl: `/api/sessions/${saved.id}/download`
+    };
+  }
+
+  async function registerExport({ outputPath, filename, format }) {
+    const media = await storage.registerExisting({
+      sourcePath: outputPath,
+      originalName: filename,
+      kind: "export",
+      copy: false
+    });
+    return { downloadUrl: media.url, filename, format };
   }
 
   app.use("/api", express.json({ limit: "10mb" }));
@@ -229,6 +281,95 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
       return storage.normalizeChart(result, { copy: false });
     });
     res.json({ chart });
+  }));
+
+  app.post("/api/sessions", asyncRoute(async (req, res) => {
+    storage.assertSessionSchema(req.body);
+    res.json(sessionResponse(await storage.saveSession(req.body)));
+  }));
+
+  app.get("/api/sessions", asyncRoute(async (_req, res) => {
+    const sessions = storage.listSessions().map((stored) => ({
+      id: stored.id,
+      title: stored.session?.chart?.title || stored.session?.audio?.name || "Untitled",
+      audioName: stored.session?.audio?.name || "",
+      savedAt: stored.createdAt
+    }));
+    res.json({ sessions });
+  }));
+
+  app.get("/api/sessions/:id", asyncRoute(async (req, res) => {
+    const opened = await storage.openSession(req.params.id);
+    if (!opened) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", "Session not found.");
+    }
+    res.json(sessionResponse(opened));
+  }));
+
+  app.get("/api/sessions/:id/download", asyncRoute(async (req, res) => {
+    const session = storage.portableSession(req.params.id);
+    if (!session) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", "Session not found.");
+    }
+    const title = session.chart?.title || session.audio?.name || "chordpilot-session";
+    res.attachment(`${path.basename(inlineFilename(title), path.extname(inlineFilename(title)))}.chordpilot-session.json`);
+    res.json(session);
+  }));
+
+  app.post("/api/sessions/import", (req, res, next) => {
+    sessionUpload.single("session")(req, res, (error) => {
+      if (error) {
+        removeTempFile(req.file?.path);
+        next(error);
+        return;
+      }
+      next();
+    });
+  }, asyncRoute(async (req, res) => {
+    if (!req.file) {
+      throw new HttpError(400, "SESSION_REQUIRED", "Upload one session file in the session field.");
+    }
+    const imported = await storage.importSession(req.file.path);
+    res.json(sessionResponse(imported));
+  }));
+
+  app.post("/api/exports/chart", asyncRoute(async (req, res) => {
+    const format = String(req.body?.format || "").toLowerCase();
+    if (!CHART_EXPORT_FORMATS.has(format)) {
+      throw new HttpError(400, "UNSUPPORTED_CHART_FORMAT", "Unsupported chart export format.");
+    }
+    const filename = exportFilename(req.body?.chart?.title || "chord-chart", format);
+    const outputPath = storage.createGeneratedPath(`.part.${format}`);
+    const exported = await queue.enqueue("chart-export", async () => {
+      try {
+        await services.exportChart({ chart: withoutMediaPaths(req.body?.chart || {}), format, outputPath });
+        return await registerExport({ outputPath, filename, format });
+      } catch (error) {
+        removeTempFile(outputPath);
+        throw error;
+      }
+    });
+    res.json(exported);
+  }));
+
+  app.post("/api/exports/audio", asyncRoute(async (req, res) => {
+    const format = String(req.body?.format || "").toLowerCase();
+    if (!AUDIO_EXPORT_FORMATS.has(format)) {
+      throw new HttpError(400, "UNSUPPORTED_AUDIO_FORMAT", "Unsupported audio export format.");
+    }
+    const source = await resolveMedia(req.body?.mediaId);
+    const filename = exportFilename(req.body?.filename || source.name, format);
+    const outputPath = storage.createGeneratedPath(`.part.${format}`);
+    const exported = await queue.enqueue("audio-export", async () => {
+      try {
+        await services.exportAudioTrack({ sourcePath: source.path, outputPath, format });
+        return await registerExport({ outputPath, filename, format });
+      } catch (error) {
+        removeTempFile(outputPath);
+        throw error;
+      }
+    });
+    res.json(exported);
   }));
 
   app.use("/api", (_req, _res, next) => {

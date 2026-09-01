@@ -73,6 +73,22 @@ function referenceFrom(value) {
     .map((field) => [field, value[field]]));
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertSessionSchema(session) {
+  if (!isPlainObject(session) || session.app !== "ChordPilot" || session.version !== 1) {
+    throw new StorageError("INVALID_SESSION", "Session data is invalid.");
+  }
+  for (const field of ["chart", "audio", "analysis", "ui"]) {
+    if (session[field] !== undefined && session[field] !== null && !isPlainObject(session[field])) {
+      throw new StorageError("INVALID_SESSION", "Session data is invalid.");
+    }
+  }
+  return session;
+}
+
 function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new Date().toISOString() } = {}) {
   if (!root) {
     throw new StorageError("DATA_ROOT_REQUIRED", "A ChordPilot data root is required.");
@@ -126,6 +142,14 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     const tempPath = path.join(tmpDirectory, `${newId("media")}${safeSuffix || ".part"}`);
     assertContained(tmpDirectory, tempPath);
     return tempPath;
+  }
+
+  function createGeneratedPath(suffix = ".part") {
+    const generatedDirectory = ensureDirectory("generated");
+    const safeSuffix = String(suffix || ".part").replace(/[^a-zA-Z0-9._-]/g, "");
+    const generatedPath = path.join(generatedDirectory, `${newId("media")}${safeSuffix || ".part"}`);
+    assertContained(generatedDirectory, generatedPath);
+    return generatedPath;
   }
 
   function fsyncFile(filePath) {
@@ -460,6 +484,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   }
 
   async function saveSession(session) {
+    assertSessionSchema(session);
     const id = newId("session");
     const record = { id, createdAt: String(now()), session: await normalizeSessionForStorage(session) };
     const sessionsDirectory = ensureDirectory("sessions");
@@ -482,6 +507,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     return record && { id: record.id, createdAt: record.createdAt, session: publicSession(record.session) };
   }
 
+  function portableSession(id) {
+    const record = readStoredSession(id);
+    return record && redactPaths(record.session);
+  }
+
   async function importSession(tempPath) {
     const tmpDirectory = ensureDirectory("tmp");
     assertContained(tmpDirectory, tempPath);
@@ -493,9 +523,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       }
       const imported = JSON.parse(fs.readFileSync(tempPath, "utf8"));
       const session = imported?.session && typeof imported.session === "object" ? imported.session : imported;
-      if (!session || typeof session !== "object") {
-        throw new StorageError("INVALID_SESSION", "Imported session data is invalid.");
-      }
+      assertSessionSchema(session);
       return saveSession(session);
     } catch (error) {
       if (error instanceof StorageError) throw error;
@@ -512,6 +540,7 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
   return {
     initialize,
     createTempPath,
+    createGeneratedPath,
     commitMedia,
     registerExisting,
     resolveMedia,
@@ -520,9 +549,11 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     normalizeChart,
     normalizeSessionForStorage,
     hydrateSession,
+    assertSessionSchema,
     saveSession,
     listSessions,
     openSession,
+    portableSession,
     importSession
   };
 }
