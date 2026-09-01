@@ -165,13 +165,27 @@ function createWebRuntime(env = process.env, {
     }
   }
 
+  function forceSettleChild(record, error) {
+    if (!activeChildren.has(record.child)) return;
+    try {
+      record.child.emit("error", error);
+    } catch (_error) {
+      // Tracking still has to settle if a child listener throws during forced release.
+    } finally {
+      record.settleExit();
+    }
+  }
+
   function signalChildren(records, signal) {
     for (const record of records) {
       if (!activeChildren.has(record.child)) continue;
       try {
         record.child.kill(signal);
-      } catch (_error) {
-        record.settleExit();
+      } catch (cause) {
+        const error = new Error(`Child process could not be signalled during server shutdown: ${cause.message}`);
+        error.code = "SERVER_SHUTTING_DOWN";
+        error.cause = cause;
+        forceSettleChild(record, error);
       }
     }
   }
@@ -187,13 +201,7 @@ function createWebRuntime(env = process.env, {
     for (const record of remaining.filter((candidate) => activeChildren.has(candidate.child))) {
       const error = new Error("Child process did not exit during server shutdown.");
       error.code = "SERVER_SHUTTING_DOWN";
-      try {
-        record.child.emit("error", error);
-      } catch (_error) {
-        // Tracking still has to settle if a child listener throws during forced release.
-      } finally {
-        record.settleExit();
-      }
+      forceSettleChild(record, error);
     }
   }
 

@@ -953,6 +953,55 @@ test("shutdown escalates an uncooperative child from SIGTERM to SIGKILL", { time
   assert.deepEqual(runtime.queue.state(), { active: 0, queued: 0, closing: true });
 });
 
+test("shutdown settles child work once when signalling throws synchronously", { timeout: 1_000 }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-child-signal-error-"));
+  const signals = [];
+  let errorEvents = 0;
+  let markSpawned;
+  const spawned = new Promise((resolve) => { markSpawned = resolve; });
+  const runtime = createWebRuntime({
+    CHORDPILOT_DATA_ROOT: path.join(root, "data"),
+    CHORDPILOT_YTDLP: "throwing-yt-dlp"
+  }, {
+    childShutdownGraceMs: 10,
+    childShutdownKillWaitMs: 10,
+    spawnImpl() {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.stdin = { write() {}, end() {} };
+      const emit = child.emit.bind(child);
+      child.emit = (event, ...args) => {
+        if (event === "error") errorEvents += 1;
+        return emit(event, ...args);
+      };
+      child.kill = (signal) => {
+        signals.push(signal);
+        throw new Error("kill failed synchronously");
+      };
+      markSpawned();
+      return child;
+    }
+  });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const childWork = runtime.queue.enqueue(
+    "throwing-child",
+    () => runtime.services.downloadYoutubeAudio("https://youtu.be/throwing-child")
+  );
+  await spawned;
+  const stopping = runtime.stop();
+  const [childResult, stopResult] = await Promise.allSettled([childWork, stopping]);
+
+  assert.deepEqual(signals, ["SIGTERM"]);
+  assert.equal(errorEvents, 1);
+  assert.equal(childResult.status, "rejected");
+  assert.equal(childResult.reason instanceof Error, true);
+  assert.equal(stopResult.status, "fulfilled");
+  assert.deepEqual(runtime.queue.state(), { active: 0, queued: 0, closing: true });
+  await runtime.queue.idle();
+});
+
 test("shutdown synchronizes with an in-flight start before it resolves", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-start-stop-"));
   const port = await unusedTcpPort();
