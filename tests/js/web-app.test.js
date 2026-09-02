@@ -253,7 +253,7 @@ test("upload rejects unsupported audio extensions and files over the configured 
   const unsupportedResponse = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: unsupported });
   assert.equal(unsupportedResponse.status, 400);
   assert.deepEqual(await unsupportedResponse.json(), {
-    error: { code: "UNSUPPORTED_AUDIO_FORMAT", message: "Upload an MP3, WAV, FLAC, M4A, AAC, or OGG audio file." }
+    error: { code: "UNSUPPORTED_AUDIO_FORMAT", message: "Upload an MP3, WAV, AIF, AIFF, FLAC, or M4A audio file." }
   });
 
   const oversized = new FormData();
@@ -264,6 +264,29 @@ test("upload rejects unsupported audio extensions and files over the configured 
     error: { code: "FILE_TOO_LARGE", message: "Uploaded file is too large." }
   });
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
+});
+
+test("upload accepts every Electron audio-picker format", async (t) => {
+  const runtime = await startTestServer(t);
+
+  for (const extension of ["mp3", "wav", "aif", "aiff", "flac", "m4a"]) {
+    const form = new FormData();
+    form.append("audio", new Blob(["audio"]), `song.${extension}`);
+    const response = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: form });
+    assert.equal(response.status, 200, `${extension} should be accepted`);
+  }
+});
+
+test("upload rejects formats outside the Electron audio-picker contract", async (t) => {
+  const runtime = await startTestServer(t);
+
+  for (const extension of ["aac", "ogg"]) {
+    const form = new FormData();
+    form.append("audio", new Blob(["audio"]), `song.${extension}`);
+    const response = await fetch(`${runtime.url}/api/media/upload`, { method: "POST", body: form });
+    assert.equal(response.status, 400, `${extension} should be rejected`);
+    assert.equal((await response.json()).error.code, "UNSUPPORTED_AUDIO_FORMAT");
+  }
 });
 
 test("upload commits audio before building a public audio response", async (t) => {

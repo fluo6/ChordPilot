@@ -6,8 +6,8 @@ const path = require("node:path");
 const { HttpError, asyncRoute } = require("./http-errors");
 const { redactLocationMetadata } = require("./storage");
 
-const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "flac", "m4a", "aac", "ogg"]);
-const AUDIO_FORMAT_MESSAGE = "Upload an MP3, WAV, FLAC, M4A, AAC, or OGG audio file.";
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "aif", "aiff", "flac", "m4a"]);
+const AUDIO_FORMAT_MESSAGE = "Upload an MP3, WAV, AIF, AIFF, FLAC, or M4A audio file.";
 const CHART_EXPORT_FORMATS = new Set(["txt", "csv", "json", "musicxml"]);
 const AUDIO_EXPORT_FORMATS = new Set(["wav", "mp3", "flac", "m4a"]);
 const SESSION_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;

@@ -133,7 +133,7 @@
 
   browserWindow.chordPilot = {
     async chooseAudio() {
-      const file = await pickFile("audio/mpeg,audio/wav,.mp3,.wav");
+      const file = await pickFile(".mp3,.wav,.aif,.aiff,.flac,.m4a");
       if (!file) return null;
       const payload = await uploadFile("/api/media/upload", "audio", file);
       return browserMedia(payload.audio);

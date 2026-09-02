@@ -191,6 +191,7 @@ test("chooseAudio uploads one selected file and uses its opaque ID as path", asy
   });
   const choosing = runtime.bridge.chooseAudio();
   const picker = runtime.created.find((element) => element.tagName === "INPUT");
+  assert.equal(picker.accept, ".mp3,.wav,.aif,.aiff,.flac,.m4a");
   picker.files = [file];
   picker.dispatch("change");
   const audio = await choosing;
