@@ -1,9 +1,20 @@
 .git
 .gitignore
 .worktrees
+.env*
+.npmrc
+.agents
+.codex
+.superpowers
+.tool-cache
+.idea
+.vscode
+.DS_Store
 node_modules
 dist
 build
+coverage
+.nyc_output
 .chordpilot-data
 __pycache__
 *.py[cod]
@@ -18,3 +29,5 @@ __pycache__
 *.aif
 *.aiff
 *.chordpilot-session.json
+*.pem
+*.key

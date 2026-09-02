@@ -33,8 +33,14 @@ RUN npm ci --omit=dev
 
 COPY . ./
 
-RUN mkdir -p /data \
-    && chown node:node /data
+RUN mkdir -p /data/home /data/cache /data/config /data/share /data/tmp \
+    && chown -R node:node /data
+
+ENV HOME=/data/home \
+    XDG_CACHE_HOME=/data/cache \
+    XDG_CONFIG_HOME=/data/config \
+    XDG_DATA_HOME=/data/share \
+    TMPDIR=/data/tmp
 
 USER node
 
