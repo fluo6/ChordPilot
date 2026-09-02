@@ -51,6 +51,71 @@ For embedded distributions that need an explicit runtime home, also set `CHORDPI
 npm start
 ```
 
+## Run in a browser on your LAN
+
+The Docker runtime serves the full ChordPilot workflow to browsers on the same trusted local network. Build and start it from the repository root:
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+On Linux, find the host computer's LAN address with:
+
+```bash
+hostname -I
+```
+
+From another laptop on the same network, open `http://<host-ip>:2712`. If the page is not reachable, allow inbound TCP port `2712` through the host computer's firewall and check that the laptops are not on an isolated guest or client network. The Compose port is published on all host interfaces.
+
+This service has no authentication, TLS, or per-user isolation. Use it only on a trusted LAN and do not expose it directly to the public internet. Anyone who can reach the selected port can upload and download audio, inspect stored sessions, and start CPU-intensive analysis work.
+
+Inspect health and follow logs with:
+
+```bash
+docker compose ps
+docker compose logs -f chordpilot
+```
+
+To use a different host port, set `CHORDPILOT_PORT` when starting the stack, then open that port in the browser and firewall:
+
+```bash
+CHORDPILOT_PORT=2713 docker compose up -d --build
+```
+
+The default upload limit is 512 MiB. Override it in bytes with `CHORDPILOT_UPLOAD_LIMIT_BYTES` when starting Compose.
+
+All uploads, sessions, downloaded models, generated files, and analysis caches live in the `chordpilot-data` named volume. Stopping and removing the service preserves that volume:
+
+```bash
+docker compose down
+```
+
+Use the following only when you intentionally want to delete all ChordPilot uploads, sessions, models, generated files, and caches:
+
+```bash
+docker compose down -v
+```
+
+High-quality Demucs analysis runs on the CPU and can be slow. Its first run downloads the selected Demucs model into the persistent data volume; later runs reuse it. The current Python 3.11 audio dependency stack uses an amd64 Essentia wheel, so the Compose service targets `linux/amd64`. An ARM64 host therefore needs amd64 emulation (QEMU/binfmt, normally included with Docker Desktop), and the initial image build and analysis will be substantially slower under emulation.
+
+Run the host-published API smoke test after the service is healthy:
+
+```bash
+npm run smoke:web
+```
+
+To verify that a saved session survives a container restart, record the first smoke run's session ID, restart the service, wait until it is healthy, and verify the same state file:
+
+```bash
+npm run smoke:web -- --state-file /tmp/chordpilot-smoke-session.json
+docker compose restart chordpilot
+docker compose ps
+npm run smoke:web -- --verify-existing-session /tmp/chordpilot-smoke-session.json
+```
+
+`--verify-existing-session` also accepts the session ID printed by the first smoke run directly. Set `CHORDPILOT_WEB_URL` when testing a non-default port or a remote host, for example `CHORDPILOT_WEB_URL=http://127.0.0.1:2713 npm run smoke:web`.
+
 ## Build desktop apps
 
 Install dependencies once with `npm install` or `npm ci`, then build on the operating system you are targeting.
