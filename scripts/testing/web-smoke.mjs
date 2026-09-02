@@ -238,6 +238,24 @@ async function runSmoke(client, wavPath, options, baseUrl) {
   console.log("ChordPilot web smoke passed");
 }
 
+async function cleanupTemporaryFiles(wavPath, temporaryDirectory) {
+  const failures = [];
+  for (const [label, target, options] of [
+    ["WAV file", wavPath, { force: true }],
+    ["temporary directory", temporaryDirectory, { recursive: true, force: true }]
+  ]) {
+    if (!target) continue;
+    try {
+      await fs.rm(target, options);
+    } catch (error) {
+      failures.push(`${label}: ${error.message}`);
+    }
+  }
+  if (failures.length) {
+    console.warn(`ChordPilot web smoke cleanup warning: ${failures.join("; ")}`);
+  }
+}
+
 async function main() {
   let temporaryDirectory;
   let wavPath;
@@ -256,8 +274,7 @@ async function main() {
       await runSmoke(client, wavPath, options, baseUrl);
     }
   } finally {
-    if (wavPath) await fs.rm(wavPath, { force: true });
-    if (temporaryDirectory) await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    await cleanupTemporaryFiles(wavPath, temporaryDirectory);
   }
 }
 
