@@ -238,26 +238,30 @@ async function runSmoke(client, wavPath, options, baseUrl) {
   console.log("ChordPilot web smoke passed");
 }
 
-const options = parseArguments(process.argv.slice(2));
-const baseUrl = webBaseUrl(process.env.CHORDPILOT_WEB_URL || DEFAULT_WEB_URL);
-const timeoutMs = positiveInteger(process.env.CHORDPILOT_SMOKE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, "CHORDPILOT_SMOKE_TIMEOUT_MS");
-const client = createClient(baseUrl, timeoutMs);
-let temporaryDirectory;
-let wavPath;
+async function main() {
+  let temporaryDirectory;
+  let wavPath;
+  try {
+    const options = parseArguments(process.argv.slice(2));
+    const baseUrl = webBaseUrl(process.env.CHORDPILOT_WEB_URL || DEFAULT_WEB_URL);
+    const timeoutMs = positiveInteger(process.env.CHORDPILOT_SMOKE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, "CHORDPILOT_SMOKE_TIMEOUT_MS");
+    const client = createClient(baseUrl, timeoutMs);
 
-try {
-  if (options.verifyExistingSession) {
-    await verifyExistingSession(client, options.verifyExistingSession);
-  } else {
-    temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chordpilot-web-smoke-"));
-    wavPath = path.join(temporaryDirectory, "smoke.wav");
-    await fs.writeFile(wavPath, createWav());
-    await runSmoke(client, wavPath, options, baseUrl);
+    if (options.verifyExistingSession) {
+      await verifyExistingSession(client, options.verifyExistingSession);
+    } else {
+      temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chordpilot-web-smoke-"));
+      wavPath = path.join(temporaryDirectory, "smoke.wav");
+      await fs.writeFile(wavPath, createWav());
+      await runSmoke(client, wavPath, options, baseUrl);
+    }
+  } finally {
+    if (wavPath) await fs.rm(wavPath, { force: true });
+    if (temporaryDirectory) await fs.rm(temporaryDirectory, { recursive: true, force: true });
   }
-} catch (error) {
+}
+
+main().catch((error) => {
   console.error(`ChordPilot web smoke failed: ${error.message}`);
   process.exitCode = 1;
-} finally {
-  if (wavPath) await fs.rm(wavPath, { force: true });
-  if (temporaryDirectory) await fs.rm(temporaryDirectory, { recursive: true, force: true });
-}
+});
