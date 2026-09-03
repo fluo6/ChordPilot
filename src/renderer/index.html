@@ -801,6 +801,17 @@
         </header>
         <div id="webSessionList" class="web-session-list" aria-label="Saved sessions"></div>
         <p id="webSessionEmpty" class="web-session-empty">No saved sessions are available yet.</p>
+        <section class="web-storage-panel" aria-labelledby="webStorageTitle">
+          <h3 id="webStorageTitle">Server storage</h3>
+          <p id="webStorageSummary" aria-live="polite"></p>
+          <p id="webStorageError" class="web-storage-error" role="alert" hidden></p>
+          <div class="web-storage-actions" aria-label="Cache actions">
+            <button id="webClearAnalysis" type="button">Clear analysis cache</button>
+            <button id="webClearModels" type="button">Clear models</button>
+            <button id="webClearAll" type="button">Clear both</button>
+          </div>
+          <p>Cache controls are unavailable while ChordPilot is working. Uploaded audio and sessions are never cleared here.</p>
+        </section>
         <input id="webSessionImport" type="file" accept=".json,.chordpilot-session.json,application/json" hidden />
         <footer>
           <button id="webSessionImportButton" type="button">Import Session</button>

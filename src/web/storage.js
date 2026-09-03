@@ -4,6 +4,8 @@ const path = require("node:path");
 
 const UUID_PATTERN = /^[a-f0-9-]{36}$/;
 const REFERENCE_FIELDS = ["id", "name", "extension", "kind"];
+const ANALYSIS_CACHE_DIRECTORIES = ["decoded", "analysis", "stems", "history"];
+const MODEL_CACHE_DIRECTORIES = ["torch"];
 
 class StorageError extends Error {
   constructor(code, message) {
@@ -131,7 +133,7 @@ function assertSessionSchema(session) {
   return session;
 }
 
-function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new Date().toISOString() } = {}) {
+function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = crypto.randomUUID, now = () => new Date().toISOString() } = {}) {
   if (!root) {
     throw new StorageError("DATA_ROOT_REQUIRED", "A ChordPilot data root is required.");
   }
@@ -144,19 +146,23 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     cache: path.join(dataRoot, "cache"),
     tmp: path.join(dataRoot, "tmp")
   };
+  const cacheRoot = path.resolve(configuredCacheRoot || directories.cache);
+  assertContained(dataRoot, cacheRoot);
 
-  function ensureDirectory(key) {
-    const directory = directories[key];
-    assertContained(dataRoot, directory);
+  function ensureOwnedDirectory(parent, directory) {
+    assertContained(parent, directory);
     try {
       const stats = fs.lstatSync(directory);
-      if (!stats.isDirectory() || stats.isSymbolicLink()) {
-        throw new Error("invalid directory");
-      }
+      if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error("invalid directory");
     } catch (_error) {
       throw new StorageError("INVALID_DATA_DIRECTORY", "Configured ChordPilot storage is invalid.");
     }
     return directory;
+  }
+
+  function ensureDirectory(key) {
+    const directory = directories[key];
+    return ensureOwnedDirectory(dataRoot, directory);
   }
 
   function directoryKeyForKind(kind) {
@@ -172,6 +178,87 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
       fs.mkdirSync(directory, { recursive: true });
     }
     Object.keys(directories).forEach(ensureDirectory);
+    fs.mkdirSync(cacheRoot, { recursive: true });
+    ensureOwnedDirectory(cacheRoot, cacheRoot);
+    for (const child of [...ANALYSIS_CACHE_DIRECTORIES, ...MODEL_CACHE_DIRECTORIES]) {
+      fs.mkdirSync(path.join(cacheRoot, child), { recursive: true });
+      ensureOwnedDirectory(cacheRoot, path.join(cacheRoot, child));
+    }
+  }
+
+  function directoryUsage(directory, { include = () => true } = {}) {
+    let count = 0;
+    let bytes = 0;
+    const visit = (current) => {
+      ensureOwnedDirectory(directory, current);
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const candidate = path.join(current, entry.name);
+        assertContained(directory, candidate);
+        const stats = fs.lstatSync(candidate);
+        if (stats.isSymbolicLink()) {
+          throw new StorageError("INVALID_DATA_DIRECTORY", "Configured ChordPilot storage is invalid.");
+        }
+        if (stats.isDirectory()) visit(candidate);
+        else if (stats.isFile() && include(candidate)) {
+          count += 1;
+          bytes += stats.size;
+        }
+      }
+    };
+    visit(directory);
+    return { count, bytes };
+  }
+
+  function combinedUsage(names) {
+    return names.reduce((total, name) => {
+      const directory = path.join(cacheRoot, name);
+      ensureOwnedDirectory(cacheRoot, directory);
+      const usage = directoryUsage(directory);
+      return { count: total.count + usage.count, bytes: total.bytes + usage.bytes };
+    }, { count: 0, bytes: 0 });
+  }
+
+  function summary() {
+    const media = ensureDirectory("media");
+    const generated = ensureDirectory("generated");
+    const sessions = ensureDirectory("sessions");
+    return {
+      media: directoryUsage(media, { include: (file) => !file.endsWith(".json") && !file.endsWith(".part") }),
+      generated: directoryUsage(generated, { include: (file) => !file.endsWith(".json") && !file.endsWith(".part") }),
+      sessions: directoryUsage(sessions, { include: (file) => file.endsWith(".json") }),
+      analysis: combinedUsage(ANALYSIS_CACHE_DIRECTORIES),
+      models: combinedUsage(MODEL_CACHE_DIRECTORIES)
+    };
+  }
+
+  function cacheTargets(scope) {
+    if (scope === "analysis") return ANALYSIS_CACHE_DIRECTORIES;
+    if (scope === "models") return MODEL_CACHE_DIRECTORIES;
+    if (scope === "all") return [...ANALYSIS_CACHE_DIRECTORIES, ...MODEL_CACHE_DIRECTORIES];
+    throw new StorageError("INVALID_CACHE_SCOPE", "Invalid cache scope.");
+  }
+
+  function clearCache(scope) {
+    const targets = cacheTargets(String(scope || ""));
+    const directoriesToClear = targets.map((name) => {
+      const directory = path.join(cacheRoot, name);
+      ensureOwnedDirectory(cacheRoot, directory);
+      directoryUsage(directory);
+      return directory;
+    });
+    for (const directory of directoriesToClear) {
+      const trash = path.join(cacheRoot, `.clear-${path.basename(directory)}-${crypto.randomUUID()}`);
+      assertContained(cacheRoot, trash);
+      fs.renameSync(directory, trash);
+      try {
+        fs.mkdirSync(directory);
+      } catch (error) {
+        fs.renameSync(trash, directory);
+        throw error;
+      }
+      fs.rmSync(trash, { recursive: true, force: true });
+    }
+    return summary();
   }
 
   function newId(label) {
@@ -572,6 +659,20 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     return record && redactPaths(record.session);
   }
 
+  function deleteSession(id) {
+    const sessionId = assertUuid(id, "session");
+    const sessionsDirectory = ensureDirectory("sessions");
+    const sessionPath = path.join(sessionsDirectory, `${sessionId}.json`);
+    assertContained(sessionsDirectory, sessionPath);
+    if (!fs.existsSync(sessionPath)) return false;
+    const stats = fs.lstatSync(sessionPath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new StorageError("INVALID_SESSION", "Stored session data is invalid.");
+    }
+    fs.rmSync(sessionPath);
+    return true;
+  }
+
   async function importSession(tempPath, { sanitize = (session) => session } = {}) {
     const tmpDirectory = ensureDirectory("tmp");
     assertContained(tmpDirectory, tempPath);
@@ -614,7 +715,10 @@ function createStorage({ root, randomUUID = crypto.randomUUID, now = () => new D
     listSessions,
     openSession,
     portableSession,
-    importSession
+    importSession,
+    deleteSession,
+    summary,
+    clearCache
   };
 }
 

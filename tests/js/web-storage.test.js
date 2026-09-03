@@ -288,3 +288,86 @@ test("registerExisting removes its staging file when media registration fails", 
   );
   assert.deepEqual(fs.readdirSync(path.join(root, "tmp")), []);
 });
+
+test("storage summary reports only public category counts and bytes", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const sourcePath = storage.createTempPath(".wav.part");
+  fs.writeFileSync(sourcePath, "SOURCE");
+  await storage.commitMedia({ tempPath: sourcePath, originalName: "song.wav", kind: "source" });
+  const generatedPath = storage.createTempPath(".wav.part");
+  fs.writeFileSync(generatedPath, "MIX");
+  await storage.commitMedia({ tempPath: generatedPath, originalName: "mix.wav", kind: "preview" });
+  await storage.saveSession({ app: "ChordPilot", version: 1, chart: { title: "Song" } });
+  fs.mkdirSync(path.join(root, "cache", "analysis"), { recursive: true });
+  fs.mkdirSync(path.join(root, "cache", "torch"), { recursive: true });
+  fs.writeFileSync(path.join(root, "cache", "analysis", "result.json"), "12345");
+  fs.writeFileSync(path.join(root, "cache", "torch", "model.bin"), "1234567");
+
+  const summary = storage.summary();
+
+  assert.deepEqual(summary, {
+    media: { count: 1, bytes: 6 },
+    generated: { count: 1, bytes: 3 },
+    sessions: { count: 1, bytes: fs.statSync(path.join(root, "sessions", fs.readdirSync(path.join(root, "sessions"))[0])).size },
+    analysis: { count: 1, bytes: 5 },
+    models: { count: 1, bytes: 7 }
+  });
+  assert.equal(JSON.stringify(summary).includes(root), false);
+});
+
+test("deleteSession removes only the requested session record", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const tempPath = storage.createTempPath(".wav.part");
+  fs.writeFileSync(tempPath, "AUDIO");
+  const media = await storage.commitMedia({ tempPath, originalName: "song.wav", kind: "source" });
+  const first = await storage.saveSession({ app: "ChordPilot", version: 1, audio: media });
+  const second = await storage.saveSession({ app: "ChordPilot", version: 1, chart: { title: "Keep" } });
+
+  assert.equal(storage.deleteSession(first.id), true);
+  assert.equal(storage.deleteSession(first.id), false);
+  assert.equal(await storage.openSession(first.id), null);
+  assert.equal((await storage.openSession(second.id)).session.chart.title, "Keep");
+  assert.equal(fs.readFileSync(media.path, "utf8"), "AUDIO");
+  assert.throws(() => storage.deleteSession("../sessions"), /Invalid session ID/);
+  assert.equal(fs.existsSync(path.join(root, "media", `${media.id}.json`)), true);
+});
+
+test("clearCache removes only the selected derived cache and refuses symlinks", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const cache = path.join(root, "cache");
+  for (const child of ["decoded", "analysis", "stems", "history", "torch"]) {
+    fs.mkdirSync(path.join(cache, child), { recursive: true });
+    fs.writeFileSync(path.join(cache, child, `${child}.bin`), child);
+  }
+  fs.writeFileSync(path.join(root, "media", "keep.wav"), "MEDIA");
+  fs.writeFileSync(path.join(root, "sessions", "keep.json"), "SESSION");
+
+  storage.clearCache("analysis");
+  for (const child of ["decoded", "analysis", "stems", "history"]) {
+    assert.deepEqual(fs.readdirSync(path.join(cache, child)), []);
+  }
+  assert.equal(fs.readFileSync(path.join(cache, "torch", "torch.bin"), "utf8"), "torch");
+  assert.equal(fs.readFileSync(path.join(root, "media", "keep.wav"), "utf8"), "MEDIA");
+  assert.equal(fs.readFileSync(path.join(root, "sessions", "keep.json"), "utf8"), "SESSION");
+
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-cache-outside-"));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(outside, "model.bin"), "DO NOT DELETE");
+  fs.rmSync(path.join(cache, "torch"), { recursive: true });
+  fs.symlinkSync(outside, path.join(cache, "torch"));
+  assert.throws(() => storage.clearCache("models"), /Configured ChordPilot storage is invalid/);
+  assert.equal(fs.readFileSync(path.join(outside, "model.bin"), "utf8"), "DO NOT DELETE");
+  assert.throws(() => storage.clearCache("everything"), /Invalid cache scope/);
+});
+
+test("managed cache root must remain inside the ChordPilot data root", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-cache-root-"));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-cache-external-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+
+  assert.throws(
+    () => createStorage({ root, cacheRoot: outside }),
+    /outside the ChordPilot data root/
+  );
+});

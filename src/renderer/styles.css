@@ -57,7 +57,15 @@ body.loading {
   overflow: auto;
 }
 
+.web-session-row {
+  align-items: center;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .web-session-choice {
+  cursor: pointer;
   display: grid;
   gap: 3px;
   text-align: left;
@@ -77,6 +85,28 @@ body.loading {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.web-storage-panel {
+  border-top: 1px solid #303947;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.web-storage-panel h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.web-storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.web-storage-error {
+  color: #ff9b9b !important;
 }
 
 .app-frame {

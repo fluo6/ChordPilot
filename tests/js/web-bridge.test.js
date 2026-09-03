@@ -148,6 +148,8 @@ test("web bridge exposes the complete preload method surface", () => {
   assert.deepEqual(Object.keys(bridge).sort(), [
     "analyze",
     "chooseAudio",
+    "clearCache",
+    "deleteSession",
     "downloadYoutubeAudio",
     "exportAudioTrack",
     "exportChart",
@@ -157,7 +159,30 @@ test("web bridge exposes the complete preload method surface", () => {
     "openSessionPath",
     "processAudio",
     "saveSession",
-    "showMessage"
+    "showMessage",
+    "storageSummary"
+  ]);
+});
+
+test("web storage bridge uses same-origin management APIs and returns their public shape", async () => {
+  const runtime = bridgeEnvironment({
+    fetch: async (url, init = {}) => {
+      runtime.calls.push([url, init]);
+      if (url === "/api/storage") return response({ storage: { media: { count: 1, bytes: 4 } }, queue: { active: 0, queued: 0, closing: false } });
+      if (url.includes("/api/sessions/")) return response({ deleted: true, storage: { sessions: { count: 0, bytes: 0 } } });
+      return response({ cleared: "analysis", storage: { analysis: { count: 0, bytes: 0 } }, queue: { active: 0, queued: 0, closing: false } });
+    }
+  });
+
+  assert.deepEqual(plain(await runtime.bridge.storageSummary()), {
+    storage: { media: { count: 1, bytes: 4 } }, queue: { active: 0, queued: 0, closing: false }
+  });
+  assert.equal((await runtime.bridge.deleteSession("session id")).deleted, true);
+  assert.equal((await runtime.bridge.clearCache("analysis")).cleared, "analysis");
+  assert.deepEqual(plain(runtime.calls.map(([url, init]) => [url, init.method || "GET"])), [
+    ["/api/storage", "GET"],
+    ["/api/sessions/session%20id", "DELETE"],
+    ["/api/storage/cache/analysis", "DELETE"]
   ]);
 });
 
@@ -349,7 +374,7 @@ test("session dialog renders stored sessions, imports a file, and restores focus
     onImport: async (file) => ({ id: "imported-id", file })
   });
   assert.equal(elements.webSessionList.children.length, 1);
-  elements.webSessionList.children[0].click();
+  elements.webSessionList.children[0].children[0].click();
   assert.equal(await choosing, "stored-id");
   assert.equal(previous.focused, true);
 });
@@ -424,7 +449,7 @@ test("session dialog removes stale import handlers after a stored session is cho
     sessions: [{ id: "stored-id", title: "Stored" }],
     onImport: async () => { staleImports += 1; }
   });
-  elements.webSessionList.children[0].click();
+  elements.webSessionList.children[0].children[0].click();
   assert.equal(await first, "stored-id");
 
   let currentImports = 0;
@@ -437,4 +462,89 @@ test("session dialog removes stale import handlers after a stored session is cho
   assert.deepEqual(plain(await second), { id: "imported-id" });
   assert.equal(staleImports, 0);
   assert.equal(currentImports, 1);
+});
+
+test("session dialog manages sessions and cache with confirmations and refreshed public usage", async () => {
+  const elements = {};
+  const ids = [
+    "webSessionDialog", "webSessionList", "webSessionEmpty", "webSessionImportButton", "webSessionImport", "webSessionCancel",
+    "webStorageSummary", "webStorageError", "webClearAnalysis", "webClearModels", "webClearAll"
+  ];
+  for (const id of ids) elements[id] = makeElement(id === "webSessionDialog" ? "dialog" : "button");
+  elements.webSessionDialog.showModal = function showModal() { this.open = true; };
+  elements.webSessionDialog.close = function close() { this.open = false; this.dispatch("close"); };
+  const document = {
+    activeElement: makeElement("button"),
+    getElementById(id) { return elements[id]; },
+    createElement: makeElement
+  };
+  const confirmations = [];
+  const window = {
+    document,
+    confirm(message) { confirmations.push(message); return true; }
+  };
+  loadScript("src/renderer/web-session-dialog.js", [], { window, document });
+  const calls = [];
+  const choosing = window.chordPilotSessionDialog.choose({
+    sessions: [{ id: "stored-id", title: "Saved Song", audioName: "song.wav" }],
+    storage: {
+      media: { count: 1, bytes: 1024 }, generated: { count: 2, bytes: 2048 }, sessions: { count: 1, bytes: 512 },
+      analysis: { count: 3, bytes: 4096 }, models: { count: 1, bytes: 8192 }
+    },
+    queue: { active: 0, queued: 0, closing: false },
+    onDelete: async (id) => {
+      calls.push(["delete", id]);
+      return { sessions: [], storage: { media: { count: 1, bytes: 1024 }, generated: { count: 2, bytes: 2048 }, sessions: { count: 0, bytes: 0 }, analysis: { count: 3, bytes: 4096 }, models: { count: 1, bytes: 8192 } }, queue: { active: 0, queued: 0, closing: false } };
+    },
+    onClearCache: async (scope) => {
+      calls.push(["clear", scope]);
+      return { sessions: [], storage: { media: { count: 1, bytes: 1024 }, generated: { count: 2, bytes: 2048 }, sessions: { count: 0, bytes: 0 }, analysis: { count: 0, bytes: 0 }, models: { count: 1, bytes: 8192 } }, queue: { active: 0, queued: 0, closing: false } };
+    }
+  });
+
+  assert.match(elements.webStorageSummary.textContent, /Uploads 1 · 1 KB/);
+  assert.match(elements.webStorageSummary.textContent, /Generated 2 · 2 KB/);
+  const deleteButton = elements.webSessionList.children[0].children[1];
+  deleteButton.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls[0], ["delete", "stored-id"]);
+  assert.equal(elements.webSessionList.children.length, 0);
+  assert.equal(elements.webSessionEmpty.hidden, false);
+
+  elements.webClearAnalysis.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls[1], ["clear", "analysis"]);
+  assert.match(elements.webStorageSummary.textContent, /Analysis cache 0 · 0 B/);
+  assert.equal(confirmations.length, 2);
+  elements.webSessionCancel.click();
+  assert.equal(await choosing, null);
+});
+
+test("session dialog disables cache actions while busy and never exposes mutation error details", async () => {
+  const elements = {};
+  const ids = [
+    "webSessionDialog", "webSessionList", "webSessionEmpty", "webSessionImportButton", "webSessionImport", "webSessionCancel",
+    "webStorageSummary", "webStorageError", "webClearAnalysis", "webClearModels", "webClearAll"
+  ];
+  for (const id of ids) elements[id] = makeElement(id === "webSessionDialog" ? "dialog" : "button");
+  elements.webSessionDialog.showModal = function showModal() { this.open = true; };
+  elements.webSessionDialog.close = function close() { this.open = false; this.dispatch("close"); };
+  const document = { activeElement: makeElement("button"), getElementById(id) { return elements[id]; }, createElement: makeElement };
+  const window = { document, confirm: () => true };
+  loadScript("src/renderer/web-session-dialog.js", [], { window, document });
+  const choosing = window.chordPilotSessionDialog.choose({
+    sessions: [{ id: "stored-id", title: "Saved" }], storage: {}, queue: { active: 1, queued: 0, closing: false },
+    onDelete: async () => { throw new Error("private /data/sessions/stored-id.json"); }
+  });
+
+  assert.equal(elements.webClearAnalysis.disabled, true);
+  assert.equal(elements.webClearModels.disabled, true);
+  assert.equal(elements.webClearAll.disabled, true);
+  elements.webSessionList.children[0].children[1].click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.webStorageError.hidden, false);
+  assert.equal(elements.webStorageError.textContent, "Could not update server storage. Please try again.");
+  assert.equal(elements.webStorageError.textContent.includes("/data/"), false);
+  elements.webSessionCancel.click();
+  await choosing;
 });

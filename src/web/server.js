@@ -46,7 +46,7 @@ function createWebRuntime(env = process.env, {
 } = {}) {
   const config = parseWebEnvironment(env);
   const appRoot = path.resolve(__dirname, "../..");
-  const storage = createStorage({ root: config.dataRoot });
+  const storage = createStorage({ root: config.dataRoot, cacheRoot: config.cacheDir });
   storage.initialize();
   fs.mkdirSync(config.cacheDir, { recursive: true });
   fs.mkdirSync(path.join(config.cacheDir, "torch"), { recursive: true });

@@ -520,6 +520,73 @@ test("stored sessions list newest first and opening hydrates a missing source sa
   assert.equal(first.status, 200);
 });
 
+test("storage API reports public usage and queue state without paths", async (t) => {
+  const runtime = await startTestServer(t);
+  const audio = await uploadFixture(runtime, "song.wav", "AUDIO");
+  await postJson(runtime, "/api/sessions", { app: "ChordPilot", version: 1, audio });
+  fs.writeFileSync(path.join(runtime.root, "data", "cache", "analysis", "result.json"), "CACHE");
+
+  const response = await fetch(`${runtime.url}/api/storage`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload.queue, { active: 0, queued: 0, closing: false });
+  assert.equal(payload.storage.media.count, 1);
+  assert.equal(payload.storage.media.bytes, 5);
+  assert.equal(payload.storage.sessions.count, 1);
+  assert.equal(payload.storage.analysis.bytes, 5);
+  assert.equal(JSON.stringify(payload).includes(runtime.root), false);
+});
+
+test("session delete API validates opaque IDs and preserves media", async (t) => {
+  const runtime = await startTestServer(t);
+  const audio = await uploadFixture(runtime, "song.wav", "AUDIO");
+  const saved = await postJson(runtime, "/api/sessions", { app: "ChordPilot", version: 1, audio });
+
+  const deleted = await fetch(`${runtime.url}/api/sessions/${saved.body.id}`, { method: "DELETE" });
+  assert.equal(deleted.status, 200);
+  assert.equal((await deleted.json()).deleted, true);
+  assert.equal((await fetch(`${runtime.url}/api/sessions/${saved.body.id}`)).status, 404);
+  assert.equal(await (await fetch(`${runtime.url}/api/media/${audio.id}`)).text(), "AUDIO");
+
+  const missing = await fetch(`${runtime.url}/api/sessions/${saved.body.id}`, { method: "DELETE" });
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: { code: "SESSION_NOT_FOUND", message: "Session not found." } });
+  const invalid = await fetch(`${runtime.url}/api/sessions/not-an-id`, { method: "DELETE" });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await invalid.json(), { error: { code: "INVALID_SESSION_ID", message: "Invalid session ID." } });
+});
+
+test("cache clear API scopes deletion and refuses work in progress", async (t) => {
+  const runtime = await startTestServer(t);
+  const cache = path.join(runtime.root, "data", "cache");
+  fs.writeFileSync(path.join(cache, "analysis", "result.json"), "ANALYSIS");
+  fs.writeFileSync(path.join(cache, "torch", "model.bin"), "MODEL");
+  fs.writeFileSync(path.join(runtime.root, "data", "media", "keep.wav"), "MEDIA");
+
+  const cleared = await fetch(`${runtime.url}/api/storage/cache/analysis`, { method: "DELETE" });
+  assert.equal(cleared.status, 200);
+  const clearedPayload = await cleared.json();
+  assert.equal(clearedPayload.cleared, "analysis");
+  assert.deepEqual(fs.readdirSync(path.join(cache, "analysis")), []);
+  assert.equal(fs.readFileSync(path.join(cache, "torch", "model.bin"), "utf8"), "MODEL");
+  assert.equal(fs.readFileSync(path.join(runtime.root, "data", "media", "keep.wav"), "utf8"), "MEDIA");
+
+  const invalid = await fetch(`${runtime.url}/api/storage/cache/everything`, { method: "DELETE" });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await invalid.json(), { error: { code: "INVALID_CACHE_SCOPE", message: "Invalid cache scope." } });
+
+  const busyRuntime = await startTestServer(t, {
+    queue: { state: () => ({ active: 1, queued: 0, closing: false }) }
+  });
+  const busyCache = path.join(busyRuntime.root, "data", "cache", "torch", "model.bin");
+  fs.writeFileSync(busyCache, "KEEP");
+  const busy = await fetch(`${busyRuntime.url}/api/storage/cache/all`, { method: "DELETE" });
+  assert.equal(busy.status, 409);
+  assert.deepEqual(await busy.json(), { error: { code: "WORK_IN_PROGRESS", message: "Wait for current work to finish before clearing caches." } });
+  assert.equal(fs.readFileSync(busyCache, "utf8"), "KEEP");
+});
+
 test("session import validates portable JSON before saving and removes the temporary upload", async (t) => {
   const runtime = await startTestServer(t);
   const importedResponse = await importSessionFixture(runtime, {

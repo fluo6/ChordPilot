@@ -42,6 +42,9 @@ function apiError(error) {
   if (error.code === "INVALID_SESSION") {
     return new HttpError(400, "INVALID_SESSION", "Session data is invalid.");
   }
+  if (error.code === "INVALID_CACHE_SCOPE") {
+    return new HttpError(400, "INVALID_CACHE_SCOPE", "Invalid cache scope.");
+  }
   return new HttpError(500, "INTERNAL_ERROR", "An unexpected server error occurred.");
 }
 
@@ -182,6 +185,19 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
     res.json({ ok: true, queue: queue.state() });
   });
 
+  app.get("/api/storage", asyncRoute(async (_req, res) => {
+    res.json({ storage: storage.summary(), queue: queue.state() });
+  }));
+
+  app.delete("/api/storage/cache/:scope", asyncRoute(async (req, res) => {
+    const state = queue.state();
+    if (state.active > 0 || state.queued > 0 || state.closing) {
+      throw new HttpError(409, "WORK_IN_PROGRESS", "Wait for current work to finish before clearing caches.");
+    }
+    const storageSummary = storage.clearCache(req.params.scope);
+    res.json({ cleared: req.params.scope, storage: storageSummary, queue: queue.state() });
+  }));
+
   app.get("/api/events", (req, res) => {
     res.status(200);
     res.set({
@@ -310,6 +326,13 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
       throw new HttpError(404, "SESSION_NOT_FOUND", "Session not found.");
     }
     res.json(sessionResponse(opened));
+  }));
+
+  app.delete("/api/sessions/:id", asyncRoute(async (req, res) => {
+    if (!storage.deleteSession(req.params.id)) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", "Session not found.");
+    }
+    res.json({ deleted: true, storage: storage.summary() });
   }));
 
   app.get("/api/sessions/:id/download", asyncRoute(async (req, res) => {

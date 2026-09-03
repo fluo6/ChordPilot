@@ -132,6 +132,18 @@
   }
 
   browserWindow.chordPilot = {
+    async storageSummary() {
+      return requestJson("/api/storage");
+    },
+
+    async deleteSession(sessionId) {
+      return requestJson(`/api/sessions/${encodeURIComponent(mediaId(sessionId))}`, { method: "DELETE" });
+    },
+
+    async clearCache(scope) {
+      return requestJson(`/api/storage/cache/${encodeURIComponent(String(scope || ""))}`, { method: "DELETE" });
+    },
+
     async chooseAudio() {
       const file = await pickFile(".mp3,.wav,.aif,.aiff,.flac,.m4a");
       if (!file) return null;
@@ -192,10 +204,25 @@
     },
 
     async openSession() {
-      const listed = await requestJson("/api/sessions");
+      const loadState = async () => {
+        const [listed, storageState] = await Promise.all([
+          requestJson("/api/sessions"),
+          browserWindow.chordPilot.storageSummary()
+        ]);
+        return { sessions: listed.sessions || [], ...storageState };
+      };
+      const initial = await loadState();
       const selected = await browserWindow.chordPilotSessionDialog?.choose({
-        sessions: listed.sessions || [],
-        onImport: async (file) => browserSession(await uploadFile("/api/sessions/import", "session", file))
+        ...initial,
+        onImport: async (file) => browserSession(await uploadFile("/api/sessions/import", "session", file)),
+        onDelete: async (id) => {
+          await browserWindow.chordPilot.deleteSession(id);
+          return loadState();
+        },
+        onClearCache: async (scope) => {
+          await browserWindow.chordPilot.clearCache(scope);
+          return loadState();
+        }
       });
       if (!selected) return null;
       if (typeof selected === "object") return browserSession(selected);
