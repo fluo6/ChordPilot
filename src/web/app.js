@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const { HttpError, asyncRoute } = require("./http-errors");
 const { redactLocationMetadata } = require("./storage");
+const { getBuildInfo } = require("../runtime/build-info");
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "aif", "aiff", "flac", "m4a"]);
 const AUDIO_FORMAT_MESSAGE = "Upload an MP3, WAV, AIF, AIFF, FLAC, or M4A audio file.";
@@ -85,7 +86,8 @@ function createWebApp({
   queue,
   logBroker,
   uploadLimitBytes,
-  analysisProgressIntervalMs = 30_000
+  analysisProgressIntervalMs = 30_000,
+  buildInfo = getBuildInfo()
 }) {
   const app = express();
   const indexPath = path.join(rendererRoot, "index.html");
@@ -98,23 +100,34 @@ function createWebApp({
           callback(error);
         }
       },
-      filename: (_req, _file, callback) => {
-        try {
-          callback(null, path.basename(storage.createTempPath(".part")));
-        } catch (error) {
-          callback(error);
-        }
+      filename: (_req, file, callback) => {
+        const extension = audioExtension(file.originalname);
+        callback(null, `upload-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension || "part"}`);
       }
     }),
-    limits: { fileSize: uploadLimitBytes, files: 1 },
+    limits: {
+      fileSize: uploadLimitBytes,
+      files: 1
+    },
     fileFilter: (_req, file, callback) => {
-      if (!AUDIO_EXTENSIONS.has(audioExtension(file.originalname))) {
+      const extension = audioExtension(file.originalname);
+      if (!AUDIO_EXTENSIONS.has(extension)) {
         callback(new HttpError(400, "UNSUPPORTED_AUDIO_FORMAT", AUDIO_FORMAT_MESSAGE));
         return;
       }
       callback(null, true);
     }
   });
+
+  async function downloadAudioStream(sourceStream, filename, format) {
+    const media = await storage.registerStream(sourceStream, {
+      name: filename,
+      type: "generated",
+      copy: false
+    });
+    return { downloadUrl: media.url, filename, format };
+  }
+
   const sessionUpload = multer({
     storage: multer.diskStorage({
       destination: (_req, _file, callback) => {
@@ -191,6 +204,10 @@ function createWebApp({
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, queue: queue.state() });
+  });
+
+  app.get("/api/version", (_req, res) => {
+    res.json(buildInfo);
   });
 
   app.get("/api/storage", asyncRoute(async (_req, res) => {

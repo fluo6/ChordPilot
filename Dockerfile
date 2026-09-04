@@ -36,7 +36,9 @@ COPY . ./
 RUN mkdir -p /data/home /data/cache /data/config /data/share /data/tmp \
     && chown -R node:node /data
 
-ENV HOME=/data/home \
+ARG CHORDPILOT_BUILD_TIME=""
+ENV CHORDPILOT_BUILD_TIME=${CHORDPILOT_BUILD_TIME} \
+    HOME=/data/home \
     XDG_CACHE_HOME=/data/cache \
     XDG_CONFIG_HOME=/data/config \
     XDG_DATA_HOME=/data/share \

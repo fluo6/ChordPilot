@@ -149,6 +149,23 @@ renderBars();
 setView("home");
 updateTimelineTransportInfo();
 
+function loadBuildInfo() {
+  if (typeof fetch === "function") {
+    fetch("/api/version")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !data.version) return;
+        const formattedDate = data.builtAt ? data.builtAt.replace("T", " ").replace(/\.\d+Z$/, " UTC").replace(/Z$/, " UTC") : "";
+        const label = formattedDate ? `v${data.version} • Built ${formattedDate}` : `v${data.version}`;
+        if (elements.appBuildInfo) elements.appBuildInfo.textContent = label;
+        if (elements.homeBuildInfo) elements.homeBuildInfo.textContent = `Version ${data.version}${formattedDate ? ` • Built ${formattedDate}` : ""}`;
+        if (elements.helpBuildInfo) elements.helpBuildInfo.textContent = `Version ${data.version}${formattedDate ? ` • Built ${formattedDate}` : ""}`;
+      })
+      .catch(() => {});
+  }
+}
+loadBuildInfo();
+
 window.chordPilot.onBackendLog((message) => {
   appendLog(message);
 });

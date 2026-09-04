@@ -125,7 +125,7 @@ body.loading {
   border-right: 1px solid #242b35;
   display: grid;
   gap: 8px;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
   padding: 8px 6px;
 }
@@ -220,9 +220,34 @@ body.loading {
   white-space: nowrap;
 }
 
+.nav-footer {
+  border-top: 1px solid #242b35;
+  margin-top: auto;
+  padding: 6px 4px 2px;
+}
+
+.nav-build-info {
+  color: #606d80;
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+  white-space: nowrap;
+}
+
 .left-pane.collapsed-rail .nav-brand,
-.left-pane.collapsed-rail .nav-label {
+.left-pane.collapsed-rail .nav-label,
+.left-pane.collapsed-rail .nav-footer {
   display: none;
+}
+
+.home-build-info,
+.help-build-info {
+  color: #7b889b;
+  font-size: 11px;
+  margin-top: 4px;
 }
 
 .left-pane.collapsed-rail .nav-item {

@@ -126,6 +126,16 @@ test("health reports queue and storage readiness", async (t) => {
   assert.deepEqual(await response.json(), { ok: true, queue: { active: 0, queued: 0, closing: false } });
 });
 
+test("version reports application identity, version, and builtAt timestamp", async (t) => {
+  const runtime = await startTestServer(t);
+  const response = await fetch(`${runtime.url}/api/version`);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.app, "ChordPilot");
+  assert.equal(typeof payload.version, "string");
+  assert.equal(typeof payload.builtAt, "string");
+});
+
 test("unknown API routes return stable JSON errors", async (t) => {
   const runtime = await startTestServer(t);
   const response = await fetch(`${runtime.url}/api/not-real`);

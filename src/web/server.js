@@ -4,6 +4,7 @@ const http = require("node:http");
 const path = require("node:path");
 
 const { createChordPilotServices } = require("../runtime/chordpilot-services");
+const { getBuildInfo } = require("../runtime/build-info");
 const { createWebApp } = require("./app");
 const { createStorage } = require("./storage");
 const { createLogBroker, createSerialQueue } = require("./work-queue");
@@ -117,13 +118,15 @@ function createWebRuntime(env = process.env, {
     emitLog: (message) => logBroker.publish(message),
     spawnImpl: trackedSpawn
   });
+  const buildInfo = getBuildInfo({ appRoot });
   const app = createWebApp({
     rendererRoot: path.join(appRoot, "src", "renderer"),
     storage,
     services,
     queue,
     logBroker,
-    uploadLimitBytes: config.uploadLimitBytes
+    uploadLimitBytes: config.uploadLimitBytes,
+    buildInfo
   });
   const server = http.createServer(app);
   server.on("connection", (socket) => {
@@ -247,7 +250,7 @@ function createWebRuntime(env = process.env, {
     return stopPromise;
   }
 
-  return { app, server, storage, services, queue, logBroker, config, start, stop };
+  return { app, server, storage, services, queue, logBroker, config, buildInfo, start, stop };
 }
 
 async function run() {
@@ -267,7 +270,7 @@ async function run() {
     const address = await runtime.start();
     const host = typeof address === "object" && address ? address.address : runtime.config.host;
     const port = typeof address === "object" && address ? address.port : runtime.config.port;
-    console.log(`ChordPilot web runtime listening on http://${host}:${port}`);
+    console.log(`ChordPilot web runtime v${runtime.buildInfo?.version || "0.1.0"} (built ${runtime.buildInfo?.builtAt || "unknown"}) listening on http://${host}:${port}`);
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
