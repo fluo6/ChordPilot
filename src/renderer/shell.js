@@ -137,10 +137,70 @@ function hideTooltip() {
   tooltipState.element?.classList.remove("visible");
 }
 
+function setAnalysisActive(active, message = "Analyzing...") {
+  state.isAnalyzing = Boolean(active);
+  if (elements.analyzeBtn) {
+    elements.analyzeBtn.disabled = active;
+    elements.analyzeBtn.classList.toggle("analyzing", active);
+    elements.analyzeBtn.textContent = active ? "Analyzing..." : "Analyze";
+  }
+  if (elements.globalProgressBar) {
+    elements.globalProgressBar.classList.toggle("hidden", !active);
+  }
+  if (elements.topbarAnalysisBadge) {
+    elements.topbarAnalysisBadge.classList.toggle("hidden", !active);
+    if (active && elements.topbarAnalysisText) {
+      elements.topbarAnalysisText.textContent = message;
+    }
+  }
+  if (elements.navLogSpinner) {
+    elements.navLogSpinner.classList.toggle("hidden", !active);
+  }
+  if (elements.logActiveBanner) {
+    elements.logActiveBanner.classList.toggle("hidden", !active);
+    if (active && elements.logActiveText) {
+      elements.logActiveText.textContent = message;
+    }
+  }
+  if (active) {
+    setStatus(message);
+  }
+}
+
+function updateAnalysisProgressMessage(message) {
+  if (!state.isAnalyzing || !message) return;
+  const clean = String(message).trim();
+  let label = null;
+  if (clean.startsWith("analysis: queued")) label = "Queued for analysis...";
+  else if (clean.startsWith("analysis: started")) label = "Analysis started...";
+  else if (clean.startsWith("hq: preparing source separation") || clean.startsWith("hq:") || clean.includes("demucs")) label = "Separating stems (Demucs)...";
+  else if (clean.startsWith("tempo:") || clean.includes("autocorrelation")) label = "Estimating tempo & beats...";
+  else if (clean.startsWith("pitch:") || clean.startsWith("key:") || clean.includes("chroma")) label = "Detecting pitch & key...";
+  else if (clean.startsWith("chords:") || clean.includes("candidates")) label = "Ranking chord candidates...";
+  else if (clean.startsWith("lyrics:")) label = "Transcribing lyrics...";
+  else if (clean.startsWith("analysis: still running")) {
+    const match = clean.match(/still running \(([^)]+)\)/);
+    label = match ? `Analyzing (${match[1]})...` : "Still analyzing...";
+  } else if (clean.startsWith("analysis: complete")) {
+    setAnalysisActive(false);
+    return;
+  } else if (clean.startsWith("analysis: failed")) {
+    setAnalysisActive(false);
+    return;
+  }
+
+  if (label) {
+    if (elements.topbarAnalysisText) elements.topbarAnalysisText.textContent = label;
+    if (elements.logActiveText) elements.logActiveText.textContent = label;
+    setStatus(label);
+  }
+}
+
 function appendLog(message) {
   if (!message) {
     return;
   }
+  updateAnalysisProgressMessage(message);
   const row = document.createElement("div");
   row.className = "log-line";
   const time = new Date().toLocaleTimeString([], {

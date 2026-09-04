@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div id="globalProgressBar" class="global-progress-bar hidden" role="progressbar" aria-label="Analysis in progress"></div>
     <div class="app-frame">
       <aside id="leftPane" class="left-pane">
         <button id="leftPaneToggle" class="left-pane-toggle" type="button" title="Collapse navigation">&lt;</button>
@@ -38,6 +39,7 @@
               <svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
             </span>
             <span class="nav-label">Log</span>
+            <span id="navLogSpinner" class="nav-busy-dot hidden" title="Analysis running"></span>
           </button>
           <button class="nav-item project-nav" type="button" data-editor-view="table" title="Table">
             <span class="nav-icon" aria-hidden="true">
@@ -326,6 +328,10 @@
         <div class="topbar-actions">
           <button id="chooseBtn" type="button">Choose Audio</button>
           <button id="analyzeBtn" type="button" disabled>Analyze</button>
+          <div id="topbarAnalysisBadge" class="topbar-analysis-badge hidden" role="status" aria-live="polite">
+            <span class="analysis-spinner"></span>
+            <span id="topbarAnalysisText">Analyzing...</span>
+          </div>
           <button id="openSessionBtn" type="button">Open Session</button>
           <button id="saveSessionBtn" type="button" disabled>Save Session</button>
         </div>
@@ -615,6 +621,10 @@
         <div class="log-header">
           <button class="collapse-toggle" type="button" title="Collapse section">v</button>
           <strong>Analysis Log</strong>
+          <div id="logActiveBanner" class="log-active-banner hidden" role="status">
+            <span class="analysis-spinner"></span>
+            <span id="logActiveText">Analysis running in backend...</span>
+          </div>
           <button id="clearLogBtn" type="button">Clear</button>
         </div>
         <div id="analysisLog" class="analysis-log collapsible-content"></div>

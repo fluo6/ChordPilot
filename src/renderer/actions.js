@@ -302,7 +302,7 @@ async function analyzeAudio(settings = {}) {
   const mode = elements.analysisModeInput.value;
   appendLog(`app: analyzing ${state.audio.name} (${mode})`);
   addJob(`Analyzing ${state.audio.name} (${mode})`, "running");
-  elements.analyzeBtn.disabled = true;
+  setAnalysisActive(true, `Analyzing ${state.audio.name}...`);
 
   try {
     const options = collectAnalysisOptions();
@@ -337,7 +337,7 @@ async function analyzeAudio(settings = {}) {
     setStatus(error.message);
     showErrorDialog("Analysis Error", error.message);
   } finally {
-    elements.analyzeBtn.disabled = false;
+    setAnalysisActive(false);
   }
 }
 
@@ -364,6 +364,7 @@ async function runAnalysisWithOptions(options, loadingText, jobText) {
   openEditorPanel("log");
   appendLog(`app: ${jobText} (${mode})`);
   addJob(jobText, "running");
+  setAnalysisActive(true, loadingText || jobText || "Analyzing...");
   try {
     const result = await window.chordPilot.analyze(state.audio.path, mode, options);
     addJob(`${jobText} ready`, "done");
@@ -374,6 +375,8 @@ async function runAnalysisWithOptions(options, loadingText, jobText) {
     setStatus(error.message);
     showErrorDialog(`${jobText} Error`, error.message);
     return null;
+  } finally {
+    setAnalysisActive(false);
   }
 }
 

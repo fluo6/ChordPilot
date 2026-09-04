@@ -166,6 +166,20 @@ function loadBuildInfo() {
 }
 loadBuildInfo();
 
+function checkInitialQueueState() {
+  if (typeof fetch === "function") {
+    fetch("/api/health")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.queue?.active > 0) {
+          setAnalysisActive(true, "Analysis running in backend...");
+        }
+      })
+      .catch(() => {});
+  }
+}
+checkInitialQueueState();
+
 window.chordPilot.onBackendLog((message) => {
   appendLog(message);
 });

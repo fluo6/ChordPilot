@@ -469,6 +469,21 @@ body.loading {
 
 .job-row.running span {
   color: #f6c65b;
+  display: inline-flex;
+  align-items: center;
+}
+
+.job-row.running span::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border: 1.5px solid rgba(246, 198, 91, 0.3);
+  border-top-color: #f6c65b;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+  vertical-align: middle;
 }
 
 .job-row.error span {
@@ -1974,6 +1989,109 @@ body.resizing-detail-pane {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Global top progress bar */
+.global-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #35d9bb, #f6c65b, #35d9bb);
+  background-size: 200% 100%;
+  animation: progress-slide 1.5s ease-in-out infinite;
+  z-index: 9999;
+}
+
+.global-progress-bar.hidden {
+  display: none;
+}
+
+@keyframes progress-slide {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Spinner used in buttons, badges, banners */
+.analysis-spinner {
+  animation: loading-spin 0.8s linear infinite;
+  border: 2px solid rgba(53, 217, 187, 0.25);
+  border-top-color: #35d9bb;
+  border-radius: 50%;
+  display: inline-block;
+  height: 12px;
+  width: 12px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Topbar analysis badge */
+.topbar-analysis-badge {
+  align-items: center;
+  background: rgba(53, 217, 187, 0.12);
+  border: 1px solid rgba(53, 217, 187, 0.35);
+  border-radius: 999px;
+  color: #35d9bb;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.2px;
+  padding: 3px 10px;
+  transition: opacity 0.2s ease;
+}
+
+.topbar-analysis-badge.hidden {
+  display: none;
+}
+
+/* Analyze button analyzing state */
+#analyzeBtn.analyzing {
+  background: rgba(53, 217, 187, 0.18);
+  border-color: #35d9bb;
+  color: #35d9bb;
+  cursor: wait;
+}
+
+/* Nav item busy dot */
+.nav-busy-dot {
+  background: #35d9bb;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #35d9bb;
+  display: inline-block;
+  height: 7px;
+  margin-left: auto;
+  width: 7px;
+  animation: nav-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.nav-busy-dot.hidden {
+  display: none;
+}
+
+@keyframes nav-pulse {
+  from { opacity: 0.4; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+/* Log active banner */
+.log-active-banner {
+  align-items: center;
+  background: rgba(53, 217, 187, 0.08);
+  border: 1px solid rgba(53, 217, 187, 0.22);
+  border-radius: 4px;
+  color: #35d9bb;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 2px 8px;
+}
+
+.log-active-banner.hidden {
+  display: none;
 }
 
 .suggestion-head {
