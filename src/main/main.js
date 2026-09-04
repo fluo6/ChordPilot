@@ -161,7 +161,7 @@ ipcMain.handle("app:message", async (_event, payload) => dialog.showMessageBox(m
 }));
 
 ipcMain.handle("audio:exportTrack", async (_event, payload = {}) => {
-  const sourcePath = String(payload.sourcePath || "");
+  const sourcePath = String(payload.sourcePath || payload.path || "");
   const label = safeFileName(payload.label || path.basename(sourcePath, path.extname(sourcePath)), "audio-track");
   const result = await dialog.showSaveDialog(mainWindow, {
     title: `Export ${label}`,

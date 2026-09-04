@@ -64,15 +64,34 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
   return { enqueue, close, idle, state };
 }
 
-function createLogBroker() {
+function sanitizePublicLogText(value) {
+  return String(value)
+    .replace(/\bfile:(?:\/\/)?[^\s"'<>]+/gi, "[path]")
+    .replace(/(["'])(?:[a-z]:[\\/]|\\\\|\/)[^"']+\1/gi, (_match, quote) => `${quote}[path]${quote}`)
+    .replace(/(^|[\s(=])(?:[a-z]:[\\/]|\\\\)[^\s,;)\]}'"<>]+/gi, "$1[path]")
+    .replace(/(^|[\s(=])\/(?!\/)[^\s,;)\]}'"<>]+/g, "$1[path]");
+}
+
+function sanitizePublicLog(message, seen = new WeakSet()) {
+  if (typeof message === "string") return sanitizePublicLogText(message);
+  if (!message || typeof message !== "object") return message;
+  if (seen.has(message)) return "[unavailable]";
+  seen.add(message);
+  if (Array.isArray(message)) return message.map((item) => sanitizePublicLog(item, seen));
+  return Object.fromEntries(Object.entries(message)
+    .map(([key, value]) => [key, sanitizePublicLog(value, seen)]));
+}
+
+function createLogBroker({ sanitize = sanitizePublicLog } = {}) {
   const listeners = new Set();
   let closed = false;
 
   function publish(message) {
     if (closed) return;
+    const publicMessage = sanitize(message);
     for (const listener of listeners) {
       try {
-        listener(message);
+        listener(publicMessage);
       } catch (_error) {
         // A disconnected client must not prevent other listeners from receiving a log.
       }
@@ -93,4 +112,4 @@ function createLogBroker() {
   return { publish, subscribe, close };
 }
 
-module.exports = { createSerialQueue, createLogBroker };
+module.exports = { createSerialQueue, createLogBroker, sanitizePublicLog };

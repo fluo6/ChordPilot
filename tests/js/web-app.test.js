@@ -28,7 +28,8 @@ async function startTestServer(t, overrides = {}) {
     services: overrides.services || {},
     queue,
     logBroker,
-    uploadLimitBytes: overrides.uploadLimitBytes || 1024 * 1024
+    uploadLimitBytes: overrides.uploadLimitBytes || 1024 * 1024,
+    analysisProgressIntervalMs: overrides.analysisProgressIntervalMs
   });
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -246,6 +247,31 @@ test("events unsubscribe the log listener when the client disconnects", async (t
   assert.equal(listeners.size, 0);
 });
 
+test("events redact private paths while retaining harmless progress text", async (t) => {
+  const runtime = await startTestServer(t);
+  const connection = openSse(`${runtime.url}/api/events`);
+  await connection.connected;
+  runtime.logBroker.publish({
+    level: "info",
+    message: "analysis: /data/media/id.wav via /opt/chordpilot-venv/bin/python from C:\\Users\\Alice\\song.wav and file:///home/fujia/secret.wav; progress 50% complete",
+    details: ["cache: /home/fujia/ChordPilot/cache", "demucs: 2/4 stems complete"]
+  });
+
+  const received = await connection.event;
+  const data = received.chunk.split("data: ")[1].trim();
+  const payload = JSON.parse(data);
+  assert.equal(payload.level, "info");
+  assert.match(payload.message, /^analysis:/);
+  assert.match(payload.message, /progress 50% complete$/);
+  assert.match(payload.message, /\[path\]/);
+  assert.equal(payload.message.includes("/data/media/id.wav"), false);
+  assert.equal(payload.message.includes("/opt/chordpilot-venv/bin/python"), false);
+  assert.equal(payload.message.includes("C:\\Users\\Alice"), false);
+  assert.equal(payload.message.includes("file:///home/fujia"), false);
+  assert.equal(payload.details[0].includes("/home/fujia"), false);
+  assert.equal(payload.details[1], "demucs: 2/4 stems complete");
+});
+
 test("upload rejects unsupported audio extensions and files over the configured limit", async (t) => {
   const runtime = await startTestServer(t, { uploadLimitBytes: 4 });
   const unsupported = new FormData();
@@ -266,7 +292,7 @@ test("upload rejects unsupported audio extensions and files over the configured 
   assert.deepEqual(fs.readdirSync(path.join(runtime.root, "data", "tmp")), []);
 });
 
-test("upload accepts every Electron audio-picker format", async (t) => {
+test("upload accepts every planned web audio format", async (t) => {
   const runtime = await startTestServer(t);
 
   for (const extension of ["mp3", "wav", "aif", "aiff", "flac", "m4a"]) {
@@ -277,7 +303,7 @@ test("upload accepts every Electron audio-picker format", async (t) => {
   }
 });
 
-test("upload rejects formats outside the Electron audio-picker contract", async (t) => {
+test("upload rejects AAC and OGG outside the planned web allowlist", async (t) => {
   const runtime = await startTestServer(t);
 
   for (const extension of ["aac", "ogg"]) {
@@ -438,6 +464,105 @@ test("analysis serializes jobs and hides registered stem paths", async (t) => {
     assert.equal(response.body.chart.stems.stems[0].path, undefined);
     assert.match(response.body.chart.stems.stems[0].url, /^\/api\/media\//);
   }
+});
+
+test("analysis publishes queued, active, backend, and terminal lifecycle progress in order", async (t) => {
+  let runtime;
+  runtime = await startTestServer(t, {
+    services: {
+      analyze: async () => {
+        runtime.logBroker.publish("analyze: /data/media/private-source.wav");
+        return { title: "Song", bars: [] };
+      }
+    }
+  });
+  const messages = [];
+  runtime.logBroker.subscribe((message) => messages.push(message));
+  const audio = await uploadFixture(runtime);
+
+  const response = await postJson(runtime, "/api/analyze", {
+    mediaId: audio.id,
+    mode: "high-quality",
+    options: {}
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(messages[0], "analysis: queued");
+  assert.equal(messages[1], "analysis: started");
+  assert.equal(messages[2], "analyze: [path]");
+  assert.match(messages[3], /^analysis: complete \([0-9]+(?:\.[0-9])?s\)$/);
+  assert.equal(messages.length, 4);
+});
+
+test("analysis publishes one safe failed terminal event without service error details", async (t) => {
+  const privateError = "Demucs failed at /data/cache/private/song.wav: raw child stderr secret";
+  const runtime = await startTestServer(t, {
+    services: {
+      analyze: async () => {
+        throw new Error(privateError);
+      }
+    }
+  });
+  const messages = [];
+  runtime.logBroker.subscribe((message) => messages.push(message));
+  const audio = await uploadFixture(runtime);
+
+  const response = await postJson(runtime, "/api/analyze", {
+    mediaId: audio.id,
+    mode: "high-quality",
+    options: {}
+  });
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(response.body, {
+    error: { code: "INTERNAL_ERROR", message: "An unexpected server error occurred." }
+  });
+  assert.equal(messages[0], "analysis: queued");
+  assert.equal(messages[1], "analysis: started");
+  assert.match(messages[2], /^analysis: failed \([0-9]+(?:\.[0-9])?s\): Analysis could not be completed\.$/);
+  assert.equal(messages.filter((message) => /^analysis: (?:complete|failed)/.test(message)).length, 1);
+  assert.equal(messages.some((message) => String(message).includes("/data/cache")), false);
+  assert.equal(messages.some((message) => String(message).includes("raw child stderr")), false);
+  assert.equal(messages.length, 3);
+});
+
+test("analysis periodically confirms a quiet active job is still running", async (t) => {
+  let releaseAnalysis;
+  t.after(() => releaseAnalysis?.());
+  const runtime = await startTestServer(t, {
+    analysisProgressIntervalMs: 10,
+    services: {
+      analyze: () => new Promise((resolve) => {
+        releaseAnalysis = () => resolve({ title: "Song", bars: [] });
+      })
+    }
+  });
+  const messages = [];
+  let resolveHeartbeat;
+  const heartbeat = new Promise((resolve) => { resolveHeartbeat = resolve; });
+  runtime.logBroker.subscribe((message) => {
+    messages.push(message);
+    if (String(message).startsWith("analysis: still running")) resolveHeartbeat();
+  });
+  const audio = await uploadFixture(runtime);
+  const request = postJson(runtime, "/api/analyze", {
+    mediaId: audio.id,
+    mode: "high-quality",
+    options: {}
+  });
+
+  await Promise.race([
+    heartbeat,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("missing active-analysis progress")), 150))
+  ]);
+  assert.equal(messages[0], "analysis: queued");
+  assert.equal(messages[1], "analysis: started");
+  assert.match(messages[2], /^analysis: still running \([0-9]+(?:\.[0-9])?s elapsed\)$/);
+
+  releaseAnalysis();
+  const response = await request;
+  assert.equal(response.status, 200);
+  assert.match(messages.at(-1), /^analysis: complete \([0-9]+(?:\.[0-9])?s\)$/);
 });
 
 async function importSessionFixture(runtime, session, name = "session.chordpilot-session.json") {

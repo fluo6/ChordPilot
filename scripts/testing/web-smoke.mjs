@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+
+const require = createRequire(import.meta.url);
 
 const DEFAULT_WEB_URL = "http://127.0.0.1:2712";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -100,6 +103,13 @@ function diagnosticBody(text) {
 }
 
 function createClient(baseUrl, timeoutMs) {
+  try {
+    const { Agent, setGlobalDispatcher } = require("undici");
+    setGlobalDispatcher(new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs, connectTimeout: timeoutMs }));
+  } catch (_error) {
+    // If undici is not available, default fetch behavior is retained.
+  }
+
   async function request(route, { expectedStatuses = [200], ...options } = {}) {
     const url = new URL(route, `${baseUrl}/`).toString();
     const method = options.method || "GET";

@@ -78,7 +78,15 @@ function sanitizeSessionPaths(value) {
   return redactLocationMetadata(value);
 }
 
-function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploadLimitBytes }) {
+function createWebApp({
+  rendererRoot,
+  storage,
+  services,
+  queue,
+  logBroker,
+  uploadLimitBytes,
+  analysisProgressIntervalMs = 30_000
+}) {
   const app = express();
   const indexPath = path.join(rendererRoot, "index.html");
   const upload = multer({
@@ -293,15 +301,37 @@ function createWebApp({ rendererRoot, storage, services, queue, logBroker, uploa
 
   app.post("/api/analyze", asyncRoute(async (req, res) => {
     const media = await resolveMedia(req.body?.mediaId);
-    const chart = await queue.enqueue("analysis", async () => {
-      const result = await services.analyze({
-        audioPath: media.path,
-        mode: req.body?.mode || "fast",
-        options: req.body?.options || {}
+    const queuedAt = Date.now();
+    let startedAt;
+    logBroker.publish("analysis: queued");
+    try {
+      const chart = await queue.enqueue("analysis", async () => {
+        startedAt = Date.now();
+        logBroker.publish("analysis: started");
+        const progressTimer = setInterval(() => {
+          const elapsedSeconds = (Date.now() - startedAt) / 1000;
+          logBroker.publish(`analysis: still running (${elapsedSeconds.toFixed(1)}s elapsed)`);
+        }, analysisProgressIntervalMs);
+        progressTimer.unref?.();
+        try {
+          const result = await services.analyze({
+            audioPath: media.path,
+            mode: req.body?.mode || "fast",
+            options: req.body?.options || {}
+          });
+          return storage.normalizeChart(result, { copy: false });
+        } finally {
+          clearInterval(progressTimer);
+        }
       });
-      return storage.normalizeChart(result, { copy: false });
-    });
-    res.json({ chart });
+      const elapsedSeconds = (Date.now() - (startedAt || queuedAt)) / 1000;
+      res.json({ chart });
+      logBroker.publish(`analysis: complete (${elapsedSeconds.toFixed(1)}s)`);
+    } catch (error) {
+      const elapsedSeconds = (Date.now() - (startedAt || queuedAt)) / 1000;
+      logBroker.publish(`analysis: failed (${elapsedSeconds.toFixed(1)}s): Analysis could not be completed.`);
+      throw error;
+    }
   }));
 
   app.post("/api/sessions", asyncRoute(async (req, res) => {
