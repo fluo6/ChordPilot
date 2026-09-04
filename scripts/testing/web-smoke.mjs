@@ -102,20 +102,47 @@ function diagnosticBody(text) {
   }
 }
 
-function createClient(baseUrl, timeoutMs) {
+async function configureDispatcher(timeoutMs) {
   try {
     const { Agent, setGlobalDispatcher } = require("undici");
-    setGlobalDispatcher(new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs, connectTimeout: timeoutMs }));
-  } catch (_error) {
-    // If undici is not available, default fetch behavior is retained.
-  }
+    const dispatcher = new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs, connectTimeout: timeoutMs });
+    setGlobalDispatcher(dispatcher);
+    return dispatcher;
+  } catch (_error) {}
+
+  try {
+    let sym = Object.getOwnPropertySymbols(globalThis).find((s) => s.description === "undici.globalDispatcher.1");
+    if (!sym) {
+      await fetch("http://127.0.0.1:0", { signal: AbortSignal.timeout(10) }).catch(() => {});
+      sym = Object.getOwnPropertySymbols(globalThis).find((s) => s.description === "undici.globalDispatcher.1");
+    }
+    const AgentClass = globalThis[sym]?.constructor;
+    if (AgentClass) {
+      const dispatcher = new AgentClass({
+        headersTimeout: timeoutMs,
+        bodyTimeout: timeoutMs,
+        connectTimeout: timeoutMs
+      });
+      globalThis[sym] = dispatcher;
+      return dispatcher;
+    }
+  } catch (_error) {}
+  return undefined;
+}
+
+async function createClient(baseUrl, timeoutMs) {
+  const dispatcher = await configureDispatcher(timeoutMs);
 
   async function request(route, { expectedStatuses = [200], ...options } = {}) {
     const url = new URL(route, `${baseUrl}/`).toString();
     const method = options.method || "GET";
     let response;
     try {
-      response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+      response = await fetch(url, {
+        ...options,
+        ...(dispatcher ? { dispatcher } : {}),
+        signal: AbortSignal.timeout(timeoutMs)
+      });
     } catch (error) {
       const cause = error?.cause?.message ? ` (${error.cause.message})` : "";
       throw new Error(`${method} ${url} could not connect: ${error.message}${cause}`, { cause: error });
@@ -273,7 +300,7 @@ async function main() {
     const options = parseArguments(process.argv.slice(2));
     const baseUrl = webBaseUrl(process.env.CHORDPILOT_WEB_URL || DEFAULT_WEB_URL);
     const timeoutMs = positiveInteger(process.env.CHORDPILOT_SMOKE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, "CHORDPILOT_SMOKE_TIMEOUT_MS");
-    const client = createClient(baseUrl, timeoutMs);
+    const client = await createClient(baseUrl, timeoutMs);
 
     if (options.verifyExistingSession) {
       await verifyExistingSession(client, options.verifyExistingSession);
