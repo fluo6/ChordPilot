@@ -153,6 +153,7 @@ test("web bridge exposes the complete preload method surface", () => {
     "downloadYoutubeAudio",
     "exportAudioTrack",
     "exportChart",
+    "isWebRuntime",
     "lookupMetadata",
     "onBackendLog",
     "openSession",

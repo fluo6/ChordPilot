@@ -296,10 +296,20 @@ async function analyzeAudio(settings = {}) {
   if (requireStems) {
     elements.analysisModeInput.value = "high-quality";
   }
+
+  const mode = elements.analysisModeInput.value;
+  if (mode === "high-quality" && window.chordPilot?.isWebRuntime) {
+    const proceed = window.confirm(
+      "High Quality Stems uses heavy AI processing.\n\nIn the web runtime, this currently runs on the server CPU and may take several minutes depending on the hardware.\n\nAre you sure you want to proceed?"
+    );
+    if (!proceed) {
+      return;
+    }
+  }
+
   setStatus("Analyzing...");
   clearLog();
   openEditorPanel("log");
-  const mode = elements.analysisModeInput.value;
   appendLog(`app: analyzing ${state.audio.name} (${mode})`);
   addJob(`Analyzing ${state.audio.name} (${mode})`, "running");
   setAnalysisActive(true, `Analyzing ${state.audio.name}...`);

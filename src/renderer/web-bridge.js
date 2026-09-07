@@ -132,6 +132,8 @@
   }
 
   browserWindow.chordPilot = {
+    isWebRuntime: true,
+
     async storageSummary() {
       return requestJson("/api/storage");
     },
