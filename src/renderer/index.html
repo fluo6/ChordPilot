@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div id="globalProgressBar" class="global-progress-bar hidden" role="progressbar" aria-label="Analysis in progress"></div>
     <div class="app-frame">
       <aside id="leftPane" class="left-pane">
         <button id="leftPaneToggle" class="left-pane-toggle" type="button" title="Collapse navigation">&lt;</button>
@@ -38,6 +39,7 @@
               <svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
             </span>
             <span class="nav-label">Log</span>
+            <span id="navLogSpinner" class="nav-busy-dot hidden" title="Analysis running"></span>
           </button>
           <button class="nav-item project-nav" type="button" data-editor-view="table" title="Table">
             <span class="nav-icon" aria-hidden="true">
@@ -59,6 +61,7 @@
           <div>
             <h1>ChordPilot</h1>
             <p>Open a song project, resume a saved session, or start a new analysis job.</p>
+            <div id="homeBuildInfo" class="home-build-info">Version 0.1.1 • Built 2026-09-06 23:09 UTC</div>
           </div>
           <div class="home-actions">
             <button id="homeNewProjectBtn" type="button">New Project</button>
@@ -116,6 +119,7 @@
             <div>
               <h1>ChordPilot Help</h1>
               <p>Usage notes and a compact technical map of the analysis pipeline.</p>
+              <div id="helpBuildInfo" class="help-build-info">Version 0.1.1 • Built 2026-09-06 23:09 UTC</div>
             </div>
           </header>
 
@@ -321,6 +325,10 @@
         <div class="topbar-actions">
           <button id="chooseBtn" type="button">Choose Audio</button>
           <button id="analyzeBtn" type="button" disabled>Analyze</button>
+          <div id="topbarAnalysisBadge" class="topbar-analysis-badge hidden" role="status" aria-live="polite">
+            <span class="analysis-spinner"></span>
+            <span id="topbarAnalysisText">Analyzing...</span>
+          </div>
           <button id="openSessionBtn" type="button">Open Session</button>
           <button id="saveSessionBtn" type="button" disabled>Save Session</button>
         </div>
@@ -610,6 +618,10 @@
         <div class="log-header">
           <button class="collapse-toggle" type="button" title="Collapse section">v</button>
           <strong>Analysis Log</strong>
+          <div id="logActiveBanner" class="log-active-banner hidden" role="status">
+            <span class="analysis-spinner"></span>
+            <span id="logActiveText">Analysis running in backend...</span>
+          </div>
           <button id="clearLogBtn" type="button">Clear</button>
         </div>
         <div id="analysisLog" class="analysis-log collapsible-content"></div>
@@ -785,6 +797,10 @@
         </aside>
       </section>
       </main>
+      <footer id="appFooter" class="global-footer">
+        <span class="global-footer-brand">ChordPilot</span>
+        <small id="appBuildInfo" class="global-build-info" title="ChordPilot version and build time">v0.1.1 • Built 2026-09-06 23:09 UTC</small>
+      </footer>
     </div>
     <div id="chordSuggestion" class="chord-suggestion hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-busy="true">
@@ -793,6 +809,34 @@
         <strong id="loadingText">Working...</strong>
       </div>
     </div>
+    <dialog id="webSessionDialog" class="web-session-dialog" aria-labelledby="webSessionDialogTitle">
+      <form method="dialog" class="web-session-dialog-content">
+        <header>
+          <h2 id="webSessionDialogTitle">Open Session</h2>
+          <p>Choose a saved session from this ChordPilot server or import a portable session file.</p>
+        </header>
+        <div id="webSessionList" class="web-session-list" aria-label="Saved sessions"></div>
+        <p id="webSessionEmpty" class="web-session-empty">No saved sessions are available yet.</p>
+        <section class="web-storage-panel" aria-labelledby="webStorageTitle">
+          <h3 id="webStorageTitle">Server storage</h3>
+          <p id="webStorageSummary" aria-live="polite"></p>
+          <p id="webStorageError" class="web-storage-error" role="alert" hidden></p>
+          <div class="web-storage-actions" aria-label="Cache actions">
+            <button id="webClearAnalysis" type="button">Clear analysis cache</button>
+            <button id="webClearModels" type="button">Clear models</button>
+            <button id="webClearAll" type="button">Clear both</button>
+          </div>
+          <p>Cache controls are unavailable while ChordPilot is working. Uploaded audio and sessions are never cleared here.</p>
+        </section>
+        <input id="webSessionImport" type="file" accept=".json,.chordpilot-session.json,application/json" hidden />
+        <footer>
+          <button id="webSessionImportButton" type="button">Import Session</button>
+          <button id="webSessionCancel" type="button">Cancel</button>
+        </footer>
+      </form>
+    </dialog>
+    <script src="./web-session-dialog.js"></script>
+    <script src="./web-bridge.js"></script>
     <script src="./state.js"></script>
     <script src="./transpose.js"></script>
     <script src="./shell.js"></script>

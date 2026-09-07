@@ -1,0 +1,144 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { EventEmitter } = require("node:events");
+
+const { createChordPilotServices, buildAudioPreviewFilter, normalizeYoutubeUrl } = require("../../src/runtime/chordpilot-services");
+
+function fakeChild({ stdout = "", stderr = "", code = 0, onSpawn } = {}) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = { write() {}, end() {} };
+  queueMicrotask(() => {
+    onSpawn?.();
+    if (stdout) child.stdout.emit("data", Buffer.from(stdout));
+    if (stderr) child.stderr.emit("data", Buffer.from(stderr));
+    child.emit("close", code);
+  });
+  return child;
+}
+
+function makeServices(t, overrides = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-services-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const options = {
+    appRoot: path.resolve(__dirname, "../.."),
+    backendScript: path.resolve(__dirname, "../../backend/chordpilot.py"),
+    tempDir: path.join(root, "temp"),
+    coverDir: path.join(root, "covers"),
+    importDir: path.join(root, "imports"),
+    previewDir: path.join(root, "previews"),
+    pythonCandidates: [],
+    ffmpegPath: "ffmpeg",
+    ytDlpPath: "yt-dlp",
+    env: {},
+    toUrl: (value) => `test://${path.basename(value)}`,
+    emitLog: () => {},
+    ...overrides
+  };
+  return { root, options, services: createChordPilotServices(options) };
+}
+
+test("preview filters clamp tempo and preserve pitch", () => {
+  assert.match(buildAudioPreviewFilter(2, 1.25), /asetrate=/);
+  assert.match(buildAudioPreviewFilter(0, 9), /atempo=2/);
+});
+
+test("YouTube URLs reject non-YouTube hosts", () => {
+  assert.throws(() => normalizeYoutubeUrl("https://example.com/watch?v=x"), /Only YouTube/);
+});
+
+test("session file operations round-trip JSON without Electron", async (t) => {
+  const { root, services } = makeServices(t);
+  const filename = path.join(root, "session.json");
+  await services.writeSessionFile(filename, { app: "ChordPilot", version: 1 });
+  assert.equal((await services.readSessionFile(filename)).session.version, 1);
+});
+
+test("factory creates configured runtime directories", (t) => {
+  const { options } = makeServices(t);
+  for (const directory of [options.tempDir, options.coverDir, options.importDir, options.previewDir]) {
+    assert.equal(fs.statSync(directory).isDirectory(), true);
+  }
+});
+
+test("audio export converts to the selected path without choosing a destination", async (t) => {
+  const calls = [];
+  const { root, services } = makeServices(t, {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return fakeChild();
+    }
+  });
+  const sourcePath = path.join(root, "source.wav");
+  const outputPath = path.join(root, "track.mp3");
+  fs.writeFileSync(sourcePath, "RIFF");
+
+  assert.deepEqual(await services.exportAudioTrack({ sourcePath, outputPath, format: "mp3" }), {
+    path: outputPath,
+    format: "mp3"
+  });
+  assert.equal(calls[0].command, "ffmpeg");
+  assert.deepEqual(calls[0].args, [
+    "-y", "-hide_banner", "-loglevel", "error", "-i", sourcePath, "-vn",
+    "-codec:a", "libmp3lame", "-b:a", "192k", outputPath
+  ]);
+});
+
+test("analysis invokes configured Python candidates and enriches stem URLs", async (t) => {
+  const calls = [];
+  const payload = { stems: { stems: [{ path: "/runtime/vocals.wav" }] } };
+  const { services } = makeServices(t, {
+    pythonCandidates: [{ command: "python3", prefix: ["backend.py"], env: { TEST_ENV: "1" } }],
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return fakeChild({ stdout: JSON.stringify(payload) });
+    }
+  });
+
+  const result = await services.analyze({ audioPath: "/runtime/song.wav", mode: "hq", options: { stems: true } });
+  assert.equal(result.stems.stems[0].url, "test://vocals.wav");
+  assert.deepEqual(calls[0].args, [
+    "backend.py", "analyze", "/runtime/song.wav", "--mode", "hq", "--options", JSON.stringify({ stems: true })
+  ]);
+  assert.equal(calls[0].options.shell, undefined);
+});
+
+test("chart export removes its temporary input after backend failure", async (t) => {
+  let inputPath;
+  const { root, services } = makeServices(t, {
+    pythonCandidates: [{ command: "python3", prefix: ["backend.py"] }],
+    spawnImpl(_command, args) {
+      inputPath = args[2];
+      assert.equal(fs.existsSync(inputPath), true);
+      return fakeChild({ stderr: "export failed", code: 1 });
+    }
+  });
+
+  await assert.rejects(
+    services.exportChart({ chart: { title: "Song" }, format: "txt", outputPath: path.join(root, "song.txt") }),
+    /export failed/
+  );
+  assert.equal(fs.existsSync(inputPath), false);
+});
+
+test("cleanup removes only previews generated by the service", async (t) => {
+  let generatedPath;
+  const { root, services } = makeServices(t, {
+    spawnImpl(_command, args) {
+      generatedPath = args.at(-1);
+      return fakeChild({ onSpawn: () => fs.writeFileSync(generatedPath, "RIFF") });
+    }
+  });
+  const sourcePath = path.join(root, "source.wav");
+  fs.writeFileSync(sourcePath, "RIFF");
+
+  await services.processAudioPreview({ audioPath: sourcePath, semitones: 2, tempoRate: 1.25 });
+  assert.equal(fs.existsSync(generatedPath), true);
+  services.cleanup();
+  assert.equal(fs.existsSync(generatedPath), false);
+  assert.equal(fs.existsSync(sourcePath), true);
+});

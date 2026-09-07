@@ -1,0 +1,9 @@
+numpy>=2.0,<3
+scipy>=1.14,<2
+librosa>=0.11,<1
+soundfile>=0.13,<1
+music21==10.5.0
+demucs==4.1.0
+# Essentia's CPython 3.11 Linux wheel is currently x86_64-only.
+essentia==2.1b6.dev1389 ; platform_machine == "x86_64"
+yt-dlp[default]

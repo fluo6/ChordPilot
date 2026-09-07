@@ -1,0 +1,822 @@
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const https = require("node:https");
+const path = require("node:path");
+
+const downloadPercentRegex = /\[download\]\s+([0-9]+(?:\.[0-9]+)?)%/;
+
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, number));
+}
+
+function chainAtempo(rate) {
+  const parts = [];
+  let remaining = Math.max(0.25, Math.min(4, Number(rate) || 1));
+  while (remaining > 2) {
+    parts.push("atempo=2");
+    remaining /= 2;
+  }
+  while (remaining < 0.5) {
+    parts.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+  parts.push(`atempo=${remaining.toFixed(6)}`);
+  return parts;
+}
+
+function buildAudioPreviewFilter(semitones, tempoRate) {
+  const pitchFactor = Math.pow(2, semitones / 12);
+  const filters = [];
+  if (Math.abs(semitones) > 0.001) {
+    filters.push("aresample=48000");
+    filters.push(`asetrate=${(48000 * pitchFactor).toFixed(3)}`);
+    filters.push("aresample=48000");
+    filters.push(...chainAtempo(tempoRate / pitchFactor));
+  } else {
+    filters.push(...chainAtempo(tempoRate));
+  }
+  return filters.join(",");
+}
+
+function safeFileName(value, fallback = "audio") {
+  return (
+    String(value || fallback)
+      .replace(/[<>:"/\\|?*]+/g, "-")
+      .trim() || fallback
+  );
+}
+
+function normalizeYoutubeUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const isYoutubeHost =
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be";
+    if (!isYoutubeHost) {
+      throw new Error("Only YouTube links are supported.");
+    }
+    if (host === "youtu.be") {
+      const id = url.pathname.replace(/^\/+|\/+$/g, "");
+      return id
+        ? `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`
+        : value;
+    }
+    const videoId = url.searchParams.get("v");
+    return videoId
+      ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
+      : value;
+  } catch (error) {
+    if (error.message === "Only YouTube links are supported.") {
+      throw error;
+    }
+    throw new Error("Enter a valid YouTube link.");
+  }
+}
+
+function shouldShowBackendLog(message) {
+  return ![
+    "Error in sitecustomize",
+    "PermissionError: [WinError 5] Access is denied: 'C:\\Users\\fujial\\AppData\\Local\\Microsoft\\WindowsApps'",
+  ].some((noise) => String(message).includes(noise));
+}
+
+function audioExportArgsForExtension(extension) {
+  if (extension === "mp3") {
+    return ["-codec:a", "libmp3lame", "-b:a", "192k"];
+  }
+  if (extension === "flac") {
+    return ["-codec:a", "flac"];
+  }
+  if (extension === "m4a") {
+    return ["-codec:a", "aac", "-b:a", "192k"];
+  }
+  return ["-codec:a", "pcm_s16le", "-ar", "48000"];
+}
+
+function cleanMetadataSearchText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function musicBrainzQuery(audio = {}) {
+  return [
+    cleanMetadataSearchText(audio.title || audio.name),
+    cleanMetadataSearchText(audio.artist),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function decodeFfmetadataValue(value) {
+  return String(value || "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\([\\=;#])/g, "$1")
+    .trim();
+}
+
+function parseYtDlpProgress(line) {
+  const match = downloadPercentRegex.exec(line);
+  if (match) {
+    return `youtube: downloading ${Number.parseFloat(match[1]).toFixed(1)}%`;
+  }
+  if (
+    line.includes("[ExtractAudio]") ||
+    line.includes("[EmbedThumbnail]") ||
+    line.includes("[Metadata]") ||
+    line.includes("Deleting original file") ||
+    line.includes("[download] Destination:")
+  ) {
+    return `youtube: ${line.trim()}`;
+  }
+  return "";
+}
+
+function firstUsefulLine(...chunks) {
+  for (const chunk of chunks) {
+    for (const line of String(chunk || "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return "No details were returned.";
+}
+
+function createChordPilotServices({
+  appRoot,
+  backendScript,
+  tempDir,
+  coverDir,
+  importDir,
+  previewDir,
+  pythonCandidates,
+  ffmpegPath,
+  ytDlpPath,
+  env,
+  toUrl,
+  emitLog,
+  spawnImpl,
+  httpsGet,
+  ytDlpFfmpegLocation,
+}) {
+  const spawn = spawnImpl || require("node:child_process").spawn;
+  const configuredEnv = env || process.env;
+  const makeUrl =
+    toUrl || ((filePath) => `file://${filePath.replace(/\\/g, "/")}`);
+  const log = emitLog || (() => {});
+  const get = httpsGet || https.get;
+  const previews = new Set();
+  const directories = [tempDir, coverDir, importDir, previewDir].filter(
+    Boolean,
+  );
+  directories.forEach((directory) =>
+    fs.mkdirSync(directory, { recursive: true }),
+  );
+
+  function metadataCacheKey(filePath) {
+    const stat = fs.statSync(filePath);
+    return crypto
+      .createHash("sha1")
+      .update(`${filePath}:${stat.size}:${stat.mtimeMs}`)
+      .digest("hex");
+  }
+
+  function httpsJson(url) {
+    return new Promise((resolve, reject) => {
+      const request = get(
+        url,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "ChordPilot/0.1.0 (manual metadata lookup)",
+          },
+        },
+        (response) => {
+          if (
+            response.statusCode >= 300 &&
+            response.statusCode < 400 &&
+            response.headers.location
+          ) {
+            response.resume();
+            httpsJson(new URL(response.headers.location, url).toString())
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            response.resume();
+            reject(
+              new Error(`Metadata lookup returned HTTP ${response.statusCode}`),
+            );
+            return;
+          }
+
+          let body = "";
+          response.setEncoding("utf8");
+          response.on("data", (chunk) => {
+            body += chunk;
+          });
+          response.on("end", () => {
+            try {
+              resolve(JSON.parse(body));
+            } catch (error) {
+              reject(
+                new Error(
+                  `Metadata lookup returned invalid JSON: ${error.message}`,
+                ),
+              );
+            }
+          });
+        },
+      );
+      request.setTimeout(12000, () =>
+        request.destroy(new Error("Metadata lookup timed out")),
+      );
+      request.on("error", reject);
+    });
+  }
+
+  function readAudioTags(filePath) {
+    if (!ffmpegPath || !fs.existsSync(filePath)) {
+      return Promise.resolve({});
+    }
+
+    return new Promise((resolve) => {
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          filePath,
+          "-f",
+          "ffmetadata",
+          "-",
+        ],
+        { windowsHide: true },
+      );
+
+      let stdout = "";
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.on("error", () => resolve({}));
+      child.on("close", () => {
+        const tags = {};
+        stdout.split(/\r?\n/).forEach((line) => {
+          if (!line || line.startsWith(";") || line.startsWith("[")) {
+            return;
+          }
+          const index = line.indexOf("=");
+          if (index <= 0) {
+            return;
+          }
+          const key = line.slice(0, index).trim().toLowerCase();
+          const value = decodeFfmetadataValue(line.slice(index + 1));
+          if (value) {
+            tags[key] = value;
+          }
+        });
+        resolve(tags);
+      });
+    });
+  }
+
+  function extractAudioCover(filePath) {
+    if (!ffmpegPath || !fs.existsSync(filePath)) {
+      return Promise.resolve(null);
+    }
+
+    const coverPath = path.join(coverDir, `${metadataCacheKey(filePath)}.jpg`);
+    if (fs.existsSync(coverPath)) {
+      return Promise.resolve(coverPath);
+    }
+
+    return new Promise((resolve) => {
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          filePath,
+          "-an",
+          "-map",
+          "0:v:0",
+          "-frames:v",
+          "1",
+          coverPath,
+        ],
+        { windowsHide: true },
+      );
+
+      child.on("error", () => resolve(null));
+      child.on("close", (code) => {
+        if (code !== 0 || !fs.existsSync(coverPath)) {
+          fs.rmSync(coverPath, { force: true });
+          resolve(null);
+          return;
+        }
+        resolve(coverPath);
+      });
+    });
+  }
+
+  async function buildAudioPayload(filePath) {
+    const tags = await readAudioTags(filePath);
+    const coverPath = await extractAudioCover(filePath);
+    const stat = fs.statSync(filePath);
+    const title = tags.title || path.basename(filePath, path.extname(filePath));
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      extension: path.extname(filePath).slice(1).toUpperCase(),
+      size: stat.size,
+      title,
+      artist: tags.artist || tags.album_artist || tags.albumartist || "",
+      album: tags.album || "",
+      genre: tags.genre || "",
+      date: tags.date || tags.year || "",
+      track: tags.track || "",
+      coverPath: coverPath || "",
+      coverUrl: coverPath ? makeUrl(coverPath) : "",
+      url: makeUrl(filePath),
+    };
+  }
+
+  async function lookupAudioMetadata(audio = {}) {
+    const query = musicBrainzQuery(audio);
+    if (!query) {
+      throw new Error(
+        "There is not enough file information to search for metadata.",
+      );
+    }
+
+    const payload = await httpsJson(
+      `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=8`,
+    );
+    const recordings = Array.isArray(payload.recordings)
+      ? payload.recordings
+      : [];
+    if (!recordings.length) {
+      return null;
+    }
+
+    const best = recordings
+      .map((recording) => ({
+        recording,
+        release: Array.isArray(recording.releases)
+          ? recording.releases.find((release) => release.title) ||
+            recording.releases[0]
+          : null,
+        score: Number(recording.score) || 0,
+      }))
+      .sort((a, b) => b.score - a.score)[0];
+
+    const artist = Array.isArray(best.recording["artist-credit"])
+      ? best.recording["artist-credit"]
+          .map((item) => item.name)
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    const date =
+      best.release?.date || best.recording["first-release-date"] || "";
+
+    return {
+      title: best.recording.title || "",
+      artist,
+      album: best.release?.title || "",
+      date: date ? String(date).slice(0, 4) : "",
+      coverUrl: best.release?.id
+        ? `https://coverartarchive.org/release/${best.release.id}/front-250`
+        : "",
+      metadataSource: "MusicBrainz",
+      metadataUrl: best.recording.id
+        ? `https://musicbrainz.org/recording/${best.recording.id}`
+        : "",
+      matchScore: best.score,
+    };
+  }
+
+  async function downloadYoutubeAudio(rawUrl) {
+    const url = normalizeYoutubeUrl(rawUrl);
+    const outputDir = importDir;
+    const args = [
+      "--no-playlist",
+      "-x",
+      "--audio-format",
+      "mp3",
+      "--audio-quality",
+      "0",
+      "--embed-thumbnail",
+      "--add-metadata",
+      "--print",
+      "after_move:filepath",
+      "-o",
+      path.join(outputDir, "%(title).180B [%(id)s].%(ext)s"),
+      url,
+    ];
+
+    if (ytDlpFfmpegLocation) {
+      args.splice(8, 0, "--ffmpeg-location", ytDlpFfmpegLocation);
+    }
+
+    log(`youtube: starting download with ${ytDlpPath}`);
+    return new Promise((resolve, reject) => {
+      const child = spawn(ytDlpPath, args, {
+        env: {
+          ...configuredEnv,
+          TEMP: outputDir,
+          TMP: outputDir,
+          PYINSTALLER_CACHE_DIR: path.join(tempDir, "ToolCache"),
+        },
+        windowsHide: true,
+      });
+
+      let stdout = "";
+      let stderr = "";
+      const handleChunk = (chunk, stream) => {
+        const text = chunk.toString("utf8");
+        if (stream === "stdout") {
+          stdout += text;
+        } else {
+          stderr += text;
+        }
+        text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach((line) => {
+            const progress = parseYtDlpProgress(line);
+            if (progress) {
+              log(progress);
+            }
+          });
+      };
+
+      child.stdout.on("data", (chunk) => handleChunk(chunk, "stdout"));
+      child.stderr.on("data", (chunk) => handleChunk(chunk, "stderr"));
+      child.on("error", (error) =>
+        reject(new Error(`Could not start yt-dlp: ${error.message}`)),
+      );
+      child.on("close", async (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(
+              `YouTube download failed: ${firstUsefulLine(stderr, stdout)}`,
+            ),
+          );
+          return;
+        }
+
+        const downloadedPath = stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .reverse()
+          .find((line) => fs.existsSync(line));
+        if (!downloadedPath) {
+          reject(
+            new Error(
+              "YouTube download completed, but the audio file path was not returned.",
+            ),
+          );
+          return;
+        }
+
+        try {
+          const audio = await buildAudioPayload(downloadedPath);
+          resolve({
+            ...audio,
+            sourceUrl: url,
+            metadataSource: audio.metadataSource || "YouTube",
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+  }
+
+  function processAudioPreview({ audioPath, semitones = 0, tempoRate = 1 }) {
+    const sourcePath = String(audioPath || "");
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      return Promise.reject(
+        new Error("Choose an audio file before applying audio preview."),
+      );
+    }
+    if (!ffmpegPath) {
+      return Promise.reject(
+        new Error(
+          "ffmpeg is unavailable, so audio preview cannot be rendered.",
+        ),
+      );
+    }
+
+    const cleanSemitones = clampNumber(semitones, 0, -12, 12);
+    const cleanTempoRate = clampNumber(tempoRate, 1, 0.5, 2);
+    const outputPath = path.join(
+      previewDir,
+      `chordpilot-preview-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
+    );
+    const filter = buildAudioPreviewFilter(cleanSemitones, cleanTempoRate);
+
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          sourcePath,
+          "-vn",
+          "-af",
+          filter,
+          "-ar",
+          "48000",
+          "-ac",
+          "2",
+          outputPath,
+        ],
+        { windowsHide: true },
+      );
+
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code !== 0) {
+          fs.rmSync(outputPath, { force: true });
+          reject(
+            new Error((stderr || `ffmpeg exited with code ${code}`).trim()),
+          );
+          return;
+        }
+        previews.add(outputPath);
+        resolve({
+          path: outputPath,
+          url: makeUrl(outputPath),
+          semitones: cleanSemitones,
+          tempoRate: cleanTempoRate,
+        });
+      });
+    });
+  }
+
+  function exportAudioTrack({ sourcePath, outputPath, format } = {}) {
+    const inputPath = String(sourcePath || "");
+    const destinationPath = String(outputPath || "");
+    if (!inputPath || !fs.existsSync(inputPath)) {
+      return Promise.reject(new Error("Audio source is missing for export."));
+    }
+    if (!destinationPath) {
+      return Promise.reject(
+        new Error("Choose an export destination before exporting audio."),
+      );
+    }
+    if (!ffmpegPath) {
+      return Promise.reject(
+        new Error("ffmpeg is unavailable, so audio cannot be exported."),
+      );
+    }
+
+    const extension = String(
+      format || path.extname(destinationPath).slice(1) || "wav",
+    ).toLowerCase();
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          inputPath,
+          "-vn",
+          ...audioExportArgsForExtension(extension),
+          destinationPath,
+        ],
+        { windowsHide: true },
+      );
+
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code !== 0) {
+          fs.rmSync(destinationPath, { force: true });
+          reject(
+            new Error((stderr || `ffmpeg exited with code ${code}`).trim()),
+          );
+          return;
+        }
+        resolve({ path: destinationPath, format: extension });
+      });
+    });
+  }
+
+  function enrichChartPayload(payload) {
+    if (payload && payload.stems && Array.isArray(payload.stems.stems)) {
+      payload.stems.stems = payload.stems.stems.map((stem) => ({
+        ...stem,
+        url: stem.path ? makeUrl(stem.path) : "",
+      }));
+    }
+    return payload;
+  }
+
+  function runBackend(args, input) {
+    const candidates = Array.isArray(pythonCandidates) ? pythonCandidates : [];
+    const errors = [];
+
+    function attempt(index) {
+      if (index >= candidates.length) {
+        return Promise.reject(
+          new Error(errors.join("\n") || "No Python backend could be started."),
+        );
+      }
+      const candidate = candidates[index];
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        log(`backend: trying ${candidate.command}`);
+        const child = spawn(
+          candidate.command,
+          [...(candidate.prefix || [backendScript]), ...args],
+          {
+            cwd: appRoot,
+            env: { ...configuredEnv, ...(candidate.env || {}) },
+            windowsHide: true,
+          },
+        );
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk) => {
+          stdout += chunk.toString();
+        });
+        function isBenignLibraryWarning(line) {
+          if (/libmpg123.*ID3v2/i.test(line)) return true;
+          if (/NNPACK\.cpp.*Could not initialize NNPACK/i.test(line))
+            return true;
+          if (
+            /You are sending unauthenticated requests to the HF Hub/i.test(line)
+          )
+            return true;
+          return false;
+        }
+
+        child.stderr.on("data", (chunk) => {
+          const text = chunk.toString();
+          stderr += text;
+          text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .filter((line) => !isBenignLibraryWarning(line))
+            .forEach(log);
+        });
+        child.on("error", (error) => {
+          if (settled) return;
+          settled = true;
+          const message = `${candidate.command}: ${error.message}`;
+          errors.push(message);
+          log(`backend: ${message}`);
+          attempt(index + 1)
+            .then(resolve)
+            .catch(reject);
+        });
+        child.on("close", (code) => {
+          if (settled) return;
+          settled = true;
+          if (code !== 0) {
+            const message = `${candidate.command}: ${stderr || `exited with code ${code}`}`;
+            errors.push(message);
+            log(`backend: ${candidate.command} failed, trying next option`);
+            attempt(index + 1)
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
+          try {
+            const payload = JSON.parse(stdout);
+            log("backend: complete");
+            resolve(payload);
+          } catch (error) {
+            reject(
+              new Error(`Backend returned invalid JSON: ${error.message}`),
+            );
+          }
+        });
+        if (input) {
+          child.stdin.write(input);
+        }
+        child.stdin.end();
+      });
+    }
+
+    return attempt(0);
+  }
+
+  async function analyze({ audioPath, mode = "fast", options = {} } = {}) {
+    return enrichChartPayload(
+      await runBackend([
+        "analyze",
+        audioPath,
+        "--mode",
+        mode,
+        "--options",
+        JSON.stringify(options),
+      ]),
+    );
+  }
+
+  async function exportChart({ chart, format, outputPath } = {}) {
+    const inputPath = path.join(
+      tempDir,
+      `chordpilot-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+    );
+    fs.writeFileSync(inputPath, JSON.stringify(chart, null, 2), "utf8");
+    try {
+      return await runBackend(["export", inputPath, format, outputPath]);
+    } finally {
+      fs.rmSync(inputPath, { force: true });
+    }
+  }
+
+  async function writeSessionFile(sessionPath, session) {
+    fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2), "utf8");
+    return { path: sessionPath };
+  }
+
+  async function readSessionFile(sessionPath) {
+    const session = JSON.parse(fs.readFileSync(sessionPath, "utf8"));
+    if (session?.audio?.path) {
+      session.audio = {
+        ...session.audio,
+        name: session.audio.name || path.basename(session.audio.path),
+        url: makeUrl(session.audio.path),
+        coverUrl:
+          session.audio.coverPath && fs.existsSync(session.audio.coverPath)
+            ? makeUrl(session.audio.coverPath)
+            : session.audio.coverUrl || "",
+        exists: fs.existsSync(session.audio.path),
+      };
+    }
+    if (session?.chart) {
+      session.chart = enrichChartPayload(session.chart);
+    }
+    return { path: sessionPath, session };
+  }
+
+  function cleanup() {
+    previews.forEach((previewPath) => fs.rmSync(previewPath, { force: true }));
+    previews.clear();
+  }
+
+  return {
+    buildAudioPayload,
+    downloadYoutubeAudio,
+    lookupAudioMetadata,
+    processAudioPreview,
+    exportAudioTrack,
+    analyze,
+    exportChart,
+    readSessionFile,
+    writeSessionFile,
+    enrichChartPayload,
+    cleanup,
+  };
+}
+
+module.exports = {
+  createChordPilotServices,
+  buildAudioPreviewFilter,
+  normalizeYoutubeUrl,
+  safeFileName,
+  shouldShowBackendLog,
+};

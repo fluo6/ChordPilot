@@ -1,13 +1,16 @@
 {
   "name": "chordpilot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Electron desktop app with a Python backend for drafting and cleaning up chord charts from audio.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "start:web": "node src/web/server.js",
     "test": "npm run test:unit && npm run test:python",
     "test:unit": "node --test tests/js/*.test.js",
+    "test:web": "node --test tests/js/web-*.test.js tests/js/runtime-services.test.js",
     "test:python": "node scripts/testing/run-python-tests.mjs",
+    "smoke:web": "node scripts/testing/web-smoke.mjs",
     "build": "electron-builder --dir",
     "postbuild": "node scripts/packaging/create-platform-shortcut.mjs",
     "build:win": "electron-builder --win dir",
@@ -74,6 +77,8 @@
     "electron-builder": "^26.8.1"
   },
   "dependencies": {
-    "ffmpeg-static": "^5.3.0"
+    "express": "5.1.0",
+    "ffmpeg-static": "^5.3.0",
+    "multer": "2.0.2"
   }
 }

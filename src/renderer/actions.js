@@ -296,13 +296,23 @@ async function analyzeAudio(settings = {}) {
   if (requireStems) {
     elements.analysisModeInput.value = "high-quality";
   }
+
+  const mode = elements.analysisModeInput.value;
+  if (mode === "high-quality" && window.chordPilot?.isWebRuntime) {
+    const proceed = window.confirm(
+      "High Quality Stems uses heavy AI processing.\n\nIn the web runtime, this currently runs on the server CPU and may take several minutes depending on the hardware.\n\nAre you sure you want to proceed?"
+    );
+    if (!proceed) {
+      return;
+    }
+  }
+
   setStatus("Analyzing...");
   clearLog();
   openEditorPanel("log");
-  const mode = elements.analysisModeInput.value;
   appendLog(`app: analyzing ${state.audio.name} (${mode})`);
   addJob(`Analyzing ${state.audio.name} (${mode})`, "running");
-  elements.analyzeBtn.disabled = true;
+  setAnalysisActive(true, `Analyzing ${state.audio.name}...`);
 
   try {
     const options = collectAnalysisOptions();
@@ -337,7 +347,7 @@ async function analyzeAudio(settings = {}) {
     setStatus(error.message);
     showErrorDialog("Analysis Error", error.message);
   } finally {
-    elements.analyzeBtn.disabled = false;
+    setAnalysisActive(false);
   }
 }
 
@@ -364,6 +374,7 @@ async function runAnalysisWithOptions(options, loadingText, jobText) {
   openEditorPanel("log");
   appendLog(`app: ${jobText} (${mode})`);
   addJob(jobText, "running");
+  setAnalysisActive(true, loadingText || jobText || "Analyzing...");
   try {
     const result = await window.chordPilot.analyze(state.audio.path, mode, options);
     addJob(`${jobText} ready`, "done");
@@ -374,6 +385,8 @@ async function runAnalysisWithOptions(options, loadingText, jobText) {
     setStatus(error.message);
     showErrorDialog(`${jobText} Error`, error.message);
     return null;
+  } finally {
+    setAnalysisActive(false);
   }
 }
 
