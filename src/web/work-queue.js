@@ -4,6 +4,7 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
   let closing = false;
   let cancelPending = false;
   let tail = Promise.resolve();
+  let activeLabel = null;
 
   function shutdownError() {
     const error = new Error("The server is shutting down.");
@@ -12,7 +13,9 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
   }
 
   function state() {
-    return { active, queued, closing };
+    return activeLabel !== null 
+      ? { active, queued, closing, label: activeLabel } 
+      : { active, queued, closing };
   }
 
   function notify() {
@@ -23,7 +26,7 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
     }
   }
 
-  function enqueue(_label, work) {
+  function enqueue(label, work) {
     if (closing) {
       return Promise.reject(shutdownError());
     }
@@ -37,11 +40,13 @@ function createSerialQueue({ onStateChange = () => {} } = {}) {
         throw shutdownError();
       }
       active += 1;
+      activeLabel = label;
       notify();
       try {
         return await work();
       } finally {
         active -= 1;
+        activeLabel = null;
         notify();
       }
     });

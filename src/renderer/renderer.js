@@ -172,7 +172,8 @@ function checkInitialQueueState() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.queue?.active > 0) {
-          setAnalysisActive(true, "Analysis running in backend...");
+          const label = data.queue.label || "Analysis running in backend...";
+          setAnalysisActive(true, label.startsWith("analysis: ") ? `Analyzing (${label.slice(10)})...` : label);
         }
       })
       .catch(() => {});

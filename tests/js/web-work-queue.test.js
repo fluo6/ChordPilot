@@ -41,7 +41,7 @@ test("queue reports transitions and rejects new work after close", async () => {
 
   await new Promise((resolve) => setImmediate(resolve));
   queue.close();
-  assert.deepEqual(queue.state(), { active: 1, queued: 0, closing: true });
+  assert.deepEqual(queue.state(), { active: 1, queued: 0, closing: true, label: "analysis" });
   await assert.rejects(queue.enqueue("export", async () => {}), (error) => error.code === "SERVER_SHUTTING_DOWN");
   release();
   await running;
@@ -49,8 +49,8 @@ test("queue reports transitions and rejects new work after close", async () => {
   assert.deepEqual(queue.state(), { active: 0, queued: 0, closing: true });
   assert.deepEqual(changes, [
     { active: 0, queued: 1, closing: false },
-    { active: 1, queued: 0, closing: false },
-    { active: 1, queued: 0, closing: true },
+    { active: 1, queued: 0, closing: false, label: "analysis" },
+    { active: 1, queued: 0, closing: true, label: "analysis" },
     { active: 0, queued: 0, closing: true }
   ]);
 });

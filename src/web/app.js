@@ -322,7 +322,7 @@ function createWebApp({
     let startedAt;
     logBroker.publish("analysis: queued");
     try {
-      const chart = await queue.enqueue("analysis", async () => {
+      const chart = await queue.enqueue(`analysis: ${media.name}`, async () => {
         startedAt = Date.now();
         logBroker.publish("analysis: started");
         const progressTimer = setInterval(() => {
