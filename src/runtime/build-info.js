@@ -3,7 +3,7 @@ const path = require("node:path");
 
 function getBuildInfo(options = {}) {
   const appRoot = options.appRoot || path.resolve(__dirname, "../..");
-  let version = "0.1.0";
+  let version = "0.1.1";
   let builtAt = process.env.CHORDPILOT_BUILD_TIME || process.env.BUILD_TIME || "";
 
   try {

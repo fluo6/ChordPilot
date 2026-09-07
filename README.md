@@ -99,6 +99,9 @@ docker compose down -v
 
 High-quality Demucs analysis runs on the CPU and can be slow. Its first run downloads the selected Demucs model into the persistent data volume; later runs reuse it. The current Python 3.11 audio dependency stack uses an amd64 Essentia wheel, so the Compose service targets `linux/amd64`. An ARM64 host therefore needs amd64 emulation (QEMU/binfmt, normally included with Docker Desktop), and the initial image build and analysis will be substantially slower under emulation.
 
+**Hardware Recommendations for Better Performance:**
+For significantly faster High-Quality analysis (stem separation), we strongly recommend running the native Desktop app (Electron) directly on a machine with a dedicated GPU or Apple Silicon. If you prefer to use this Docker LAN runtime, you can manually configure Docker for GPU passthrough (e.g., via the NVIDIA Container Toolkit) and update the backend script (`chordpilot_stems.py`) to use `device="cuda"` instead of `"cpu"`. Note that Docker Desktop for Mac does not support GPU passthrough to Linux containers.
+
 Run the host-published API smoke test after the service is healthy:
 
 ```bash

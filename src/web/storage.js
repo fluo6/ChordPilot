@@ -224,7 +224,7 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     const sessions = ensureDirectory("sessions");
     return {
       media: directoryUsage(media, { include: (file) => !file.endsWith(".json") && !file.endsWith(".part") }),
-      generated: directoryUsage(generated, { include: (file) => !file.endsWith(".json") && !file.endsWith(".part") }),
+      generated: directoryUsage(generated, { include: (file) => (!file.endsWith(".json") || file.includes(".data.json")) && !file.endsWith(".part") }),
       sessions: directoryUsage(sessions, { include: (file) => file.endsWith(".json") }),
       analysis: combinedUsage(ANALYSIS_CACHE_DIRECTORIES),
       models: combinedUsage(MODEL_CACHE_DIRECTORIES)
@@ -354,7 +354,7 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
       throw new StorageError("INVALID_MEDIA_METADATA", "Stored media metadata is invalid.");
     }
     const extension = normalizeExtension(stored.extension);
-    const expectedFilename = `${mediaId}.${extension}`;
+    const expectedFilename = extension === "json" ? `${mediaId}.data.json` : `${mediaId}.${extension}`;
     if (
       stored.id !== mediaId ||
       typeof stored.filename !== "string" ||
@@ -406,7 +406,7 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     const id = newId("media");
     const name = sanitizeName(originalName, "media");
     const extension = extensionFor(name, extensionFor(sourcePath.replace(/\.part$/i, "")));
-    const filename = `${id}.${extension}`;
+    const filename = extension === "json" ? `${id}.data.json` : `${id}.${extension}`;
     const destination = path.join(directory, filename);
     const destinationPart = `${destination}.part`;
     assertContained(directory, destination);

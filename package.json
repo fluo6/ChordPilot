@@ -1,6 +1,6 @@
 {
   "name": "chordpilot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Electron desktop app with a Python backend for drafting and cleaning up chord charts from audio.",
   "main": "src/main/main.js",
   "scripts": {

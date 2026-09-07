@@ -9,6 +9,8 @@ services:
       CHORDPILOT_UPLOAD_LIMIT_BYTES: "${CHORDPILOT_UPLOAD_LIMIT_BYTES:-536870912}"
     volumes:
       - chordpilot-data:/data
+      - ./src:/app/src:ro
+      - ./backend:/app/backend:ro
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/api/health"]
       interval: 30s

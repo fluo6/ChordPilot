@@ -43,7 +43,11 @@ function buildAudioPreviewFilter(semitones, tempoRate) {
 }
 
 function safeFileName(value, fallback = "audio") {
-  return String(value || fallback).replace(/[<>:"/\\|?*]+/g, "-").trim() || fallback;
+  return (
+    String(value || fallback)
+      .replace(/[<>:"/\\|?*]+/g, "-")
+      .trim() || fallback
+  );
 }
 
 function normalizeYoutubeUrl(rawUrl) {
@@ -55,16 +59,23 @@ function normalizeYoutubeUrl(rawUrl) {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    const isYoutubeHost = host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtu.be";
+    const isYoutubeHost =
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be";
     if (!isYoutubeHost) {
       throw new Error("Only YouTube links are supported.");
     }
     if (host === "youtu.be") {
       const id = url.pathname.replace(/^\/+|\/+$/g, "");
-      return id ? `https://www.youtube.com/watch?v=${encodeURIComponent(id)}` : value;
+      return id
+        ? `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`
+        : value;
     }
     const videoId = url.searchParams.get("v");
-    return videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : value;
+    return videoId
+      ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
+      : value;
   } catch (error) {
     if (error.message === "Only YouTube links are supported.") {
       throw error;
@@ -76,7 +87,7 @@ function normalizeYoutubeUrl(rawUrl) {
 function shouldShowBackendLog(message) {
   return ![
     "Error in sitecustomize",
-    "PermissionError: [WinError 5] Access is denied: 'C:\\Users\\fujial\\AppData\\Local\\Microsoft\\WindowsApps'"
+    "PermissionError: [WinError 5] Access is denied: 'C:\\Users\\fujial\\AppData\\Local\\Microsoft\\WindowsApps'",
   ].some((noise) => String(message).includes(noise));
 }
 
@@ -105,8 +116,10 @@ function cleanMetadataSearchText(value) {
 function musicBrainzQuery(audio = {}) {
   return [
     cleanMetadataSearchText(audio.title || audio.name),
-    cleanMetadataSearchText(audio.artist)
-  ].filter(Boolean).join(" ");
+    cleanMetadataSearchText(audio.artist),
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function decodeFfmetadataValue(value) {
@@ -160,55 +173,81 @@ function createChordPilotServices({
   emitLog,
   spawnImpl,
   httpsGet,
-  ytDlpFfmpegLocation
+  ytDlpFfmpegLocation,
 }) {
   const spawn = spawnImpl || require("node:child_process").spawn;
   const configuredEnv = env || process.env;
-  const makeUrl = toUrl || ((filePath) => `file://${filePath.replace(/\\/g, "/")}`);
+  const makeUrl =
+    toUrl || ((filePath) => `file://${filePath.replace(/\\/g, "/")}`);
   const log = emitLog || (() => {});
   const get = httpsGet || https.get;
   const previews = new Set();
-  const directories = [tempDir, coverDir, importDir, previewDir].filter(Boolean);
-  directories.forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
+  const directories = [tempDir, coverDir, importDir, previewDir].filter(
+    Boolean,
+  );
+  directories.forEach((directory) =>
+    fs.mkdirSync(directory, { recursive: true }),
+  );
 
   function metadataCacheKey(filePath) {
     const stat = fs.statSync(filePath);
-    return crypto.createHash("sha1").update(`${filePath}:${stat.size}:${stat.mtimeMs}`).digest("hex");
+    return crypto
+      .createHash("sha1")
+      .update(`${filePath}:${stat.size}:${stat.mtimeMs}`)
+      .digest("hex");
   }
 
   function httpsJson(url) {
     return new Promise((resolve, reject) => {
-      const request = get(url, {
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "ChordPilot/0.1.0 (manual metadata lookup)"
-        }
-      }, (response) => {
-        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          response.resume();
-          httpsJson(new URL(response.headers.location, url).toString()).then(resolve).catch(reject);
-          return;
-        }
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          response.resume();
-          reject(new Error(`Metadata lookup returned HTTP ${response.statusCode}`));
-          return;
-        }
-
-        let body = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (error) {
-            reject(new Error(`Metadata lookup returned invalid JSON: ${error.message}`));
+      const request = get(
+        url,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "ChordPilot/0.1.0 (manual metadata lookup)",
+          },
+        },
+        (response) => {
+          if (
+            response.statusCode >= 300 &&
+            response.statusCode < 400 &&
+            response.headers.location
+          ) {
+            response.resume();
+            httpsJson(new URL(response.headers.location, url).toString())
+              .then(resolve)
+              .catch(reject);
+            return;
           }
-        });
-      });
-      request.setTimeout(12000, () => request.destroy(new Error("Metadata lookup timed out")));
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            response.resume();
+            reject(
+              new Error(`Metadata lookup returned HTTP ${response.statusCode}`),
+            );
+            return;
+          }
+
+          let body = "";
+          response.setEncoding("utf8");
+          response.on("data", (chunk) => {
+            body += chunk;
+          });
+          response.on("end", () => {
+            try {
+              resolve(JSON.parse(body));
+            } catch (error) {
+              reject(
+                new Error(
+                  `Metadata lookup returned invalid JSON: ${error.message}`,
+                ),
+              );
+            }
+          });
+        },
+      );
+      request.setTimeout(12000, () =>
+        request.destroy(new Error("Metadata lookup timed out")),
+      );
       request.on("error", reject);
     });
   }
@@ -219,13 +258,20 @@ function createChordPilotServices({
     }
 
     return new Promise((resolve) => {
-      const child = spawn(ffmpegPath, [
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", filePath,
-        "-f", "ffmetadata",
-        "-"
-      ], { windowsHide: true });
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          filePath,
+          "-f",
+          "ffmetadata",
+          "-",
+        ],
+        { windowsHide: true },
+      );
 
       let stdout = "";
       child.stdout.on("data", (chunk) => {
@@ -264,16 +310,24 @@ function createChordPilotServices({
     }
 
     return new Promise((resolve) => {
-      const child = spawn(ffmpegPath, [
-        "-y",
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", filePath,
-        "-an",
-        "-map", "0:v:0",
-        "-frames:v", "1",
-        coverPath
-      ], { windowsHide: true });
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          filePath,
+          "-an",
+          "-map",
+          "0:v:0",
+          "-frames:v",
+          "1",
+          coverPath,
+        ],
+        { windowsHide: true },
+      );
 
       child.on("error", () => resolve(null));
       child.on("close", (code) => {
@@ -305,18 +359,24 @@ function createChordPilotServices({
       track: tags.track || "",
       coverPath: coverPath || "",
       coverUrl: coverPath ? makeUrl(coverPath) : "",
-      url: makeUrl(filePath)
+      url: makeUrl(filePath),
     };
   }
 
   async function lookupAudioMetadata(audio = {}) {
     const query = musicBrainzQuery(audio);
     if (!query) {
-      throw new Error("There is not enough file information to search for metadata.");
+      throw new Error(
+        "There is not enough file information to search for metadata.",
+      );
     }
 
-    const payload = await httpsJson(`https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=8`);
-    const recordings = Array.isArray(payload.recordings) ? payload.recordings : [];
+    const payload = await httpsJson(
+      `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=8`,
+    );
+    const recordings = Array.isArray(payload.recordings)
+      ? payload.recordings
+      : [];
     if (!recordings.length) {
       return null;
     }
@@ -324,25 +384,36 @@ function createChordPilotServices({
     const best = recordings
       .map((recording) => ({
         recording,
-        release: Array.isArray(recording.releases) ? recording.releases.find((release) => release.title) || recording.releases[0] : null,
-        score: Number(recording.score) || 0
+        release: Array.isArray(recording.releases)
+          ? recording.releases.find((release) => release.title) ||
+            recording.releases[0]
+          : null,
+        score: Number(recording.score) || 0,
       }))
       .sort((a, b) => b.score - a.score)[0];
 
     const artist = Array.isArray(best.recording["artist-credit"])
-      ? best.recording["artist-credit"].map((item) => item.name).filter(Boolean).join(", ")
+      ? best.recording["artist-credit"]
+          .map((item) => item.name)
+          .filter(Boolean)
+          .join(", ")
       : "";
-    const date = best.release?.date || best.recording["first-release-date"] || "";
+    const date =
+      best.release?.date || best.recording["first-release-date"] || "";
 
     return {
       title: best.recording.title || "",
       artist,
       album: best.release?.title || "",
       date: date ? String(date).slice(0, 4) : "",
-      coverUrl: best.release?.id ? `https://coverartarchive.org/release/${best.release.id}/front-250` : "",
+      coverUrl: best.release?.id
+        ? `https://coverartarchive.org/release/${best.release.id}/front-250`
+        : "",
       metadataSource: "MusicBrainz",
-      metadataUrl: best.recording.id ? `https://musicbrainz.org/recording/${best.recording.id}` : "",
-      matchScore: best.score
+      metadataUrl: best.recording.id
+        ? `https://musicbrainz.org/recording/${best.recording.id}`
+        : "",
+      matchScore: best.score,
     };
   }
 
@@ -352,13 +423,17 @@ function createChordPilotServices({
     const args = [
       "--no-playlist",
       "-x",
-      "--audio-format", "mp3",
-      "--audio-quality", "0",
+      "--audio-format",
+      "mp3",
+      "--audio-quality",
+      "0",
       "--embed-thumbnail",
       "--add-metadata",
-      "--print", "after_move:filepath",
-      "-o", path.join(outputDir, "%(title).180B [%(id)s].%(ext)s"),
-      url
+      "--print",
+      "after_move:filepath",
+      "-o",
+      path.join(outputDir, "%(title).180B [%(id)s].%(ext)s"),
+      url,
     ];
 
     if (ytDlpFfmpegLocation) {
@@ -372,9 +447,9 @@ function createChordPilotServices({
           ...configuredEnv,
           TEMP: outputDir,
           TMP: outputDir,
-          PYINSTALLER_CACHE_DIR: path.join(tempDir, "ToolCache")
+          PYINSTALLER_CACHE_DIR: path.join(tempDir, "ToolCache"),
         },
-        windowsHide: true
+        windowsHide: true,
       });
 
       let stdout = "";
@@ -386,32 +461,55 @@ function createChordPilotServices({
         } else {
           stderr += text;
         }
-        text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
-          const progress = parseYtDlpProgress(line);
-          if (progress) {
-            log(progress);
-          }
-        });
+        text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach((line) => {
+            const progress = parseYtDlpProgress(line);
+            if (progress) {
+              log(progress);
+            }
+          });
       };
 
       child.stdout.on("data", (chunk) => handleChunk(chunk, "stdout"));
       child.stderr.on("data", (chunk) => handleChunk(chunk, "stderr"));
-      child.on("error", (error) => reject(new Error(`Could not start yt-dlp: ${error.message}`)));
+      child.on("error", (error) =>
+        reject(new Error(`Could not start yt-dlp: ${error.message}`)),
+      );
       child.on("close", async (code) => {
         if (code !== 0) {
-          reject(new Error(`YouTube download failed: ${firstUsefulLine(stderr, stdout)}`));
+          reject(
+            new Error(
+              `YouTube download failed: ${firstUsefulLine(stderr, stdout)}`,
+            ),
+          );
           return;
         }
 
-        const downloadedPath = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).reverse().find((line) => fs.existsSync(line));
+        const downloadedPath = stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .reverse()
+          .find((line) => fs.existsSync(line));
         if (!downloadedPath) {
-          reject(new Error("YouTube download completed, but the audio file path was not returned."));
+          reject(
+            new Error(
+              "YouTube download completed, but the audio file path was not returned.",
+            ),
+          );
           return;
         }
 
         try {
           const audio = await buildAudioPayload(downloadedPath);
-          resolve({ ...audio, sourceUrl: url, metadataSource: audio.metadataSource || "YouTube" });
+          resolve({
+            ...audio,
+            sourceUrl: url,
+            metadataSource: audio.metadataSource || "YouTube",
+          });
         } catch (error) {
           reject(error);
         }
@@ -422,29 +520,47 @@ function createChordPilotServices({
   function processAudioPreview({ audioPath, semitones = 0, tempoRate = 1 }) {
     const sourcePath = String(audioPath || "");
     if (!sourcePath || !fs.existsSync(sourcePath)) {
-      return Promise.reject(new Error("Choose an audio file before applying audio preview."));
+      return Promise.reject(
+        new Error("Choose an audio file before applying audio preview."),
+      );
     }
     if (!ffmpegPath) {
-      return Promise.reject(new Error("ffmpeg is unavailable, so audio preview cannot be rendered."));
+      return Promise.reject(
+        new Error(
+          "ffmpeg is unavailable, so audio preview cannot be rendered.",
+        ),
+      );
     }
 
     const cleanSemitones = clampNumber(semitones, 0, -12, 12);
     const cleanTempoRate = clampNumber(tempoRate, 1, 0.5, 2);
-    const outputPath = path.join(previewDir, `chordpilot-preview-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`);
+    const outputPath = path.join(
+      previewDir,
+      `chordpilot-preview-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
+    );
     const filter = buildAudioPreviewFilter(cleanSemitones, cleanTempoRate);
 
     return new Promise((resolve, reject) => {
-      const child = spawn(ffmpegPath, [
-        "-y",
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", sourcePath,
-        "-vn",
-        "-af", filter,
-        "-ar", "48000",
-        "-ac", "2",
-        outputPath
-      ], { windowsHide: true });
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          sourcePath,
+          "-vn",
+          "-af",
+          filter,
+          "-ar",
+          "48000",
+          "-ac",
+          "2",
+          outputPath,
+        ],
+        { windowsHide: true },
+      );
 
       let stderr = "";
       child.stderr.on("data", (chunk) => {
@@ -454,11 +570,18 @@ function createChordPilotServices({
       child.on("close", (code) => {
         if (code !== 0) {
           fs.rmSync(outputPath, { force: true });
-          reject(new Error((stderr || `ffmpeg exited with code ${code}`).trim()));
+          reject(
+            new Error((stderr || `ffmpeg exited with code ${code}`).trim()),
+          );
           return;
         }
         previews.add(outputPath);
-        resolve({ path: outputPath, url: makeUrl(outputPath), semitones: cleanSemitones, tempoRate: cleanTempoRate });
+        resolve({
+          path: outputPath,
+          url: makeUrl(outputPath),
+          semitones: cleanSemitones,
+          tempoRate: cleanTempoRate,
+        });
       });
     });
   }
@@ -470,23 +593,35 @@ function createChordPilotServices({
       return Promise.reject(new Error("Audio source is missing for export."));
     }
     if (!destinationPath) {
-      return Promise.reject(new Error("Choose an export destination before exporting audio."));
+      return Promise.reject(
+        new Error("Choose an export destination before exporting audio."),
+      );
     }
     if (!ffmpegPath) {
-      return Promise.reject(new Error("ffmpeg is unavailable, so audio cannot be exported."));
+      return Promise.reject(
+        new Error("ffmpeg is unavailable, so audio cannot be exported."),
+      );
     }
 
-    const extension = String(format || path.extname(destinationPath).slice(1) || "wav").toLowerCase();
+    const extension = String(
+      format || path.extname(destinationPath).slice(1) || "wav",
+    ).toLowerCase();
     return new Promise((resolve, reject) => {
-      const child = spawn(ffmpegPath, [
-        "-y",
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", inputPath,
-        "-vn",
-        ...audioExportArgsForExtension(extension),
-        destinationPath
-      ], { windowsHide: true });
+      const child = spawn(
+        ffmpegPath,
+        [
+          "-y",
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-i",
+          inputPath,
+          "-vn",
+          ...audioExportArgsForExtension(extension),
+          destinationPath,
+        ],
+        { windowsHide: true },
+      );
 
       let stderr = "";
       child.stderr.on("data", (chunk) => {
@@ -496,7 +631,9 @@ function createChordPilotServices({
       child.on("close", (code) => {
         if (code !== 0) {
           fs.rmSync(destinationPath, { force: true });
-          reject(new Error((stderr || `ffmpeg exited with code ${code}`).trim()));
+          reject(
+            new Error((stderr || `ffmpeg exited with code ${code}`).trim()),
+          );
           return;
         }
         resolve({ path: destinationPath, format: extension });
@@ -508,7 +645,7 @@ function createChordPilotServices({
     if (payload && payload.stems && Array.isArray(payload.stems.stems)) {
       payload.stems.stems = payload.stems.stems.map((stem) => ({
         ...stem,
-        url: stem.path ? makeUrl(stem.path) : ""
+        url: stem.path ? makeUrl(stem.path) : "",
       }));
     }
     return payload;
@@ -520,26 +657,48 @@ function createChordPilotServices({
 
     function attempt(index) {
       if (index >= candidates.length) {
-        return Promise.reject(new Error(errors.join("\n") || "No Python backend could be started."));
+        return Promise.reject(
+          new Error(errors.join("\n") || "No Python backend could be started."),
+        );
       }
       const candidate = candidates[index];
       return new Promise((resolve, reject) => {
         let settled = false;
         log(`backend: trying ${candidate.command}`);
-        const child = spawn(candidate.command, [...(candidate.prefix || [backendScript]), ...args], {
-          cwd: appRoot,
-          env: { ...configuredEnv, ...(candidate.env || {}) },
-          windowsHide: true
-        });
+        const child = spawn(
+          candidate.command,
+          [...(candidate.prefix || [backendScript]), ...args],
+          {
+            cwd: appRoot,
+            env: { ...configuredEnv, ...(candidate.env || {}) },
+            windowsHide: true,
+          },
+        );
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (chunk) => {
           stdout += chunk.toString();
         });
+        function isBenignLibraryWarning(line) {
+          if (/libmpg123.*ID3v2/i.test(line)) return true;
+          if (/NNPACK\.cpp.*Could not initialize NNPACK/i.test(line))
+            return true;
+          if (
+            /You are sending unauthenticated requests to the HF Hub/i.test(line)
+          )
+            return true;
+          return false;
+        }
+
         child.stderr.on("data", (chunk) => {
           const text = chunk.toString();
           stderr += text;
-          text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach(log);
+          text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .filter((line) => !isBenignLibraryWarning(line))
+            .forEach(log);
         });
         child.on("error", (error) => {
           if (settled) return;
@@ -547,7 +706,9 @@ function createChordPilotServices({
           const message = `${candidate.command}: ${error.message}`;
           errors.push(message);
           log(`backend: ${message}`);
-          attempt(index + 1).then(resolve).catch(reject);
+          attempt(index + 1)
+            .then(resolve)
+            .catch(reject);
         });
         child.on("close", (code) => {
           if (settled) return;
@@ -556,7 +717,9 @@ function createChordPilotServices({
             const message = `${candidate.command}: ${stderr || `exited with code ${code}`}`;
             errors.push(message);
             log(`backend: ${candidate.command} failed, trying next option`);
-            attempt(index + 1).then(resolve).catch(reject);
+            attempt(index + 1)
+              .then(resolve)
+              .catch(reject);
             return;
           }
           try {
@@ -564,7 +727,9 @@ function createChordPilotServices({
             log("backend: complete");
             resolve(payload);
           } catch (error) {
-            reject(new Error(`Backend returned invalid JSON: ${error.message}`));
+            reject(
+              new Error(`Backend returned invalid JSON: ${error.message}`),
+            );
           }
         });
         if (input) {
@@ -578,11 +743,23 @@ function createChordPilotServices({
   }
 
   async function analyze({ audioPath, mode = "fast", options = {} } = {}) {
-    return enrichChartPayload(await runBackend(["analyze", audioPath, "--mode", mode, "--options", JSON.stringify(options)]));
+    return enrichChartPayload(
+      await runBackend([
+        "analyze",
+        audioPath,
+        "--mode",
+        mode,
+        "--options",
+        JSON.stringify(options),
+      ]),
+    );
   }
 
   async function exportChart({ chart, format, outputPath } = {}) {
-    const inputPath = path.join(tempDir, `chordpilot-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
+    const inputPath = path.join(
+      tempDir,
+      `chordpilot-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+    );
     fs.writeFileSync(inputPath, JSON.stringify(chart, null, 2), "utf8");
     try {
       return await runBackend(["export", inputPath, format, outputPath]);
@@ -603,8 +780,11 @@ function createChordPilotServices({
         ...session.audio,
         name: session.audio.name || path.basename(session.audio.path),
         url: makeUrl(session.audio.path),
-        coverUrl: session.audio.coverPath && fs.existsSync(session.audio.coverPath) ? makeUrl(session.audio.coverPath) : session.audio.coverUrl || "",
-        exists: fs.existsSync(session.audio.path)
+        coverUrl:
+          session.audio.coverPath && fs.existsSync(session.audio.coverPath)
+            ? makeUrl(session.audio.coverPath)
+            : session.audio.coverUrl || "",
+        exists: fs.existsSync(session.audio.path),
       };
     }
     if (session?.chart) {
@@ -629,7 +809,7 @@ function createChordPilotServices({
     readSessionFile,
     writeSessionFile,
     enrichChartPayload,
-    cleanup
+    cleanup,
   };
 }
 
@@ -638,5 +818,5 @@ module.exports = {
   buildAudioPreviewFilter,
   normalizeYoutubeUrl,
   safeFileName,
-  shouldShowBackendLog
+  shouldShowBackendLog,
 };

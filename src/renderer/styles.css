@@ -112,6 +112,7 @@ body.loading {
 .app-frame {
   display: grid;
   grid-template-columns: 156px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
   min-height: 0;
 }
@@ -125,8 +126,12 @@ body.loading {
   border-right: 1px solid #242b35;
   display: grid;
   gap: 8px;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
+  overflow: hidden;
   padding: 8px 6px;
 }
 
@@ -142,6 +147,8 @@ body.loading {
 .nav-brand {
   display: grid;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
   padding: 2px 6px 6px;
 }
 
@@ -156,9 +163,11 @@ body.loading {
 }
 
 .nav-list {
+  align-content: start;
   display: grid;
   gap: 4px;
-  align-content: start;
+  min-width: 0;
+  width: 100%;
 }
 
 .nav-item {
@@ -168,11 +177,13 @@ body.loading {
   color: #aeb8c5;
   display: grid;
   gap: 7px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  justify-content: start;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  justify-content: stretch;
   min-height: 28px;
+  min-width: 0;
   padding: 3px 6px;
   text-align: left;
+  width: 100%;
 }
 
 .nav-item.active,
@@ -223,23 +234,56 @@ body.loading {
 .nav-footer {
   border-top: 1px solid #242b35;
   margin-top: auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 6px 4px 2px;
+  width: 100%;
 }
 
+.global-build-info,
 .nav-build-info {
   color: #606d80;
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.2px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: text;
   white-space: nowrap;
 }
 
+.global-footer {
+  align-items: center;
+  background: #0b0f15;
+  border-top: 1px solid #242b35;
+  color: #606d80;
+  display: flex;
+  font-size: 11px;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  height: 24px;
+  justify-content: space-between;
+  line-height: 1;
+  min-height: 24px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  user-select: text;
+  white-space: nowrap;
+}
+
+.global-footer-brand {
+  color: #6f7b8d;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
 .left-pane.collapsed-rail .nav-brand,
 .left-pane.collapsed-rail .nav-label,
-.left-pane.collapsed-rail .nav-footer {
+.left-pane.collapsed-rail .nav-footer,
+.left-pane.collapsed-rail .nav-busy-dot {
   display: none;
 }
 
@@ -258,6 +302,12 @@ body.loading {
 
 .left-pane.collapsed-rail .left-pane-toggle {
   justify-self: center;
+}
+
+.app-view {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
 }
 
 .app-view.hidden {
@@ -575,7 +625,7 @@ input[type="checkbox"] {
   display: grid;
   gap: 6px;
   grid-template-rows: auto auto minmax(0, 1fr);
-  height: 100vh;
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding: 8px;
