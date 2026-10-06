@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { HttpError, asyncRoute } = require("./http-errors");
+const { validateStudyInputs } = require("../runtime/chordpilot-services");
+const { sanitizePublicLogText } = require("./work-queue");
 const { redactLocationMetadata } = require("./storage");
 const { getBuildInfo } = require("../runtime/build-info");
 
@@ -22,6 +24,7 @@ function inlineFilename(name) {
 
 function apiError(error) {
   if (error instanceof HttpError) return error;
+  if (error.code === "INVALID_STUDY") return new HttpError(400, "INVALID_STUDY", error.message);
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     return new HttpError(413, "FILE_TOO_LARGE", "Uploaded file is too large.");
   }
@@ -316,6 +319,27 @@ function createWebApp({
     res.json({ preview });
   }));
 
+  app.post("/api/analyze-range", asyncRoute(async (req, res) => {
+    const { mediaId, sources, start, end, options = {} } = req.body || {};
+    try { validateStudyInputs(sources, start, end); } catch (error) { throw new HttpError(400, "INVALID_STUDY", error.message); }
+    if (!options || typeof options !== "object" || Array.isArray(options)) throw new HttpError(400, "INVALID_STUDY", "Study settings must be an object.");
+    await resolveMedia(mediaId);
+    storage.resolveStudySources(mediaId, sources);
+    logBroker.publish("study: queued");
+    const result = await queue.enqueue("Local Study", async () => {
+      const media = await resolveMedia(mediaId);
+      const sourcePaths = storage.resolveStudySources(mediaId, sources);
+      logBroker.publish("study: started");
+      try {
+        return await services.analyzeRange({ audioPath: media.path, sourcePaths, start, end, options });
+      } catch (error) {
+        throw new HttpError(422, "STUDY_ANALYSIS_FAILED", sanitizePublicLogText(error.message || "Selection analysis failed."));
+      }
+    });
+    res.json({ result: redactLocationMetadata(result) });
+    logBroker.publish("study: complete");
+  }));
+
   app.post("/api/analyze", asyncRoute(async (req, res) => {
     const media = await resolveMedia(req.body?.mediaId);
     const queuedAt = Date.now();
@@ -336,7 +360,9 @@ function createWebApp({
             mode: req.body?.mode || "fast",
             options: req.body?.options || {}
           });
-          return storage.normalizeChart(result, { copy: false });
+          const normalizedChart = await storage.normalizeChart(result, { copy: false });
+          if (normalizedChart?.stems?.ok) storage.associateStudyStems(media.id, normalizedChart.stems.stems);
+          return normalizedChart;
         } finally {
           clearInterval(progressTimer);
         }

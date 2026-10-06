@@ -187,6 +187,12 @@ ipcMain.handle("chart:analyze", async (_event, payload) => {
   return services.analyze({ audioPath, mode, options });
 });
 
+ipcMain.handle("study:analyzeRange", async (_event, payload) => {
+  const { audioPath, sources, start, end, options } = payload || {};
+  const sourcePaths = services.resolveStudySourcePaths(audioPath, sources);
+  return services.analyzeRange({ audioPath, sourcePaths, start, end, options });
+});
+
 ipcMain.handle("chart:export", async (_event, payload) => {
   const { chart, format } = payload;
   const extensions = { txt: "txt", csv: "csv", json: "json", musicxml: "musicxml" };

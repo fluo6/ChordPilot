@@ -834,7 +834,7 @@ function detectedStrengthMap(bar) {
   return strengths;
 }
 
-function createPianoEvidence(bar, chordSymbol = bar?.chord) {
+function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   const piano = document.createElement("div");
   piano.className = "piano-evidence";
   piano.title = "Detected notes glow by strength; outlined keys are notes in the selected chord.";
@@ -844,7 +844,8 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord) {
   const keys = document.createElement("div");
   keys.className = "piano-keys";
 
-  PIANO_OCTAVES.forEach((octave) => {
+  const octaves = options.pitchClassesOnly ? [3] : PIANO_OCTAVES;
+  octaves.forEach((octave) => {
     WHITE_KEYS.forEach((note) => {
       const key = document.createElement("div");
       const strength = strengths.get(note) || 0;
@@ -852,25 +853,27 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord) {
       key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
       key.classList.toggle("detected", strength > 0);
       key.classList.toggle("chord-tone", chordTones.has(note));
-      key.title = `${note}${octave}: detected ${formatConfidence(strength)}${chordTones.has(note) ? ", chord tone" : ""}`;
+      key.classList.toggle("bass-tone", normalizePitchName(options.bassNote) === note);
+      key.title = `${note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
-      label.textContent = `${note}${octave}`;
+      label.textContent = options.pitchClassesOnly ? note : `${note}${octave}`;
       key.appendChild(label);
       keys.appendChild(key);
     });
   });
 
-  PIANO_OCTAVES.forEach((octave, octaveIndex) => {
+  octaves.forEach((octave, octaveIndex) => {
     BLACK_KEYS.forEach((item) => {
       const key = document.createElement("div");
       const strength = strengths.get(item.note) || 0;
       const whiteIndex = (octaveIndex * WHITE_KEYS.length) + item.afterWhite + 1;
       key.className = "piano-key black-key";
-      key.style.left = `${(whiteIndex / (WHITE_KEYS.length * PIANO_OCTAVES.length)) * 100}%`;
+      key.style.left = `${(whiteIndex / (WHITE_KEYS.length * octaves.length)) * 100}%`;
       key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
       key.classList.toggle("detected", strength > 0);
       key.classList.toggle("chord-tone", chordTones.has(item.note));
-      key.title = `${item.note}${octave}: detected ${formatConfidence(strength)}${chordTones.has(item.note) ? ", chord tone" : ""}`;
+      key.classList.toggle("bass-tone", normalizePitchName(options.bassNote) === item.note);
+      key.title = `${item.note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(item.note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
       label.textContent = item.note;
       key.appendChild(label);
@@ -880,7 +883,7 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord) {
 
   const legend = document.createElement("div");
   legend.className = "piano-legend";
-  legend.textContent = "Glow = detected strength, outline = chord tones";
+  legend.textContent = `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
   piano.append(keys, legend);
   return piano;
 }

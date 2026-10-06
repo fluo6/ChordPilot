@@ -10,6 +10,37 @@ const { createWebApp } = require("../../src/web/app");
 const { createWebRuntime, parseWebEnvironment } = require("../../src/web/server");
 const { createStorage } = require("../../src/web/storage");
 const { createLogBroker, createSerialQueue } = require("../../src/web/work-queue");
+const { createChordPilotServices } = require("../../src/runtime/chordpilot-services");
+
+function studyWav(frequencies, seconds = 2) {
+  const sr = 22050; const count = sr * seconds; const bytes = Buffer.alloc(44 + count * 2);
+  bytes.write("RIFF", 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(sr, 24); bytes.writeUInt32LE(sr * 2, 28); bytes.writeUInt16LE(2, 32); bytes.writeUInt16LE(16, 34);
+  bytes.write("data", 36); bytes.writeUInt32LE(count * 2, 40);
+  for (let i = 0; i < count; i++) bytes.writeInt16LE(Math.round(frequencies.reduce((sum, hz) => sum + .15 * Math.sin(2 * Math.PI * hz * i / sr), 0) * 32767), 44 + i * 2);
+  return bytes;
+}
+
+test("real Python range API detects triad and session history survives storage restart and cache clearing", async (t) => {
+  const backendScript = path.resolve(__dirname, "../../backend/chordpilot.py");
+  const services = createChordPilotServices({ appRoot: path.resolve(__dirname, "../.."), backendScript, env: process.env,
+    pythonCandidates: [{ command: process.env.CHORDPILOT_PYTHON || (process.platform === "win32" ? "py" : "python3"), prefix: process.platform === "win32" && !process.env.CHORDPILOT_PYTHON ? ["-3", backendScript] : [backendScript] }] });
+  const runtime = await startTestServer(t, { services });
+  const song = await uploadFixture(runtime, "triad.wav", studyWav([261.63, 329.63, 392]));
+  const analyzed = await postJson(runtime, "/api/analyze-range", { mediaId: song.id, sources: ["full_mix"], start: .25, end: 1.25, options: { song_key: "C" } });
+  assert.equal(analyzed.status, 200, JSON.stringify(analyzed.body));
+  const result = analyzed.body.result;
+  assert.ok(result.chord.startsWith("C"), result.chord);
+  assert.deepEqual(result.range, [.25, 1.25]);
+  assert.deepEqual(result.evidence.detected_notes.slice(0, 3).map((note) => note.note).sort(), ["C", "E", "G"]);
+  const saved = await runtime.storage.saveSession({ app: "ChordPilot", version: 1, audio: song, studies: [{ id: "s1", start: .25, end: 1.25, sources: ["full_mix"], runs: [{ ...result, id: "r1" }] }] });
+  runtime.storage.clearCache("analysis");
+  const restarted = createStorage({ root: path.join(runtime.root, "data") }); restarted.initialize();
+  const opened = await restarted.openSession(saved.id);
+  assert.equal(opened.session.studies[0].runs[0].input_fingerprints.full_mix.sample_sha256, result.input_fingerprints.full_mix.sample_sha256);
+  assert.equal(opened.session.studies[0].runs[0].chord, result.chord);
+});
 
 async function startTestServer(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-app-"));
@@ -124,6 +155,19 @@ test("health reports queue and storage readiness", async (t) => {
   const response = await fetch(`${runtime.url}/api/health`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, queue: { active: 0, queued: 0, closing: false } });
+});
+
+test("range endpoint resolves registered song sources and redacts private result fields", async (t) => {
+  let call;
+  const runtime = await startTestServer(t, { services: { async analyzeRange(payload) { call = payload; return { chord: "C", privatePath: "/hidden.wav" }; } } });
+  const song = await uploadFixture(runtime);
+  const result = await postJson(runtime, "/api/analyze-range", { mediaId: song.id, sources: ["full_mix"], start: .2, end: .8, options: {} });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.result.chord, "C");
+  assert.equal(result.body.result.privatePath, undefined);
+  assert.equal(call.sourcePaths.full_mix, runtime.storage.resolveMedia(song.id).path);
+  const invalid = await postJson(runtime, "/api/analyze-range", { mediaId: song.id, sources: ["bass"], start: .2, end: .8 });
+  assert.equal(invalid.status, 400);
 });
 
 test("version reports application identity, version, and builtAt timestamp", async (t) => {

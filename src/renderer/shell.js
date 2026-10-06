@@ -280,6 +280,7 @@ function addJob(message, status = "done") {
 }
 
 function setView(view) {
+  if (view !== "song" && typeof stopStudyPlayback === "function") stopStudyPlayback();
   updateProjectNavigation();
   if (view === "song" && !hasProject()) {
     view = "home";
@@ -300,8 +301,10 @@ function setView(view) {
 }
 
 function setEditorPanel(name) {
+  if (name !== "study" && typeof stopStudyPlayback === "function") stopStudyPlayback();
   state.editorPanel = name || "arrange";
   elements.editorView.dataset.panel = state.editorPanel;
+  if (name === "study" && typeof renderStudy === "function") renderStudy();
   elements.navItems.forEach((item) => {
     item.classList.toggle("active", item.dataset.editorView === state.editorPanel || (state.currentView === "home" && item.dataset.view === "home"));
   });

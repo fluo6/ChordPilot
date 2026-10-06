@@ -129,6 +129,19 @@ test("analyze translates renderer audio references into media IDs", async () => 
   }]);
 });
 
+test("range analysis sends only semantic sources and opaque original media ID", async () => {
+  let body;
+  const runtime = bridgeEnvironment({ fetch: async (url, init) => {
+    assert.equal(url, "/api/analyze-range"); body = JSON.parse(init.body);
+    return response({ result: { chord: "C/E" } });
+  } });
+  const result = await runtime.bridge.analyzeRange({ audioPath: "source-id", sources: ["bass", "other"], start: .2, end: .8, options: { song_key: "C" }, sourcePaths: { bass: "/untrusted.wav" } });
+  assert.equal(result.chord, "C/E");
+  assert.equal(body.mediaId, "source-id");
+  assert.deepEqual(body.sources, ["bass", "other"]);
+  assert.equal(body.sourcePaths, undefined);
+});
+
 test("onBackendLog closes EventSource when unsubscribed", () => {
   const { bridge, eventSource } = bridgeEnvironment();
   const unsubscribe = bridge.onBackendLog(() => {});
@@ -147,6 +160,7 @@ test("web bridge exposes the complete preload method surface", () => {
   const { bridge } = bridgeEnvironment();
   assert.deepEqual(Object.keys(bridge).sort(), [
     "analyze",
+    "analyzeRange",
     "chooseAudio",
     "clearCache",
     "deleteSession",

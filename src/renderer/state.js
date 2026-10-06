@@ -21,7 +21,9 @@ const state = {
   editorPanel: "arrange",
   loadingCount: 0,
   recentSessions: [],
-  jobs: []
+  jobs: [],
+  studies: [],
+  study: createStudyState()
 };
 
 const PITCH_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -43,6 +45,7 @@ const BLACK_KEYS = [
 const PIANO_OCTAVES = [3, 4];
 
 const elements = {
+  studyPanel: document.getElementById("studyPanel"),
   leftPane: document.getElementById("leftPane"),
   leftPaneToggle: document.getElementById("leftPaneToggle"),
   homeView: document.getElementById("homeView"),

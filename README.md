@@ -11,6 +11,34 @@ ChordPilot is an Electron desktop MVP for creating editable chord charts from MP
 - Split, merge, add, duplicate, and delete bars while listening to the audio.
 - Export cleaned charts to TXT, CSV, JSON, and MusicXML.
 
+## Local Study
+
+Open **Local Study** to inspect one short passage without changing the song's
+chord chart. Hold **Ctrl** (or **Command** on macOS) and click the start and end
+on a waveform, or enable **Select Range** and click twice. Selection also works
+on Song waveform lanes and opens the study tab. Start/End fields accept precise
+seconds; select at least 0.05 seconds.
+
+**Bass + Other** is the default: Other supplies harmonic notes and Bass supplies
+root or inversion evidence. Choose other available stems or explicitly **Use
+Full Mix**. Prepare stems through high-quality song analysis when needed; old
+browser sessions may need that analysis run again to register their stems.
+Study analysis requires NumPy/SciPy and the existing audio decoder and reports
+unavailable dependencies rather than generating a draft chord.
+
+**Analyze Selection** returns one chord suggestion, alternatives, confidence,
+and a piano view of detected pitch classes. These notes do not claim exact
+octaves. **Play Selection**, **Loop Selection**, and Space audition the selected
+original sources; chart transposition and pitch-shift previews do not change
+study audio or evidence. Master volume and playback speed remain adjustable.
+
+Name the passage, add notes or an optional corrected chord, and **Save Study**.
+Then **Save Session** to persist it with the song. Save Session also includes
+successful unsaved study runs. Open saved studies from the tab's list; every
+successful rerun preserves its original inputs and results. Use the history
+and comparison selectors to inspect differences across settings or algorithm
+versions. History stays readable when audio or stems are unavailable.
+
 ## Setup
 
 Install Node dependencies:

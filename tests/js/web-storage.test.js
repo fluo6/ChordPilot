@@ -6,6 +6,21 @@ const path = require("node:path");
 
 const { createStorage } = require("../../src/web/storage");
 
+test("study stems remain associated with one song after storage restart", async (t) => {
+  const { root, storage } = await makeStorage(t);
+  const input = storage.createTempPath(".wav"); fs.writeFileSync(input, "audio");
+  const song = await storage.registerExisting({ sourcePath: input, originalName: "song.wav", kind: "source" });
+  const otherSong = await storage.registerExisting({ sourcePath: input, originalName: "song2.wav", kind: "source" });
+  const bass = await storage.registerExisting({ sourcePath: input, originalName: "bass.wav", kind: "stem" });
+  storage.associateStudyStems(song.id, [{ name: "bass", id: bass.id }]);
+  const reopened = createStorage({ root }); reopened.initialize();
+  assert.equal(reopened.resolveStudySources(song.id, ["bass"]).bass, storage.resolveMedia(bass.id).path);
+  assert.throws(() => reopened.resolveStudySources(otherSong.id, ["bass"]), /unavailable/);
+  assert.throws(() => reopened.resolveStudySources(song.id, ["full_mix", "bass"]), /Full Mix/);
+  fs.unlinkSync(storage.resolveMedia(bass.id).path);
+  assert.throws(() => reopened.resolveStudySources(song.id, ["bass"]), /unavailable/);
+});
+
 async function makeStorage(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-web-storage-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -24,6 +39,24 @@ test("initialize creates only typed data directories", async (t) => {
   for (const directory of ["media", "generated", "sessions", "cache", "tmp"]) {
     assert.equal(fs.statSync(path.join(root, directory)).isDirectory(), true);
   }
+});
+
+test("sessions preserve study result history and reject non-array study payloads", async (t) => {
+  const { storage } = await makeStorage(t);
+  const studies = [{ id: "s1", name: "Local C", start: 1, end: 2, sources: ["other"], corrected_chord: "C/E", runs: [{ id: "r1", chord: "C", range: [1, 2], sources: ["other"], settings: { song_key: "C" }, input_fingerprints: { other: { sample_sha256: "digest" } } }] }];
+  const saved = await storage.saveSession({ app: "ChordPilot", version: 1, studies });
+  const reopened = await storage.openSession(saved.id);
+  assert.deepEqual(reopened.session.studies, studies);
+  assert.throws(() => storage.assertSessionSchema({ app: "ChordPilot", version: 1, studies: {} }), /invalid/);
+});
+
+test("session stem names remain semantic names rather than registered filenames", async (t) => {
+  const { storage } = await makeStorage(t);
+  const input = storage.createTempPath(".wav"); fs.writeFileSync(input, "audio");
+  const stem = await storage.registerExisting({ sourcePath: input, originalName: "bass.wav", kind: "stem" });
+  const saved = await storage.saveSession({ app: "ChordPilot", version: 1, chart: { stems: { ok: true, stems: [{ ...stem, name: "bass" }] } } });
+  const reopened = await storage.openSession(saved.id);
+  assert.equal(reopened.session.chart.stems.stems[0].name, "bass");
 });
 
 test("commitMedia atomically promotes a temp file and redacts its filesystem path", async (t) => {

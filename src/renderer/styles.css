@@ -825,6 +825,62 @@ input[type="checkbox"] {
   display: none !important;
 }
 
+.app-shell[data-panel="study"] .study-section {
+  display: grid !important;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  overflow: auto;
+  min-height: 0;
+  padding: 20px;
+}
+.app-shell[data-panel="study"] { grid-template-rows: auto minmax(0, 1fr); }
+.study-workspace, .study-library { min-width: 0; }
+.study-library { border-right: 1px solid #303947; padding-right: 16px; }
+.study-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.study-heading h2 { margin: 0; font-size: 20px; }
+.study-muted { color: #9aa9bb; font-size: 12px; line-height: 1.6; }
+.study-original { color: #94d9bf; background: #213e35; padding: 4px 10px; border-radius: 20px; font-size: 11px; }
+.study-toolbar, .study-result-toolbar, .study-save-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 14px 0; }
+.study-toolbar label, .study-result-toolbar label, .study-save-fields label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #b3c0d0; }
+.study-toolbar input[type="number"] { width: 110px; }
+.study-toolbar input[type="text"] { width: 140px; }
+.study-zoom { flex: 1; min-width: 120px; }
+.study-wave-viewport { overflow-x: auto; border: 1px solid #303947; border-radius: 8px; background: #111c26; }
+.study-wave-body { position: relative; height: 128px; cursor: crosshair; }
+.study-wave-body canvas { display: block; width: 100%; height: 100px; }
+.study-range-overlay { position: absolute; top: 0; height: 100px; background: #77b6c744; border-left: 2px solid #37788b; border-right: 2px solid #37788b; pointer-events: none; }
+.study-range-anchor { position: absolute; top: 0; height: 100px; border-left: 2px dashed #37788b; pointer-events: none; }
+.study-time-ruler { position: relative; height: 28px; color: #aabaca; font-size: 10px; }
+.study-time-ruler span { position: absolute; top: 5px; transform: translateX(-50%); }
+.study-time-ruler span:first-child { transform: none; }
+.study-time-ruler span:last-child { transform: translateX(-100%); }
+.study-source-fieldset { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; border: 1px solid #303947; border-radius: 8px; padding: 12px; }
+.study-source-fieldset legend { font-size: 12px; color: #b3c0d0; }
+.study-source-fieldset label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.study-settings { border-top: 1px solid #303947; border-bottom: 1px solid #303947; padding: 12px 0; font-size: 12px; }
+.study-result { padding: 18px; border: 1px solid #303947; border-radius: 10px; background: #151a21; }
+.study-chord { display: block; color: #91cfdf; font-size: 36px; }
+.study-result h3 { font-size: 13px; margin: 20px 0 8px; }
+.study-result p { font-size: 13px; line-height: 1.6; }
+.study-candidates { display: flex; flex-wrap: wrap; gap: 8px; }
+.study-stale { color: #efcb8b; background: #382b19; padding: 8px; border-radius: 6px; }
+.study-result .piano-evidence { max-width: 500px; }
+.piano-key.bass-tone::after { content: ""; position: absolute; width: 7px; height: 7px; background: #de9450; border-radius: 50%; top: 10px; left: 50%; transform: translateX(-50%); }
+.study-list-row { display: flex; margin: 8px 0; gap: 4px; }
+.study-list-item { flex: 1; min-width: 0; text-align: left; white-space: pre-line; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; padding: 10px; }
+.study-delete { align-self: start; padding: 4px 8px; }
+.study-notes { flex-basis: 100%; }
+.study-notes textarea { resize: vertical; }
+.study-comparison { width: 100%; margin-top: 12px; font-size: 12px; border-collapse: collapse; table-layout: fixed; }
+.study-comparison td { padding: 8px; border-bottom: 1px solid #303947; overflow-wrap: anywhere; vertical-align: top; }
+.study-list-item.active-control, #studySelectBtn.active-control { border-color: #7397aa; background: #203441; }
+.study-comparison tr:first-child { font-weight: bold; }
+.study-result-toolbar select { max-width: 320px; }
+@media (max-width: 850px) {
+  .app-shell[data-panel="study"] .study-section { grid-template-columns: 1fr; }
+  .study-library { border-right: 0; border-bottom: 1px solid #d8e0e3; padding-bottom: 12px; }
+}
+
 .app-shell[data-panel="arrange"] .arrange-section,
 .app-shell[data-panel="analysis"] .analysis-section,
 .app-shell[data-panel="log"] .log-section,

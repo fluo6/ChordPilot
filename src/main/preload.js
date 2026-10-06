@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("chordPilot", {
   exportAudioTrack: (payload) => ipcRenderer.invoke("audio:exportTrack", payload),
   showMessage: (payload) => ipcRenderer.invoke("app:message", payload),
   analyze: (audioPath, mode = "fast", options = {}) => ipcRenderer.invoke("chart:analyze", { audioPath, mode, options }),
+  analyzeRange: (payload) => ipcRenderer.invoke("study:analyzeRange", payload),
   exportChart: (chart, format) => ipcRenderer.invoke("chart:export", { chart, format }),
   saveSession: (session) => ipcRenderer.invoke("session:save", session),
   openSession: () => ipcRenderer.invoke("session:open"),

@@ -7,6 +7,26 @@ const { EventEmitter } = require("node:events");
 
 const { createChordPilotServices, buildAudioPreviewFilter, normalizeYoutubeUrl } = require("../../src/runtime/chordpilot-services");
 
+test("range analysis sends exact inputs to backend and resolves only registered desktop stems", async (t) => {
+  let args;
+  const { root, services } = makeServices(t, {
+    pythonCandidates: [{ command: "python", prefix: [] }],
+    spawnImpl(_command, value) { args = value; return fakeChild({ stdout: JSON.stringify({ chord: "C/E" }) }); }
+  });
+  const song = path.join(root, "song.wav"); const bass = path.join(root, "bass.wav");
+  fs.writeFileSync(song, "audio"); fs.writeFileSync(bass, "bass");
+  const session = path.join(root, "session.json");
+  fs.writeFileSync(session, JSON.stringify({ audio: { path: song }, chart: { stems: { ok: true, stems: [{ name: "bass", path: bass }] } } }));
+  await services.readSessionFile(session);
+  assert.deepEqual(services.resolveStudySourcePaths(song, ["bass"]), { bass });
+  assert.throws(() => services.resolveStudySourcePaths(song, ["other"]), /unavailable/);
+  const result = await services.analyzeRange({ audioPath: song, sourcePaths: { bass }, start: .2, end: .8, options: { song_key: "C" } });
+  assert.equal(result.chord, "C/E");
+  assert.ok(args.includes("analyze-range"));
+  assert.equal(args[args.indexOf("--end") + 1], "0.8");
+  assert.deepEqual(JSON.parse(args[args.indexOf("--sources") + 1]), { bass });
+});
+
 function fakeChild({ stdout = "", stderr = "", code = 0, onSpawn } = {}) {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();

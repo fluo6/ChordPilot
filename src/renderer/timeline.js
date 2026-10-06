@@ -121,6 +121,9 @@ function buildLane(lane, options) {
 
   const body = document.createElement("div");
   body.className = "lane-body";
+  if (options.type === "waveform") {
+    body.addEventListener("click", (event) => handleStudyRangeClick(event, body, getChartDuration(), true), true);
+  }
   const canvas = document.createElement("canvas");
   canvas.className = "lane-waveform";
   canvas.width = Math.max(1200, timelineBodyWidth());

@@ -1,7 +1,7 @@
 # ChordPilot Local Study Design
 
 **Date:** 2026-10-06
-**Status:** Written spec approved in chat on 2026-10-06; implementation planning in progress
+**Status:** Implemented on 2026-10-06; automated and browser checks recorded in the validation document. Native desktop playback remains manually unverified.
 
 ## Purpose and success criteria
 

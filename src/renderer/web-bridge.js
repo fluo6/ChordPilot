@@ -134,6 +134,14 @@
   browserWindow.chordPilot = {
     isWebRuntime: true,
 
+    async analyzeRange(payload = {}) {
+      const result = await postJson("/api/analyze-range", {
+        mediaId: mediaId(payload.audioPath), sources: payload.sources,
+        start: payload.start, end: payload.end, options: payload.options || {}
+      });
+      return result.result;
+    },
+
     async storageSummary() {
       return requestJson("/api/storage");
     },

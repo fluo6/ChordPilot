@@ -48,6 +48,15 @@ function selectRelativeBar(offset) {
 }
 
 function handleKeyboardShortcut(event) {
+  if (typeof state !== "undefined" && event.key.toLowerCase() === "escape" && state.study?.selectionAnchor !== null && state.study?.selectionAnchor !== undefined && !isTypingTarget(event.target)) {
+    state.study.selectionAnchor = null; state.study.selectMode = false;
+    if (typeof renderStudy === "function") renderStudy();
+  }
+  if (typeof state !== "undefined" && event.code === "Space" && state.currentView === "song" && state.editorPanel === "study" && !isSpaceTypingTarget(event.target)) {
+    event.preventDefault();
+    if (isStudyPlaying()) stopStudyPlayback(); else playStudySelection();
+    return;
+  }
   if (event.altKey || event.metaKey) {
     return;
   }

@@ -130,6 +130,9 @@ function assertSessionSchema(session) {
       throw new StorageError("INVALID_SESSION", "Session data is invalid.");
     }
   }
+  if (session.studies !== undefined && !Array.isArray(session.studies)) {
+    throw new StorageError("INVALID_SESSION", "Session study data is invalid.");
+  }
   return session;
 }
 
@@ -390,6 +393,38 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     return publicRecord(readMedia(id));
   }
 
+  function associateStudyStems(mediaId, stems) {
+    const source = readMedia(mediaId);
+    if (!source || source.kind !== "source") throw new StorageError("INVALID_STUDY", "Original audio is unavailable.");
+    const metadataPath = path.join(ensureDirectory("media"), `${source.id}.json`);
+    const record = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    const associations = { ...(record.study_stems || {}) };
+    for (const stem of stems || []) {
+      const media = readMedia(stem.id);
+      if (!media || media.kind !== "stem" || !["bass", "other", "vocals", "drums"].includes(stem.name)) {
+        throw new StorageError("INVALID_STUDY", "Selected stem is unavailable.");
+      }
+      associations[stem.name] = media.id;
+    }
+    writeMetadata("media", { ...record, study_stems: associations });
+  }
+
+  function resolveStudySources(mediaId, names) {
+    const { validateStudyInputs } = require("../runtime/chordpilot-services");
+    try { validateStudyInputs(names, 0, 1); } catch (error) { throw new StorageError("INVALID_STUDY", error.message); }
+    const source = readMedia(mediaId);
+    if (!source || source.kind !== "source") throw new StorageError("INVALID_STUDY", "Original audio is unavailable.");
+    const metadataPath = path.join(ensureDirectory("media"), `${source.id}.json`);
+    const associations = JSON.parse(fs.readFileSync(metadataPath, "utf8")).study_stems || {};
+    return Object.fromEntries(names.map((name) => {
+      const media = name === "full_mix" ? source : associations[name] ? readMedia(associations[name]) : null;
+      if (!media || (name !== "full_mix" && media.kind !== "stem")) {
+        throw new StorageError("INVALID_STUDY", `Selected source ${name} is unavailable. Run high-quality analysis to prepare stems.`);
+      }
+      return [name, media.path];
+    }));
+  }
+
   async function commitMedia({ tempPath, originalName, kind = "generated" } = {}) {
     if (!tempPath) {
       throw new StorageError("TEMP_FILE_REQUIRED", "A temporary media file is required.");
@@ -517,7 +552,8 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     if (!Array.isArray(stems)) return stems;
     return Promise.all(stems.map(async (stem) => {
       const media = await normalizeSessionMedia(stem, "stem");
-      return media ? referenceFrom(media) : referenceFrom(stem) || redactPaths(stem);
+      const ref = media ? referenceFrom(media) : referenceFrom(stem);
+      return ref ? { ...ref, ...(stem?.name ? { name: stem.name } : {}) } : redactPaths(stem);
     }));
   }
 
@@ -706,6 +742,8 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     registerExisting,
     resolveMedia,
     publicMedia,
+    associateStudyStems,
+    resolveStudySources,
     normalizeMedia,
     normalizeChart,
     normalizeSessionForStorage,

@@ -1,4 +1,5 @@
 function startProjectWithAudio(audio, statusText = "Audio loaded") {
+  if (typeof resetStudyState === "function") resetStudyState();
   state.audio = audio;
   state.chart = null;
   state.audioPreview = null;
@@ -610,6 +611,7 @@ function buildSessionPayload() {
     saved_at: new Date().toISOString(),
     audio: state.audio,
     chart: state.chart,
+    studies: studyCopy(state.studies || []),
     analysis: {
       mode: elements.analysisModeInput.value,
       options: collectAnalysisOptions()
@@ -632,6 +634,10 @@ function buildSessionPayload() {
 }
 
 async function saveSession() {
+  if (typeof saveCurrentStudy === "function" && (state.study?.pendingRuns?.length || (state.study?.openStudyId && state.study?.dirty)) && !saveCurrentStudy({ silent: true })) {
+    setStudyMessage("Complete the current study's range and sources before saving this session."); return;
+  }
+  const studySaveSnapshot = typeof studySaveToken === "function" ? studySaveToken() : "";
   const session = buildSessionPayload();
   if (!session.audio && !session.chart) {
     setStatus("Nothing to save");
@@ -642,6 +648,10 @@ async function saveSession() {
   try {
     const result = await window.chordPilot.saveSession(session);
     if (result?.path) {
+      if (typeof studySaveToken === "function" && studySaveToken() === studySaveSnapshot) {
+        state.study.dirty = false;
+        renderStudy();
+      }
       rememberSession(result.path, session);
       addJob(`Session saved: ${session.chart?.title || session.audio?.name || "Untitled"}`, "done");
     }
@@ -655,6 +665,8 @@ async function saveSession() {
 }
 
 function restoreSessionPayload(session) {
+  if (typeof resetStudyState === "function") resetStudyState();
+  state.studies = normalizeStudies(session.studies);
   state.audio = session.audio || null;
   state.chart = session.chart || null;
   state.audioPreview = null;

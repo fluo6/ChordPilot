@@ -1,3 +1,4 @@
+initializeStudy();
 elements.chooseBtn.addEventListener("click", chooseAudio);
 elements.analyzeBtn.addEventListener("click", analyzeAudio);
 elements.openSessionBtn.addEventListener("click", openSession);
@@ -25,18 +26,22 @@ elements.clearLogBtn.addEventListener("click", clearLog);
 elements.masterVolumeInput.addEventListener("input", () => {
   state.masterVolume = Number(elements.masterVolumeInput.value);
   applyMasterVolume();
+  applyStudyPlaybackSettings();
 });
 elements.arrangementMasterVolumeInput.addEventListener("input", () => {
   state.masterVolume = Number(elements.arrangementMasterVolumeInput.value);
   applyMasterVolume();
+  applyStudyPlaybackSettings();
 });
 elements.playbackRateInput.addEventListener("change", () => {
   state.playbackRate = Number(elements.playbackRateInput.value) || 1;
   applyPlaybackRate();
+  applyStudyPlaybackSettings();
 });
 elements.arrangementPlaybackRateInput.addEventListener("change", () => {
   state.playbackRate = Number(elements.arrangementPlaybackRateInput.value) || 1;
   applyPlaybackRate();
+  applyStudyPlaybackSettings();
 });
 elements.metronomeEnabledInput.addEventListener("change", () => setMetronomeEnabled(elements.metronomeEnabledInput.checked));
 elements.metronomeVolumeInput.addEventListener("input", () => setMetronomeVolume(elements.metronomeVolumeInput.value));
@@ -63,6 +68,7 @@ elements.audioPlayer.addEventListener("play", () => {
   }
 });
 elements.audioPlayer.addEventListener("loadedmetadata", () => {
+  renderStudy();
   updatePlayhead();
   resetMetronomeSchedule();
 });

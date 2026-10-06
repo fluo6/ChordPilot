@@ -28,6 +28,10 @@
             </span>
             <span class="nav-label">Song</span>
           </button>
+          <button class="nav-item project-nav" type="button" data-editor-view="study" title="Local Study">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M4 12h16M9 8v8M15 8v8" /></svg></span>
+            <span class="nav-label">Local Study</span>
+          </button>
           <button class="nav-item project-nav" type="button" data-editor-view="analysis" title="Analysis">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>
@@ -796,6 +800,70 @@
           <div id="chartReasonPane" class="chart-reason-content"></div>
         </aside>
       </section>
+      <section id="studyPanel" class="editor-section study-section">
+        <aside class="study-library">
+          <div class="study-heading"><h2>Saved studies</h2><button id="studyNewBtn" type="button">New</button></div>
+          <p class="study-muted">Keep passages, corrections, and detection history with this song.</p>
+          <div id="studyList"></div>
+        </aside>
+        <div class="study-workspace">
+          <div class="study-heading"><h2>Local Study</h2><span class="study-original">Original audio</span></div>
+          <p id="studyDirtyText" class="study-muted"></p>
+          <div class="study-toolbar">
+            <button id="studySelectBtn" type="button" aria-pressed="false">Select Range</button>
+            <label>Start (s)<input id="studyStartInput" type="number" min="0" step="0.001" /></label>
+            <label>End (s)<input id="studyEndInput" type="number" min="0" step="0.001" /></label>
+            <label class="study-zoom">Zoom<input id="studyZoomInput" type="range" min="1" max="16" step="0.5" value="1" /></label>
+          </div>
+          <div id="studyWaveViewport" class="study-wave-viewport">
+            <div id="studyWaveBody" class="study-wave-body">
+              <canvas id="studyWaveCanvas" aria-label="Original song waveform"></canvas>
+              <div id="studyRangeOverlay" class="study-range-overlay" hidden></div>
+              <div id="studyRangeAnchor" class="study-range-anchor" hidden></div>
+              <div id="studyTimeRuler" class="study-time-ruler"></div>
+            </div>
+          </div>
+          <p id="studyWaveHint" class="study-muted"></p>
+          <fieldset class="study-source-fieldset"><legend>Sources for listening and analysis</legend>
+            <label><input type="checkbox" data-study-source="bass" /> Bass</label>
+            <label><input type="checkbox" data-study-source="other" /> Other</label>
+            <label><input type="checkbox" data-study-source="vocals" /> Vocals</label>
+            <label><input type="checkbox" data-study-source="drums" /> Drums</label>
+            <label><input type="checkbox" data-study-source="full_mix" /> Full Mix</label>
+            <button id="studyFullMixBtn" type="button">Use Full Mix</button>
+          </fieldset>
+          <p class="study-muted">With Bass + Other, Other supplies chord tones and Bass supplies root or inversion evidence.</p>
+          <div class="study-toolbar">
+            <button id="studyPlayBtn" type="button">Play Selection</button>
+            <button id="studyLoopBtn" type="button">Loop Selection</button>
+            <button id="studyStopBtn" type="button">Stop</button>
+            <button id="studyAnalyzeBtn" type="button" class="primary">Analyze Selection</button>
+            <label>Master<input id="studyVolumeInput" type="range" min="0" max="1" step="0.01" value="0.55" /></label>
+            <label>Speed<select id="studySpeedInput"><option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option></select></label>
+          </div>
+          <p id="studyStatus" role="status" aria-live="polite"></p>
+          <details class="study-settings"><summary>Chord detection settings</summary>
+            <div class="study-toolbar">
+              <label>Known key override<input id="studyKeyInput" type="text" placeholder="Auto / song key" title="C, F#, Bb, Am…" /></label>
+              <label>Low frequency (Hz)<input id="studyLowInput" type="number" min="20" max="500" value="65" /></label>
+              <label>High frequency (Hz)<input id="studyHighInput" type="number" min="500" max="5000" value="1800" /></label>
+              <label>Candidates<input id="studyAlternativesInput" type="number" min="1" max="12" value="6" /></label>
+              <label><input id="studySimplifyInput" type="checkbox" checked /> Simplify chords</label>
+            </div>
+          </details>
+          <div class="study-result-toolbar">
+            <label>Analysis history<select id="studyRunInput"></select></label>
+            <label>Compare with<select id="studyCompareInput"></select></label>
+          </div>
+          <div id="studyResult" class="study-result"></div>
+          <div class="study-save-fields">
+            <label>Study name<input id="studyNameInput" type="text" placeholder="e.g. Chorus passing chord" /></label>
+            <label>Corrected chord (optional)<input id="studyCorrectionInput" type="text" placeholder="Your own chord label" /></label>
+            <label class="study-notes">Study notes<textarea id="studyNotesInput" rows="2" placeholder="What you hear, voicing, or questions to revisit"></textarea></label>
+            <button id="studySaveBtn" type="button">Save Study</button>
+          </div>
+        </div>
+      </section>
       </main>
       <footer id="appFooter" class="global-footer">
         <span class="global-footer-brand">ChordPilot</span>
@@ -837,6 +905,7 @@
     </dialog>
     <script src="./web-session-dialog.js"></script>
     <script src="./web-bridge.js"></script>
+    <script src="./study-model.js"></script>
     <script src="./state.js"></script>
     <script src="./transpose.js"></script>
     <script src="./shell.js"></script>
@@ -846,6 +915,8 @@
     <script src="./stems.js"></script>
     <script src="./metronome.js"></script>
     <script src="./actions.js"></script>
+    <script src="./study.js"></script>
+    <script src="./study-playback.js"></script>
     <script src="./keyboard.js"></script>
     <script src="./renderer.js"></script>
   </body>

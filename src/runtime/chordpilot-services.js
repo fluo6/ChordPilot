@@ -5,6 +5,17 @@ const path = require("node:path");
 
 const downloadPercentRegex = /\[download\]\s+([0-9]+(?:\.[0-9]+)?)%/;
 
+function validateStudyInputs(sources, start, end) {
+  if (!Array.isArray(sources) || !sources.length || sources.some((name) => !["full_mix", "bass", "other", "vocals", "drums"].includes(name))) {
+    throw new Error("Select at least one available audio source.");
+  }
+  if (sources.includes("full_mix") && sources.length > 1) throw new Error("Full Mix cannot be combined with individual stems.");
+  if (typeof start !== "number" || typeof end !== "number" || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end - start < .05 - 1e-9) {
+    throw new Error("Select at least 0.05 seconds with valid start and end times.");
+  }
+  return [...new Set(sources)];
+}
+
 function clampNumber(value, fallback, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -182,6 +193,7 @@ function createChordPilotServices({
   const log = emitLog || (() => {});
   const get = httpsGet || https.get;
   const previews = new Set();
+  const studySourcePaths = new Map();
   const directories = [tempDir, coverDir, importDir, previewDir].filter(
     Boolean,
   );
@@ -743,7 +755,7 @@ function createChordPilotServices({
   }
 
   async function analyze({ audioPath, mode = "fast", options = {} } = {}) {
-    return enrichChartPayload(
+    const chart = enrichChartPayload(
       await runBackend([
         "analyze",
         audioPath,
@@ -753,6 +765,29 @@ function createChordPilotServices({
         JSON.stringify(options),
       ]),
     );
+    rememberStudySources(audioPath, chart);
+    return chart;
+  }
+
+  function rememberStudySources(audioPath, chart) {
+    if (!audioPath) return;
+    const stems = chart?.stems?.ok ? chart.stems.stems || [] : [];
+    studySourcePaths.set(path.resolve(audioPath), Object.fromEntries(stems.filter((stem) => stem?.path).map((stem) => [stem.name, stem.path])));
+  }
+
+  function resolveStudySourcePaths(audioPath, sources) {
+    if (!audioPath || typeof audioPath !== "string") throw new Error("Original audio is unavailable.");
+    validateStudyInputs(sources, 0, 1);
+    const available = { ...(studySourcePaths.get(path.resolve(audioPath)) || {}), full_mix: audioPath };
+    return Object.fromEntries(sources.map((name) => {
+      if (!available[name] || !fs.existsSync(available[name])) throw new Error(`Selected source ${name} is unavailable. Run high-quality analysis to prepare stems.`);
+      return [name, available[name]];
+    }));
+  }
+
+  async function analyzeRange({ audioPath, sourcePaths, start, end, options = {} } = {}) {
+    validateStudyInputs(Object.keys(sourcePaths || {}), start, end);
+    return runBackend(["analyze-range", audioPath, "--sources", JSON.stringify(sourcePaths), "--start", String(start), "--end", String(end), "--options", JSON.stringify(options)]);
   }
 
   async function exportChart({ chart, format, outputPath } = {}) {
@@ -790,6 +825,7 @@ function createChordPilotServices({
     if (session?.chart) {
       session.chart = enrichChartPayload(session.chart);
     }
+    rememberStudySources(session?.audio?.path, session?.chart);
     return { path: sessionPath, session };
   }
 
@@ -805,6 +841,8 @@ function createChordPilotServices({
     processAudioPreview,
     exportAudioTrack,
     analyze,
+    analyzeRange,
+    resolveStudySourcePaths,
     exportChart,
     readSessionFile,
     writeSessionFile,
@@ -814,6 +852,7 @@ function createChordPilotServices({
 }
 
 module.exports = {
+  validateStudyInputs,
   createChordPilotServices,
   buildAudioPreviewFilter,
   normalizeYoutubeUrl,
