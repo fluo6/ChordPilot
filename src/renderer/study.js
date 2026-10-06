@@ -49,7 +49,61 @@ function setStudyRange(start, end) {
   state.study.draft.start = start; state.study.draft.end = end;
   studyChanged(); renderStudy();
 }
+let studyWaveDrag = null;
+let studyWaveSuppressClick = false;
+function startStudyWaveDrag(event, body, viewport, duration) {
+  studyWaveSuppressClick = false;
+  if (event.button !== 0 || event.isPrimary === false || event.ctrlKey || event.metaKey || state.study.selectMode) return false;
+  const rect = body.getBoundingClientRect();
+  if (!rect.width || !Number.isFinite(duration) || duration <= 0) return false;
+  const draft = state.study.draft;
+  const boundary = event.target.closest?.("[data-study-boundary]")?.dataset.studyBoundary || event.target.dataset?.studyBoundary;
+  const validRange = !studyRangeError(draft.start, draft.end, duration);
+  const kind = validRange && ["start", "end"].includes(boundary) ? boundary : validRange && event.target.closest?.(".study-range-overlay") ? "move" : "pan";
+  studyWaveDrag = { owner: state.study, identity: studyAudioIdentity(), body, viewport, duration, width: rect.width,
+    pointerId: event.pointerId, clientX: event.clientX, scrollLeft: viewport.scrollLeft,
+    start: draft.start, end: draft.end, kind, moved: false };
+  event.preventDefault(); body.setPointerCapture(event.pointerId);
+  body.classList.add(kind === "pan" ? "study-panning" : "study-range-dragging");
+  return true;
+}
+function moveStudyWaveDrag(event) {
+  const drag = studyWaveDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (state.study !== drag.owner || studyAudioIdentity() !== drag.identity || state.currentView !== "song" || state.editorPanel !== "study") {
+    finishStudyWaveDrag(event); return;
+  }
+  const delta = event.clientX - drag.clientX;
+  if (!drag.moved && Math.abs(delta) < 3) return;
+  drag.moved = true; event.preventDefault();
+  if (drag.kind === "pan") {
+    drag.viewport.scrollLeft = Math.max(0, Math.min(drag.viewport.scrollWidth - drag.viewport.clientWidth, drag.scrollLeft - delta));
+    return;
+  }
+  const round = (value) => Math.round(value * 1000) / 1000;
+  const seconds = delta / drag.width * drag.duration;
+  let start = drag.start; let end = drag.end;
+  if (drag.kind === "start") start = Math.max(0, Math.min(end - .05, start + seconds));
+  else if (drag.kind === "end") end = Math.max(start + .05, Math.min(drag.duration, end + seconds));
+  else {
+    const shift = Math.max(-start, Math.min(drag.duration - end, seconds));
+    start += shift; end += shift;
+  }
+  state.study.selectionAnchor = null;
+  setStudyRange(round(start), round(end));
+}
+function finishStudyWaveDrag(event) {
+  const drag = studyWaveDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  studyWaveSuppressClick = drag.moved;
+  studyWaveDrag = null;
+  drag.body.classList.remove("study-panning", "study-range-dragging");
+  if (!drag.body.hasPointerCapture || drag.body.hasPointerCapture(drag.pointerId)) drag.body.releasePointerCapture(drag.pointerId);
+}
 function handleStudyRangeClick(event, body, duration, openWhenComplete = false) {
+  if (!openWhenComplete && studyWaveSuppressClick) {
+    studyWaveSuppressClick = false; event.preventDefault(); event.stopImmediatePropagation(); return true;
+  }
   if (!(event.ctrlKey || event.metaKey || (!openWhenComplete && state.study.selectMode))) return false;
   if (event.target?.closest?.(".lane-controls, .lane-label")) return false;
   const rect = body.getBoundingClientRect();
@@ -164,6 +218,7 @@ function renderStudyWaveform() {
   const valid = !studyRangeError(draft.start, draft.end, duration);
   range.hidden = !valid;
   if (valid) { range.style.left = `${draft.start / duration * 100}%`; range.style.width = `${(draft.end - draft.start) / duration * 100}%`; }
+  body.classList.toggle("study-selecting", state.study.selectMode);
   anchor.hidden = state.study.selectionAnchor === null;
   if (!anchor.hidden) anchor.style.left = `${state.study.selectionAnchor / duration * 100}%`;
   const ruler = studyElement("studyTimeRuler"); ruler.replaceChildren();
@@ -171,7 +226,7 @@ function renderStudyWaveform() {
     const label = studyText("span", `${(duration * index / 10).toFixed(1)}s`);
     label.style.left = `${index * 10}%`; ruler.append(label);
   }
-  studyElement("studyWaveHint").textContent = peaks.length ? "Original audio • Ctrl/⌘-click start and end, or enable Select Range." : "Original audio • Use the time ruler to select. Analyze the song for a waveform preview.";
+  studyElement("studyWaveHint").textContent = "Drag waveform to pan; drag selection to move it or its edges to resize. Ctrl/⌘-click endpoints or enable Select Range." + (peaks.length ? "" : " Analyze the song for a waveform preview.");
 }
 function renderStudyResult() {
   const container = studyElement("studyResult"); container.replaceChildren();
@@ -269,6 +324,10 @@ function initializeStudy() {
   window.addEventListener("beforeunload", stopStudyPlayback);
   studyElement("studySaveBtn").addEventListener("click", () => saveCurrentStudy());
   studyElement("studyWaveBody").addEventListener("click", (event) => handleStudyRangeClick(event, studyElement("studyWaveBody"), studyDuration()), true);
+  const waveBody = studyElement("studyWaveBody");
+  waveBody.addEventListener("pointerdown", (event) => startStudyWaveDrag(event, waveBody, studyElement("studyWaveViewport"), studyDuration()));
+  waveBody.addEventListener("pointermove", moveStudyWaveDrag);
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((name) => waveBody.addEventListener(name, finishStudyWaveDrag));
   studyElement("studyZoomInput").addEventListener("input", renderStudyWaveform);
   document.querySelectorAll("[data-study-source]").forEach((input) => input.addEventListener("change", () => {
     const name = input.dataset.studySource;

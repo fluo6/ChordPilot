@@ -49,3 +49,11 @@ Deferred Minor findings:
 - Keep the feature branch local without merging or publishing. Cost: integration remains a separate step.
 
 The reviewer excluded unrelated baseline edits from judgment; arbitrary musical accuracy is not inferred from synthesized fixtures. Evidence supports the tested interval/source workflow and regression cases, with native playback limits stated above.
+
+## Waveform gesture follow-up, 2026-10-06
+
+Added direct waveform dragging to pan the zoomed viewport, selection dragging to move the entire interval, and visible edge handles to resize it. Edits preserve the 0.05-second minimum, clamp to original song bounds, stop study playback, mark previous evidence stale, and leave run snapshots intact. Modifier/toggle two-click selection retains priority. Pointer capture handles release outside the waveform; song/view ownership checks prevent an old gesture editing a replacement song.
+
+Four new regressions were observed failing before implementation, then passed. Focused model/UI/playback: **21/21**. Full JavaScript suite with the same two explicitly excluded baseline failures: **192/192 pass**. No Python behavior changed.
+
+Actual browser mouse drags at 2x zoom panned the viewport by 100px without changing 3–5 seconds, resized the end to 6.110 seconds and the start to 2.408 seconds, then moved the selection to 3.703–7.405 seconds while preserving its 3.702-second length. Subsequent Ctrl-click endpoints produced 5.993–12.004 seconds. The browser UI showed each corresponding timestamp update and the new gesture hint.

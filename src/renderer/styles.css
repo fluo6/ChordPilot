@@ -846,9 +846,14 @@ input[type="checkbox"] {
 .study-toolbar input[type="text"] { width: 140px; }
 .study-zoom { flex: 1; min-width: 120px; }
 .study-wave-viewport { overflow-x: auto; border: 1px solid #303947; border-radius: 8px; background: #111c26; }
-.study-wave-body { position: relative; height: 128px; cursor: crosshair; }
+.study-wave-body { position: relative; height: 128px; cursor: grab; touch-action: none; user-select: none; }
 .study-wave-body canvas { display: block; width: 100%; height: 100px; }
-.study-range-overlay { position: absolute; top: 0; height: 100px; background: #77b6c744; border-left: 2px solid #37788b; border-right: 2px solid #37788b; pointer-events: none; }
+.study-range-overlay { position: absolute; top: 0; height: 100px; background: #77b6c744; border-left: 2px solid #77b6c7; border-right: 2px solid #77b6c7; cursor: move; }
+.study-range-handle { position: absolute; top: 0; bottom: 0; width: 12px; background: #77b6c777; cursor: ew-resize; }
+.study-range-start { left: 0; transform: translateX(-100%); }
+.study-range-end { right: 0; transform: translateX(100%); }
+.study-wave-body.study-selecting, .study-wave-body.study-selecting * { cursor: crosshair; }
+.study-wave-body.study-panning, .study-wave-body.study-panning * { cursor: grabbing; }
 .study-range-anchor { position: absolute; top: 0; height: 100px; border-left: 2px dashed #37788b; pointer-events: none; }
 .study-time-ruler { position: relative; height: 28px; color: #aabaca; font-size: 10px; }
 .study-time-ruler span { position: absolute; top: 5px; transform: translateX(-50%); }

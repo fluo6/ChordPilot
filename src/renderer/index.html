@@ -818,7 +818,10 @@
           <div id="studyWaveViewport" class="study-wave-viewport">
             <div id="studyWaveBody" class="study-wave-body">
               <canvas id="studyWaveCanvas" aria-label="Original song waveform"></canvas>
-              <div id="studyRangeOverlay" class="study-range-overlay" hidden></div>
+                <div id="studyRangeOverlay" class="study-range-overlay" hidden>
+                  <div class="study-range-handle study-range-start" data-study-boundary="start" title="Drag selection start"></div>
+                  <div class="study-range-handle study-range-end" data-study-boundary="end" title="Drag selection end"></div>
+                </div>
               <div id="studyRangeAnchor" class="study-range-anchor" hidden></div>
               <div id="studyTimeRuler" class="study-time-ruler"></div>
             </div>

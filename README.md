@@ -19,6 +19,11 @@ on a waveform, or enable **Select Range** and click twice. Selection also works
 on Song waveform lanes and opens the study tab. Start/End fields accept precise
 seconds; select at least 0.05 seconds.
 
+In Local Study, **drag the waveform to pan**, **drag the highlighted selection
+to move the range**, or **drag either edge to resize it**. Zoom in for finer
+control. Range edits update Start/End immediately and keep existing analysis
+history intact; analyze again to get results for the changed interval.
+
 **Bass + Other** is the default: Other supplies harmonic notes and Bass supplies
 root or inversion evidence. Choose other available stems or explicitly **Use
 Full Mix**. Prepare stems through high-quality song analysis when needed; old
