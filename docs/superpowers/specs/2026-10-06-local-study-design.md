@@ -1,7 +1,7 @@
 # ChordPilot Local Study Design
 
 **Date:** 2026-10-06
-**Status:** Feature scope approved in chat; written spec awaiting review
+**Status:** Written spec approved in chat on 2026-10-06; implementation planning in progress
 
 ## Purpose and success criteria
 
