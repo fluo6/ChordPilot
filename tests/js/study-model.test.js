@@ -43,6 +43,16 @@ test("saving edits preserves the selected historical run", () => {
   assert.equal(saved.study.selected_run_id, "r1");
 });
 
+test("octave evidence survives normalization and serialization independently from pitch classes", () => {
+  const m = model();
+  const pitch = { midi: 60, note: "C4", strength: .7, frequency_hz: 261.63 };
+  const record = { id: "s1", start: 1, end: 2, sources: ["other"], runs: [{ id: "r1", ...result(), evidence: { detected_notes: [{ note: "C", strength: .7 }], detected_pitches: [pitch] }, source_evidence: { other: { detected_pitches: [pitch] } }, algorithm_version: "local-study-v2" }] };
+  const restored = m.normalizeStudies(JSON.parse(JSON.stringify([record])));
+  assert.equal(restored[0].runs[0].evidence.detected_pitches[0].midi, 60);
+  assert.equal(restored[0].runs[0].source_evidence.other.detected_pitches[0].note, "C4");
+  assert.equal(restored[0].runs[0].algorithm_version, "local-study-v2");
+});
+
 test("malformed nested run evidence is skipped without losing valid history", () => {
   const m = model();
   const valid = { id: "good", ...result() };
@@ -52,7 +62,9 @@ test("malformed nested run evidence is skipped without losing valid history", ()
     { id: "alternatives", ...result(), alternatives: [null] },
     { id: "reasons", ...result(), alternatives: [{ chord: "C", score: .8, reasons: "broken" }] },
     { id: "fingerprint", ...result(), input_fingerprints: { other: null } },
-    { id: "digest", ...result(), input_fingerprints: { other: { sample_sha256: 12 } } }
+    { id: "digest", ...result(), input_fingerprints: { other: { sample_sha256: 12 } } },
+    { id: "pitches", ...result(), evidence: { detected_pitches: "broken" } },
+    { id: "midi", ...result(), evidence: { detected_pitches: [{ midi: 500, note: "C4", strength: .5, frequency_hz: 261.63 }] } }
   ];
   const record = { id: "s1", start: 1, end: 2, sources: ["other"], runs: [valid, ...invalid], selected_run_id: "digest" };
   const normalized = m.normalizeStudies([record]);

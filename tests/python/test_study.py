@@ -40,6 +40,27 @@ class StudyTests(unittest.TestCase):
         self.assertEqual(result["chord_confidence"], 0)
         self.assertEqual(result["key_context"], {"key": "Am", "origin": "override"})
         self.assertEqual(result["range"], [.2, .8])
+        self.assertEqual(result["evidence"]["detected_pitches"], [])
+
+    def test_detected_pitches_distinguish_octaves_and_include_selected_bass(self):
+        octaves = self.wav("octaves.wav", [130.8128, 523.2511])
+        result = study.analyze_range(octaves, {"full_mix": octaves}, .2, 1.2)
+        pitches = result["evidence"]["detected_pitches"]
+        self.assertEqual({note["midi"] for note in pitches}, {48, 72})
+        self.assertEqual({note["note"] for note in pitches}, {"C3", "C5"})
+        for note in pitches:
+            self.assertGreater(note["frequency_hz"], 0)
+            self.assertGreater(note["strength"], 0)
+        other = self.wav("other.wav", [261.6256, 329.6276, 391.9954])
+        bass = self.wav("bass.wav", [82.4069])
+        result = study.analyze_range(other, {"bass": bass, "other": other}, .2, 1.2)
+        self.assertEqual({note["midi"] for note in result["evidence"]["detected_pitches"]}, {40, 60, 64, 67})
+        self.assertEqual(result["source_evidence"]["bass"]["detected_pitches"][0]["note"], "E2")
+
+    def test_pitch_detection_covers_keyboard_extremes_and_accidentals(self):
+        audio = self.wav("keyboard.wav", [27.5, 277.1826, 4186.009])
+        result = study.analyze_range(audio, {"full_mix": audio}, .2, 1.2)
+        self.assertEqual({note["midi"] for note in result["evidence"]["detected_pitches"]}, {21, 61, 108})
 
     def test_outside_notes_do_not_change_evidence_or_crop_digest(self):
         audio = self.wav("song.wav", [261.63, 329.63, 392])
@@ -63,6 +84,7 @@ class StudyTests(unittest.TestCase):
         write(audio, self.sr, data)
         result = study.analyze_range(audio, {"full_mix": audio}, .04, .09)
         self.assertEqual(result["chord"], "N.C.")
+        self.assertEqual(result["evidence"]["detected_pitches"], [])
 
     def test_bass_other_roles_and_bass_only(self):
         mix = self.wav("mix.wav")

@@ -7,15 +7,50 @@ from pathlib import Path
 from typing import Any
 
 from chordpilot_audio import load_audio
-from chordpilot_common import normalize_analysis_options, normalize_known_key, log
+from chordpilot_common import normalize_analysis_options, normalize_known_key, log, PITCH_NAMES
 from chordpilot_chords import (
     chroma_for_segment, chord_evidence, detected_pitch_confidence,
     estimate_key_from_chroma, rank_chord_candidates,
 )
 from chordpilot_analysis import estimate_bass_reference
 
-STUDY_ALGORITHM_VERSION = "local-study-v1"
+STUDY_ALGORITHM_VERSION = "local-study-v2"
 SOURCE_NAMES = {"full_mix", "bass", "other", "vocals", "drums"}
+
+
+def detected_pitches_for_crop(crop: Any, sr: int, np: Any) -> list[dict[str, Any]]:
+    """Keep spectral peaks in MIDI space instead of folding them into pitch classes."""
+    # Spectral pitches can include instrumental overtones; they are not a played-note transcription.
+    frame = 2 ** math.ceil(math.log2(max(2048, sr * .5)))
+    frequencies = np.fft.rfftfreq(frame, 1 / sr)
+    energy, frequency_sum = {}, {}
+    for offset in range(0, len(crop), frame // 2):
+        chunk = crop[offset:offset + frame]
+        if len(chunk) < 3:
+            continue
+        # Window the actual crop before zero padding; never pull neighboring samples.
+        spectrum = np.abs(np.fft.rfft(chunk * np.hanning(len(chunk)), n=frame))
+        maximum = float(spectrum.max())
+        if maximum <= 1e-9:
+            continue
+        peaks = np.flatnonzero((spectrum[1:-1] > spectrum[:-2]) & (spectrum[1:-1] >= spectrum[2:])) + 1
+        for index in peaks:
+            if spectrum[index] < maximum * .1 or not 20 <= frequencies[index] <= 4500:
+                continue
+            left, center, right = spectrum[index - 1:index + 2]
+            denominator = left - 2 * center + right
+            adjustment = .5 * (left - right) / denominator if denominator else 0
+            frequency = float((index + adjustment) * sr / frame)
+            midi = round(69 + 12 * math.log2(frequency / 440))
+            if not 21 <= midi <= 108:
+                continue
+            weight = float(center ** 2 / len(chunk))
+            energy[midi] = energy.get(midi, 0) + weight
+            frequency_sum[midi] = frequency_sum.get(midi, 0) + frequency * weight
+    total = sum(energy.values())
+    return [{"midi": midi, "note": f"{PITCH_NAMES[midi % 12]}{midi // 12 - 1}",
+             "frequency_hz": round(frequency_sum[midi] / energy[midi], 2), "strength": round(energy[midi] / total, 3)}
+            for midi in sorted(energy, key=energy.get, reverse=True) if energy[midi] / total >= .02]
 
 
 def validate_range(start: float, end: float, duration: float) -> tuple[float, float]:
@@ -62,6 +97,7 @@ def analyze_range(audio_path: str, source_paths: dict[str, str], start: float,
         crops[name] = (crop, sr)
         chromas[name] = chroma_for_segment(crop, sr, 0, len(crop) / sr, np, settings)
         evidence[name] = chord_evidence(chromas[name], start, end, name, np)
+        evidence[name]["detected_pitches"] = detected_pitches_for_crop(crop, sr, np)
         stat = file.stat()
         digest = hashlib.sha256(str(sr).encode("ascii") + crop.astype("<f4").tobytes()).hexdigest()
         fingerprints[name] = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns, "sample_sha256": digest}
@@ -80,13 +116,25 @@ def analyze_range(audio_path: str, source_paths: dict[str, str], start: float,
     best = ranked[0]
     pitch_confidence = detected_pitch_confidence(chroma, np)
     confidence = round(max(0, min(.98, best["score"] * .72 + pitch_confidence * .28)), 3) if active else 0
+    pitched_sources = [item["detected_pitches"] for item in evidence.values() if item["detected_pitches"]]
+    pitches = {}
+    for source in pitched_sources:
+        for pitch in source:
+            midi = pitch["midi"]
+            item = pitches.setdefault(midi, {**pitch, "strength": 0, "frequency_hz": 0})
+            item["strength"] += pitch["strength"] / len(pitched_sources)
+            item["frequency_hz"] += pitch["frequency_hz"] * pitch["strength"] / len(pitched_sources)
+    detected = [{**item, "frequency_hz": round(item["frequency_hz"] / item["strength"], 2), "strength": round(item["strength"], 3)}
+                for item in sorted(pitches.values(), key=lambda item: item["strength"], reverse=True)]
+    combined_evidence = chord_evidence(chroma, start, end, ", ".join(harmonic_names), np)
+    combined_evidence["detected_pitches"] = detected
     log(f"study: analyzed {start:.3f}-{end:.3f}s ({', '.join(source_paths)})")
     return {
         "chord": best["chord"], "chord_confidence": confidence,
         "pitch_confidence": pitch_confidence,
         "alternatives": [{key: item.get(key, [] if key == "reasons" else 0) for key in ("chord", "score", "raw_score", "reasons")}
                          for item in ranked[:settings["chord_alternatives"]]],
-        "evidence": chord_evidence(chroma, start, end, ", ".join(harmonic_names), np),
+        "evidence": combined_evidence,
         "source_evidence": evidence, "bass_reference": bass_reference,
         "range": [start, end], "sources": list(source_paths), "settings": settings,
         "key_context": {"key": key, "origin": origin}, "input_fingerprints": fingerprints,

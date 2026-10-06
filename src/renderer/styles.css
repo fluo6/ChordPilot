@@ -870,6 +870,11 @@ input[type="checkbox"] {
 .study-candidates { display: flex; flex-wrap: wrap; gap: 8px; }
 .study-stale { color: #efcb8b; background: #382b19; padding: 8px; border-radius: 6px; }
 .study-result .piano-evidence { max-width: 500px; }
+.study-result .piano-exact { max-width: none; min-width: 0; }
+.piano-viewport { overflow-x: auto; }
+.piano-exact .piano-keys { min-width: 1400px; height: 76px; }
+.piano-exact .white-key { height: 74px; font-size: 10px; }
+.piano-exact .black-key { height: 48px; font-size: 8px; }
 .piano-key.bass-tone::after { content: ""; position: absolute; width: 7px; height: 7px; background: #de9450; border-radius: 50%; top: 10px; left: 50%; transform: translateX(-50%); }
 .study-list-row { display: flex; margin: 8px 0; gap: 4px; }
 .study-list-item { flex: 1; min-width: 0; text-align: left; white-space: pre-line; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; padding: 10px; }

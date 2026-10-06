@@ -57,3 +57,13 @@ Added direct waveform dragging to pan the zoomed viewport, selection dragging to
 Four new regressions were observed failing before implementation, then passed. Focused model/UI/playback: **21/21**. Full JavaScript suite with the same two explicitly excluded baseline failures: **192/192 pass**. No Python behavior changed.
 
 Actual browser mouse drags at 2x zoom panned the viewport by 100px without changing 3–5 seconds, resized the end to 6.110 seconds and the start to 2.408 seconds, then moved the selection to 3.703–7.405 seconds while preserving its 3.702-second length. Subsequent Ctrl-click endpoints produced 5.993–12.004 seconds. The browser UI showed each corresponding timestamp update and the new gesture hint.
+
+## Octave keyboard follow-up, 2026-10-06
+
+New `local-study-v2` runs preserve detected spectral peaks as MIDI pitch, octave note name, measured frequency, and strength. The 88-key A0–C8 piano highlights only those exact MIDI keys, including selected bass pitches. Undetected octaves do not glow or receive chord outlines. The scrollable keyboard initially centers the detected note range. Old runs retain their pitch-class display and explicitly invite reanalysis for octaves. Saved comparisons include octave note names when available.
+
+Signal regressions distinguish simultaneous C3/C5, E2 bass with C4/E4/G4 accompaniment, and keyboard extremes A0/C8 plus C#4. Silence and out-of-range samples remain excluded. Keyboard/normalization regressions cover all 88 keys, octave-specific and accidental highlights, malformed evidence, and persisted MIDI evidence. Failing cases were observed before implementation/fixes.
+
+Final JavaScript suite with the same two baseline exclusions: **195/195 pass**; Python: **70/70 pass**, including ten study signal tests. A fresh read-only review found no Important issues and additionally checked pure A0–C4 tones in 50ms–1s crops. Real browser analysis showed only C3/C5/E5/G5 highlighted and preserved exactly those highlights after Save Session/reload/reopen.
+
+These are octave-specific spectral pitch estimates, not guaranteed played-note transcription. Instrumental harmonics may also appear; closely spaced pitches in very short intervals can be unresolved. This preserves honest evidence rather than inventing octave positions for pitch-class-only history.

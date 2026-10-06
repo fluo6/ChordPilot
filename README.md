@@ -32,8 +32,10 @@ Study analysis requires NumPy/SciPy and the existing audio decoder and reports
 unavailable dependencies rather than generating a draft chord.
 
 **Analyze Selection** returns one chord suggestion, alternatives, confidence,
-and a piano view of detected pitch classes. These notes do not claim exact
-octaves. **Play Selection**, **Loop Selection**, and Space audition the selected
+and a scrollable **88-key piano (A0–C8)**. New runs estimate octave-specific
+pitches such as C3 and C5, and highlight only those detected keys, including
+selected bass notes. Older runs retain their pitch-class evidence; reanalyze
+to get octave highlights. **Play Selection**, **Loop Selection**, and Space audition the selected
 original sources; chart transposition and pitch-shift previews do not change
 study audio or evidence. Master volume and playback speed remain adjustable.
 

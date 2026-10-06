@@ -46,7 +46,10 @@ function normalizeStudyRun(run) {
       !Number.isFinite(run.chord_confidence) || !Number.isFinite(run.pitch_confidence)) return null;
   const object = (value) => value && typeof value === "object" && !Array.isArray(value);
   const evidence = (value) => object(value) && (value.detected_notes === undefined ||
-    Array.isArray(value.detected_notes) && value.detected_notes.every((note) => object(note) && typeof note.note === "string" && Number.isFinite(note.strength)));
+    Array.isArray(value.detected_notes) && value.detected_notes.every((note) => object(note) && typeof note.note === "string" && Number.isFinite(note.strength))) &&
+    (value.detected_pitches === undefined || Array.isArray(value.detected_pitches) && value.detected_pitches.every((note) =>
+      object(note) && Number.isInteger(note.midi) && note.midi >= 21 && note.midi <= 108 && typeof note.note === "string" &&
+      Number.isFinite(note.strength) && note.strength >= 0 && note.strength <= 1 && Number.isFinite(note.frequency_hz) && note.frequency_hz > 0));
   if (run.evidence !== undefined && !evidence(run.evidence)) return null;
   if (run.source_evidence !== undefined && (!object(run.source_evidence) || !Object.values(run.source_evidence).every(evidence))) return null;
   if (run.alternatives !== undefined && (!Array.isArray(run.alternatives) || !run.alternatives.every((item) =>

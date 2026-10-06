@@ -839,43 +839,49 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   piano.className = "piano-evidence";
   piano.title = "Detected notes glow by strength; outlined keys are notes in the selected chord.";
 
-  const strengths = detectedStrengthMap(bar);
+  const strengths = options.exactPitches
+    ? new Map((bar?.evidence?.detected_pitches || []).map((item) => [item.midi, item.strength]))
+    : detectedStrengthMap(bar);
   const chordTones = chordToneSet(chordSymbol);
   const keys = document.createElement("div");
   keys.className = "piano-keys";
 
-  const octaves = options.pitchClassesOnly ? [3] : PIANO_OCTAVES;
-  octaves.forEach((octave) => {
-    WHITE_KEYS.forEach((note) => {
+  const octaves = options.exactPitches ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : options.pitchClassesOnly ? [3] : PIANO_OCTAVES;
+  const whites = octaves.flatMap((octave) => WHITE_KEYS.map((note) => ({ note, octave, midi: (octave + 1) * 12 + pitchIndex(note) })))
+    .filter((item) => !options.exactPitches || item.midi >= 21 && item.midi <= 108);
+  whites.forEach(({ note, octave, midi }) => {
       const key = document.createElement("div");
-      const strength = strengths.get(note) || 0;
+      const strength = strengths.get(options.exactPitches ? midi : note) || 0;
       key.className = "piano-key white-key";
+      key.dataset.midi = String(midi); key.style.width = `${100 / whites.length}%`;
       key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
       key.classList.toggle("detected", strength > 0);
-      key.classList.toggle("chord-tone", chordTones.has(note));
-      key.classList.toggle("bass-tone", normalizePitchName(options.bassNote) === note);
+      key.classList.toggle("chord-tone", chordTones.has(note) && (!options.exactPitches || strength > 0));
+      key.classList.toggle("bass-tone", options.exactPitches ? options.bassMidi === midi : normalizePitchName(options.bassNote) === note);
       key.title = `${note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
       label.textContent = options.pitchClassesOnly ? note : `${note}${octave}`;
       key.appendChild(label);
       keys.appendChild(key);
-    });
   });
 
   octaves.forEach((octave, octaveIndex) => {
     BLACK_KEYS.forEach((item) => {
       const key = document.createElement("div");
-      const strength = strengths.get(item.note) || 0;
-      const whiteIndex = (octaveIndex * WHITE_KEYS.length) + item.afterWhite + 1;
+      const midi = (octave + 1) * 12 + pitchIndex(item.note);
+      if (options.exactPitches && (midi < 21 || midi > 108)) return;
+      const strength = strengths.get(options.exactPitches ? midi : item.note) || 0;
+      const whiteIndex = options.exactPitches ? whites.findIndex((white) => white.octave === octave && white.note === WHITE_KEYS[item.afterWhite]) + 1 : (octaveIndex * WHITE_KEYS.length) + item.afterWhite + 1;
       key.className = "piano-key black-key";
-      key.style.left = `${(whiteIndex / (WHITE_KEYS.length * octaves.length)) * 100}%`;
+      key.dataset.midi = String(midi); key.style.width = `${65 / whites.length}%`;
+      key.style.left = `${(whiteIndex / whites.length) * 100}%`;
       key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
       key.classList.toggle("detected", strength > 0);
-      key.classList.toggle("chord-tone", chordTones.has(item.note));
-      key.classList.toggle("bass-tone", normalizePitchName(options.bassNote) === item.note);
+      key.classList.toggle("chord-tone", chordTones.has(item.note) && (!options.exactPitches || strength > 0));
+      key.classList.toggle("bass-tone", options.exactPitches ? options.bassMidi === midi : normalizePitchName(options.bassNote) === item.note);
       key.title = `${item.note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(item.note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
-      label.textContent = item.note;
+      label.textContent = options.exactPitches ? `${item.note}${octave}` : item.note;
       key.appendChild(label);
       keys.appendChild(key);
     });
@@ -883,8 +889,12 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
 
   const legend = document.createElement("div");
   legend.className = "piano-legend";
-  legend.textContent = `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
-  piano.append(keys, legend);
+  legend.textContent = options.exactPitches ? "Glow = detected pitch estimate, outline = detected chord tones, dot = detected bass pitch · scroll for all 88 keys" : `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
+  if (options.exactPitches) {
+    piano.classList.toggle("piano-exact", true);
+    const viewport = document.createElement("div"); viewport.className = "piano-viewport";
+    viewport.append(keys); piano.append(viewport, legend);
+  } else piano.append(keys, legend);
   return piano;
 }
 

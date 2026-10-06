@@ -246,9 +246,17 @@ function renderStudyResult() {
   container.append(studyText("p", `${run.range[0].toFixed(3)}–${run.range[1].toFixed(3)}s · ${run.sources.join(" + ")} · ${run.key_context?.key || run.settings?.known_key || "?"} key`));
   container.append(studyText("p", `Chord confidence ${Math.round(run.chord_confidence * 100)}% · Pitch focus ${Math.round(run.pitch_confidence * 100)}%`, "study-muted"));
   container.append(studyText("p", matches ? "Saved analysis snapshot · Original audio" : "This result uses earlier inputs. Analyze again for the current selection.", matches ? "study-muted" : "study-stale"));
-  const piano = createPianoEvidence({ chord: run.chord, evidence: run.evidence }, run.chord, { pitchClassesOnly: true, bassNote: run.bass_reference?.note });
-  container.append(studyText("h3", "Pitch classes"), piano);
-  container.append(studyText("p", (run.evidence?.detected_notes || []).map((note) => `${note.note} ${Math.round(note.strength * 100)}%`).join(" · ") || "No strong pitched notes detected."));
+  const exactPitches = Array.isArray(run.evidence?.detected_pitches);
+  const bassMidi = run.source_evidence?.bass?.detected_pitches?.find((pitch) => normalizePitchName(pitch.note.replace(/-?\d+$/, "")) === run.bass_reference?.note)?.midi;
+  const piano = createPianoEvidence({ chord: run.chord, evidence: run.evidence }, run.chord, { exactPitches, pitchClassesOnly: !exactPitches, bassMidi, bassNote: run.bass_reference?.note });
+  container.append(studyText("h3", exactPitches ? "Detected notes · A0–C8" : "Pitch classes · reanalyze for octaves"), piano);
+  const notes = exactPitches ? run.evidence.detected_pitches : run.evidence?.detected_notes || [];
+  container.append(studyText("p", notes.map((note) => `${note.note} ${Math.round(note.strength * 100)}%`).join(" · ") || "No strong pitched notes detected."));
+  if (exactPitches && notes.length) {
+    const viewport = piano.querySelector(".piano-viewport");
+    const positions = notes.map((note) => piano.querySelector(`[data-midi="${note.midi}"]`).offsetLeft);
+    viewport.scrollLeft = Math.max(0, (Math.min(...positions) + Math.max(...positions)) / 2 - viewport.clientWidth / 2);
+  }
   if (run.bass_reference) container.append(studyText("p", `Bass reference: ${run.bass_reference.note} · ${Math.round(run.bass_reference.confidence * 100)}% confidence`));
   const alternatives = studyText("div", "", "study-candidates");
   (run.alternatives || []).forEach((item) => {
@@ -266,7 +274,7 @@ function renderStudyResult() {
     const paired = compareStudyRuns(run, previous);
     container.append(studyText("h3", paired.sameInputs ? "Run comparison · same inputs" : "Run comparison · different inputs"));
     const fingerprints = (item) => Object.entries(item.input_fingerprints || {}).map(([name, value]) => `${name}: ${(value.sample_sha256 || "unknown").slice(0, 10)}`).join(" · ");
-    const fields = [["", "Current run", "Previous run"], ["Chord", run.chord, previous.chord], ["Confidence", run.chord_confidence, previous.chord_confidence], ["Range", run.range.join("–"), previous.range.join("–")], ["Sources", run.sources.join(" + "), previous.sources.join(" + ")], ["Settings", JSON.stringify(run.settings), JSON.stringify(previous.settings)], ["Algorithm", run.algorithm_version, previous.algorithm_version], ["Notes", (run.evidence?.detected_notes || []).map((n) => n.note).join(", "), (previous.evidence?.detected_notes || []).map((n) => n.note).join(", ")], ["Audio snapshot", fingerprints(run), fingerprints(previous)]];
+    const fields = [["", "Current run", "Previous run"], ["Chord", run.chord, previous.chord], ["Confidence", run.chord_confidence, previous.chord_confidence], ["Range", run.range.join("–"), previous.range.join("–")], ["Sources", run.sources.join(" + "), previous.sources.join(" + ")], ["Settings", JSON.stringify(run.settings), JSON.stringify(previous.settings)], ["Algorithm", run.algorithm_version, previous.algorithm_version], ["Notes", (run.evidence?.detected_pitches || run.evidence?.detected_notes || []).map((n) => n.note).join(", "), (previous.evidence?.detected_pitches || previous.evidence?.detected_notes || []).map((n) => n.note).join(", ")], ["Audio snapshot", fingerprints(run), fingerprints(previous)]];
     fields.forEach((row) => { const tr = document.createElement("tr"); row.forEach((text) => tr.append(studyText("td", String(text ?? "")))); table.append(tr); });
     container.append(table);
   }
