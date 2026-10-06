@@ -47,6 +47,7 @@ function newStudy() {
 }
 function setStudyRange(start, end) {
   state.study.draft.start = start; state.study.draft.end = end;
+  state.study.wavePanned = false;
   studyChanged(); renderStudy();
 }
 let studyWaveDrag = null;
@@ -77,7 +78,9 @@ function moveStudyWaveDrag(event) {
   if (!drag.moved && Math.abs(delta) < 3) return;
   drag.moved = true; event.preventDefault();
   if (drag.kind === "pan") {
+    const previousScroll = drag.viewport.scrollLeft;
     drag.viewport.scrollLeft = Math.max(0, Math.min(drag.viewport.scrollWidth - drag.viewport.clientWidth, drag.scrollLeft - delta));
+    if (drag.viewport.scrollLeft !== previousScroll) state.study.wavePanned = true;
     return;
   }
   const round = (value) => Math.round(value * 1000) / 1000;
@@ -199,6 +202,32 @@ async function analyzeStudySelection() {
 function studyText(tag, text, className = "") {
   const node = document.createElement(tag); node.textContent = text; node.className = className; return node;
 }
+function zoomStudyWaveform(value, clientX = null) {
+  if (studyWaveDrag) return;
+  const viewport = studyElement("studyWaveViewport"); const input = studyElement("studyZoomInput");
+  const oldWidth = studyElement("studyWaveBody").getBoundingClientRect().width;
+  if (!oldWidth || !viewport.clientWidth || !Number.isFinite(Number(value))) return;
+  const draft = state.study.draft; const duration = studyDuration();
+  const centerSelection = !state.study.wavePanned && !studyRangeError(draft.start, draft.end, duration);
+  const offset = centerSelection || clientX === null ? viewport.clientWidth / 2 : Math.max(0, Math.min(viewport.clientWidth, clientX - viewport.getBoundingClientRect().left));
+  const fraction = centerSelection ? (draft.start + draft.end) / 2 / duration : (viewport.scrollLeft + offset) / oldWidth;
+  input.value = String(Math.max(Number(input.min), Math.min(Number(input.max), Number(value))));
+  renderStudyWaveform();
+  const newWidth = studyElement("studyWaveBody").getBoundingClientRect().width;
+  viewport.scrollLeft = Math.max(0, Math.min(newWidth - viewport.clientWidth, fraction * newWidth - offset));
+  state.study.waveScrollLeft = viewport.scrollLeft;
+}
+function handleStudyWaveScroll() {
+  const viewport = studyElement("studyWaveViewport");
+  if (viewport.scrollLeft !== state.study.waveScrollLeft) state.study.wavePanned = true;
+  state.study.waveScrollLeft = viewport.scrollLeft;
+}
+function handleStudyWaveWheel(event) {
+  if (!event.deltaY || Math.abs(event.deltaX || 0) > Math.abs(event.deltaY)) return;
+  event.preventDefault();
+  const input = studyElement("studyZoomInput");
+  zoomStudyWaveform(Number(input.value) - Math.sign(event.deltaY) * Number(input.step), event.clientX);
+}
 function renderStudyWaveform() {
   const body = studyElement("studyWaveBody"); const canvas = studyElement("studyWaveCanvas");
   const zoom = Number(studyElement("studyZoomInput").value) || 1;
@@ -226,7 +255,8 @@ function renderStudyWaveform() {
     const label = studyText("span", `${(duration * index / 10).toFixed(1)}s`);
     label.style.left = `${index * 10}%`; ruler.append(label);
   }
-  studyElement("studyWaveHint").textContent = "Drag waveform to pan; drag selection to move it or its edges to resize. Ctrl/⌘-click endpoints or enable Select Range." + (peaks.length ? "" : " Analyze the song for a waveform preview.");
+  studyElement("studyWaveHint").textContent = "Wheel to zoom around the selection; pan away to zoom under the mouse. Drag waveform to pan; drag selection or its edges to adjust. Ctrl/⌘-click endpoints or enable Select Range." + (peaks.length ? "" : " Analyze the song for a waveform preview.");
+  state.study.waveScrollLeft = studyElement("studyWaveViewport").scrollLeft;
 }
 function renderStudyResult() {
   const container = studyElement("studyResult"); container.replaceChildren();
@@ -336,7 +366,10 @@ function initializeStudy() {
   waveBody.addEventListener("pointerdown", (event) => startStudyWaveDrag(event, waveBody, studyElement("studyWaveViewport"), studyDuration()));
   waveBody.addEventListener("pointermove", moveStudyWaveDrag);
   ["pointerup", "pointercancel", "lostpointercapture"].forEach((name) => waveBody.addEventListener(name, finishStudyWaveDrag));
-  studyElement("studyZoomInput").addEventListener("input", renderStudyWaveform);
+  const waveViewport = studyElement("studyWaveViewport");
+  waveViewport.addEventListener("wheel", handleStudyWaveWheel, { passive: false });
+  waveViewport.addEventListener("scroll", handleStudyWaveScroll);
+  studyElement("studyZoomInput").addEventListener("input", (event) => zoomStudyWaveform(event.target.value));
   document.querySelectorAll("[data-study-source]").forEach((input) => input.addEventListener("change", () => {
     const name = input.dataset.studySource;
     state.study.draft.sources = input.checked ? name === "full_mix" ? [name] : [...state.study.draft.sources.filter((value) => value !== "full_mix" && value !== name), name] : state.study.draft.sources.filter((value) => value !== name);
@@ -345,6 +378,7 @@ function initializeStudy() {
   const fields = { studyStartInput: "start", studyEndInput: "end", studyNameInput: "name", studyNotesInput: "notes", studyCorrectionInput: "corrected_chord" };
   Object.entries(fields).forEach(([id, field]) => studyElement(id).addEventListener("input", (event) => {
     state.study.draft[field] = ["start", "end"].includes(field) ? event.target.value === "" ? null : Number(event.target.value) : event.target.value;
+    if (["start", "end"].includes(field)) state.study.wavePanned = false;
     state.study.selectionAnchor = null; studyChanged(); renderStudy();
   }));
   const settings = { studyKeyInput: "known_key", studyLowInput: "chroma_low_hz", studyHighInput: "chroma_high_hz", studyAlternativesInput: "chord_alternatives", studySimplifyInput: "simplify_chords" };

@@ -6,7 +6,7 @@ function environment(overrides = {}) {
   const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies"]);
   const state = { audio: { path: "song", url: "original" }, chart: { detected_key: "C", key: "D", stems: { ok: true, stems: [{ name: "bass", url: "bass-original" }, { name: "other", url: "other-original" }] } }, studies: [], study: helpers.createStudyState(), currentView: "song", editorPanel: "study", ...overrides.state };
   let panel;
-  const loaded = loadScript("src/renderer/study.js", ["handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
+  const loaded = loadScript("src/renderer/study.js", ["handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
     ...helpers, state, elements: { audioPlayer: { duration: 10 }, studyPanel: null },
     window: { chordPilot: overrides.bridge || {} },
     crypto: { randomUUID: (() => { let id = 0; return () => `id${++id}`; })() },
@@ -188,4 +188,60 @@ test("a gesture cannot edit a replacement song or continue after leaving the stu
   env.startStudyWaveDrag(wave.event(200, "move"), wave.body, wave.viewport, 10);
   env.state.editorPanel = "arrange"; env.moveStudyWaveDrag(wave.event(300));
   assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [5, 6]);
+});
+
+function zoomEnvironment() {
+  const wave = waveGesture();
+  const input = { value: "2.5", min: "1", max: "16", step: "0.5" };
+  let width = 1000;
+  wave.viewport.getBoundingClientRect = () => ({ left: 20 });
+  wave.body.getBoundingClientRect = () => ({ width });
+  const nodes = { studyWaveViewport: wave.viewport, studyWaveBody: wave.body, studyZoomInput: input };
+  const env = environment({ globals: { document: { getElementById: id => nodes[id] } } });
+  env.context.renderStudyWaveform = () => { width = Math.max(600, wave.viewport.clientWidth * Number(input.value)); wave.viewport.scrollWidth = width; };
+  return { ...env, ...wave, input };
+}
+
+test("wheel zoom centers the selection, updates the slider, and leaves evidence unchanged", () => {
+  const env = zoomEnvironment(); env.setStudyRange(6, 8); env.state.study.dirty = false;
+  let prevented = false;
+  env.handleStudyWaveWheel({ deltaY: -100, deltaX: 0, deltaMode: 0, clientX: 60, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(Number(env.input.value), 3);
+  assert.equal(env.viewport.scrollLeft, 640); // 7s / 10s * 1200px - 200px
+  assert.equal(env.state.study.dirty, false);
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [6, 8]);
+  env.zoomStudyWaveform(16); assert.equal(env.viewport.scrollLeft, 4280);
+  env.zoomStudyWaveform(0); assert.equal(Number(env.input.value), 1);
+  assert.equal(env.viewport.scrollLeft, 200); // boundary-clamped center
+});
+
+test("after panning away wheel zoom preserves the mouse's time, until the range changes", () => {
+  const env = zoomEnvironment(); env.setStudyRange(6, 8);
+  env.startStudyWaveDrag(env.event(300), env.body, env.viewport, 10);
+  env.moveStudyWaveDrag(env.event(200)); env.finishStudyWaveDrag(env.event(200));
+  assert.equal(env.state.study.wavePanned, true);
+  env.zoomStudyWaveform(5, 120); // mouse at 100px; original time at 300 / 1000
+  assert.equal(env.viewport.scrollLeft, 500);
+  env.setStudyRange(2, 3);
+  env.zoomStudyWaveform(10, 120);
+  assert.equal(env.viewport.scrollLeft, 800);
+});
+
+test("unselected zoom anchors under the mouse, and zero or horizontal wheel does not zoom", () => {
+  const env = zoomEnvironment();
+  env.zoomStudyWaveform(5, 120); assert.equal(env.viewport.scrollLeft, 300);
+  const event = { deltaY: 0, deltaX: 100, clientX: 120, preventDefault() { throw new Error("horizontal scrolling stays native"); } };
+  env.handleStudyWaveWheel(event); assert.equal(Number(env.input.value), 5);
+  env.handleStudyWaveWheel({ ...event, deltaY: 10 }); assert.equal(Number(env.input.value), 5);
+});
+
+test("native scrolling detaches centering but programmatic zoom scrolling does not", () => {
+  const env = zoomEnvironment(); env.setStudyRange(6, 8);
+  env.zoomStudyWaveform(4);
+  env.handleStudyWaveScroll(); assert.equal(env.state.study.wavePanned, false);
+  env.viewport.scrollLeft += 50; // midpoint still visible, but user panned
+  env.handleStudyWaveScroll(); assert.equal(env.state.study.wavePanned, true);
+  env.zoomStudyWaveform(5);
+  assert.equal(env.viewport.scrollLeft, 1262.5);
 });

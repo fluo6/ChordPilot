@@ -67,3 +67,10 @@ Signal regressions distinguish simultaneous C3/C5, E2 bass with C4/E4/G4 accompa
 Final JavaScript suite with the same two baseline exclusions: **195/195 pass**; Python: **70/70 pass**, including ten study signal tests. A fresh read-only review found no Important issues and additionally checked pure A0–C4 tones in 50ms–1s crops. Real browser analysis showed only C3/C5/E5/G5 highlighted and preserved exactly those highlights after Save Session/reload/reopen.
 
 These are octave-specific spectral pitch estimates, not guaranteed played-note transcription. Instrumental harmonics may also appear; closely spaced pitches in very short intervals can be unresolved. This preserves honest evidence rather than inventing octave positions for pitch-class-only history.
+### Mouse-wheel zoom follow-up
+
+- Mouse-wheel up/down changes waveform zoom within the existing 1–16 limits and keeps the slider in sync.
+- Zoom centers valid selections, clamped at song boundaries. Panning with a drag, scrollbar, or horizontal wheel detaches centering; subsequent wheel zoom preserves the time under the mouse. Changing the range restores selection centering.
+- Added four regression tests for centered zoom, bounds, panning, native scrolling, range edits, and unchanged evidence/dirty state. Observed failures before implementing the behavior; all 199 applicable JavaScript tests pass (the same two pre-existing Windows failures remain excluded).
+- Browser verification used an isolated synthetic 10-second WAV. Actual wheel events zoomed in and out, selection centering stayed within 2 pixels, panning preserved the mouse time within 0.003 seconds, and editing the range restored centering.
+- Visual proof: `local-study-wheel-zoom.jpg` in this task's visualization directory.
