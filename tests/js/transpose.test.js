@@ -109,3 +109,11 @@ test("bar transposition updates every stored chord choice", () => {
   });
   t.transposeBarChordFields(null, 2);
 });
+
+test("event transposition changes symbols but keeps times and raw pitch evidence", () => {
+  const event = { start: 1, end: 2, chord: "C/G", alternatives: [{ chord: "Am", score: .6 }], evidence: { detected_notes: [{ note: "C" }] }, debug: { chosen_chord: "C/G" } };
+  const bar = { chord: "C/G", chord_events: [event] };
+  const t = load({ bars: [bar] });
+  t.transposeChartBySemitones(2);
+  assert.deepEqual(plain(event), { start: 1, end: 2, chord: "D/A", alternatives: [{ chord: "Bm", score: .6 }], evidence: { detected_notes: [{ note: "C" }] }, debug: { chosen_chord: "D/A" } });
+});

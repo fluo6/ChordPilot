@@ -274,6 +274,16 @@ function transposeBarChordFields(bar, semitones) {
       bar.debug.alternatives.forEach((item) => transposeChordChoice(item, semitones));
     }
   }
+  if (Array.isArray(bar.chord_events)) {
+    bar.chord_events.forEach((event) => {
+      event.chord = transposeChordText(event.chord, semitones);
+      if (Array.isArray(event.alternatives)) event.alternatives.forEach((item) => transposeChordChoice(item, semitones));
+      if (event.debug && typeof event.debug === "object") {
+        if (event.debug.chosen_chord) event.debug.chosen_chord = transposeChordText(event.debug.chosen_chord, semitones);
+        if (Array.isArray(event.debug.alternatives)) event.debug.alternatives.forEach((item) => transposeChordChoice(item, semitones));
+      }
+    });
+  }
 }
 
 function transposeChartBySemitones(semitones) {

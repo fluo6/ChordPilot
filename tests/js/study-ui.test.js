@@ -5,15 +5,16 @@ const { loadScript, plain } = require("./helpers/load-script");
 function environment(overrides = {}) {
   const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies"]);
   const state = { audio: { path: "song", url: "original" }, chart: { detected_key: "C", key: "D", stems: { ok: true, stems: [{ name: "bass", url: "bass-original" }, { name: "other", url: "other-original" }] } }, studies: [], study: helpers.createStudyState(), currentView: "song", editorPanel: "study", ...overrides.state };
+  const elements = { audioPlayer: { duration: 10 }, studyPanel: null };
   let panel;
-  const loaded = loadScript("src/renderer/study.js", ["studyCurrentMoment", "handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
-    ...helpers, state, elements: { audioPlayer: { duration: 10 }, studyPanel: null },
+  const loaded = loadScript("src/renderer/study.js", ["studyCurrentMoment", "openChordEventStudy", "handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
+    ...helpers, state, elements,
     window: { chordPilot: overrides.bridge || {} },
     crypto: { randomUUID: (() => { let id = 0; return () => `id${++id}`; })() },
     setStatus() {}, appendLog() {}, openEditorPanel(value) { panel = value; },
     stopStudyPlayback() {}, ...overrides.globals
   });
-  return { ...loaded, state, panel: () => panel };
+  return { ...loaded, state, elements, panel: () => panel };
 }
 
 test("modifier selection maps scroll/zoom body coordinates and opens study on completion", () => {
@@ -27,6 +28,19 @@ test("modifier selection maps scroll/zoom body coordinates and opens study on co
   assert.equal(env.panel(), "study");
   env.handleStudyRangeClick(click(400), body, 10, true);
   assert.equal(env.state.study.selectionAnchor, 5);
+});
+
+test("chord event study uses the exact event interval; current moment keeps its half-second range", () => {
+  const events = [{ start: .5, end: 1.25, chord: "G" }];
+  const env = environment({ state: { chart: { bars: [{ start: 0, chord: "C", chord_events: events }] } }, globals: {
+    barChordEvents: (bar) => bar.chord_events, barEndTime: () => 2
+  } });
+  assert.equal(env.openChordEventStudy(0, 0), true);
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [.5, 1.25]);
+  env.state.study.draft.start = null; env.state.study.draft.end = null;
+  env.elements.audioPlayer.currentTime = 4;
+  env.studyCurrentMoment();
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [3.5, 4.5]);
 });
 
 test("study defaults keep missing stems explicit and result inputs stay immutable", () => {

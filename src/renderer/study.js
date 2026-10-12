@@ -59,6 +59,17 @@ function studyCurrentMoment() {
   openEditorPanel("study");
   if (elements.studyPanel) zoomStudyWaveform(studyElement("studyZoomInput").value);
 }
+function openChordEventStudy(barIndex, eventIndex) {
+  const bar = state.chart?.bars?.[barIndex];
+  const events = bar && typeof barChordEvents === "function" ? barChordEvents(bar, barEndTime(barIndex)) : [];
+  const event = events[eventIndex];
+  if (!state.audio || !event || !Number.isFinite(Number(event.start)) || !Number.isFinite(Number(event.end)) || event.end - event.start < 0.05) return false;
+  if (!newStudy()) return false;
+  setStudyRange(Number(event.start), Number(event.end));
+  openEditorPanel("study");
+  if (elements.studyPanel) zoomStudyWaveform(studyElement("studyZoomInput").value);
+  return true;
+}
 function setStudyRange(start, end) {
   state.study.draft.start = start; state.study.draft.end = end;
   state.study.wavePanned = false;

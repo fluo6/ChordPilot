@@ -52,6 +52,18 @@ function renderTimeline() {
   }
 }
 
+function chordEventRegionLayout(index) {
+  const bar = state.chart?.bars?.[index];
+  if (!bar) return [];
+  const events = chordEventsForBar(index);
+  return events.map((chordEvent, eventIndex) => ({
+    eventIndex,
+    chordEvent,
+    left: percentAt(chordEvent.start),
+    width: Math.max(0.1, percentAt(chordEvent.end) - percentAt(chordEvent.start))
+  }));
+}
+
 function buildLane(lane, options) {
   lane.innerHTML = "";
   lane.style.setProperty("--timeline-body-width", `${timelineBodyWidth()}px`);
@@ -121,6 +133,12 @@ function buildLane(lane, options) {
 
   const body = document.createElement("div");
   body.className = "lane-body";
+  if (options.type === "chord") {
+    body.addEventListener("pointermove", (event) => updateChordBoundaryDrag(event, body));
+    body.addEventListener("pointerup", (event) => finishChordBoundaryDrag(event, body));
+    body.addEventListener("pointercancel", (event) => finishChordBoundaryDrag(event, body));
+    body.addEventListener("lostpointercapture", (event) => cancelChordBoundaryDrag(event, body));
+  }
   if (options.type === "waveform") {
     body.addEventListener("click", (event) => handleStudyRangeClick(event, body, getChartDuration(), true), true);
   }
@@ -144,27 +162,44 @@ function buildLane(lane, options) {
     body.appendChild(marker);
 
     if (options.type === "chord") {
-      const nextStart = state.chart.bars[index + 1]?.start ?? getChartDuration();
-      const widthPercent = Math.max(2, percentAt(nextStart) - left);
-      const label = barRegionLabel(bar, index, widthPercent);
-      const region = document.createElement("button");
-      region.type = "button";
-      region.className = "chord-region";
-      region.dataset.index = String(index);
-      region.style.left = `${left}%`;
-      region.style.width = `${widthPercent}%`;
-      region.textContent = label;
-      region.classList.toggle("compact", label && !label.includes(" "));
-      region.classList.toggle("unlabeled", !label);
-      const displayChoice = highestConfidenceChordChoice(bar);
-      const displayConfidence = displayChoice?.confidence ?? bar.confidence;
-      region.title = `Bar ${bar.number || index + 1}: ${displayChord} - confidence ${formatConfidence(displayConfidence)}`;
-      region.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectBar(index, true);
-        showChordSuggestion(index, region);
+      const events = chordEventsForBar(index);
+      chordEventRegionLayout(index).forEach(({ chordEvent, eventIndex, left: eventLeft, width: widthPercent }) => {
+        const region = document.createElement("button");
+        region.type = "button";
+        region.className = "chord-region chord-event-region";
+        region.dataset.index = String(index);
+        region.dataset.eventIndex = String(eventIndex);
+        region.style.left = `${eventLeft}%`;
+        region.style.width = `${widthPercent}%`;
+        region.textContent = events.length > 1 ? `${bar.number || index + 1}.${eventIndex + 1} ${chordEvent.chord}` : barRegionLabel(bar, index, widthPercent);
+        region.classList.toggle("compact", region.textContent && !region.textContent.includes(" "));
+        region.classList.toggle("unlabeled", !region.textContent);
+        region.classList.toggle("selected", index === state.selectedIndex && eventIndex === state.selectedChordEventIndex);
+        region.classList.toggle("active", index === state.activeIndex && eventIndex === state.activeChordEventIndex);
+        region.title = `Bar ${bar.number || index + 1}: ${chordEvent.chord} - ${formatSeconds(chordEvent.start)}–${formatSeconds(chordEvent.end)}s - confidence ${formatConfidence(chordEvent.confidence ?? chordEvent.chord_confidence)}`;
+        if (eventIndex < events.length - 1) {
+          const boundary = document.createElement("span");
+          boundary.className = "chord-event-boundary";
+          boundary.dataset.barIndex = String(index);
+          boundary.dataset.eventIndex = String(eventIndex);
+          boundary.tabIndex = 0;
+          boundary.setAttribute("role", "slider");
+          boundary.setAttribute("aria-label", `Adjust boundary after ${chordEvent.chord}`);
+          boundary.setAttribute("aria-valuemin", String(chordEvent.start + .05));
+          boundary.setAttribute("aria-valuemax", String(events[eventIndex + 1].end - .05));
+          boundary.setAttribute("aria-valuenow", String(chordEvent.end));
+          boundary.addEventListener("pointerdown", (event) => startChordBoundaryDrag(event, index, eventIndex, body));
+          boundary.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); });
+          boundary.addEventListener("keydown", (event) => handleChordBoundaryKeydown(event, index, eventIndex));
+          region.appendChild(boundary);
+        }
+        region.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectBar(index, true, eventIndex);
+          showChordSuggestion(index, region);
+        });
+        body.appendChild(region);
       });
-      body.appendChild(region);
     }
   });
 
@@ -216,6 +251,97 @@ function buildLane(lane, options) {
   }
 
   lane.appendChild(body);
+}
+
+function startChordBoundaryDrag(event, barIndex, eventIndex, body) {
+  event.preventDefault(); event.stopPropagation();
+  (event.currentTarget || event.target)?.focus?.();
+  const rect = body.getBoundingClientRect();
+  if (!rect.width) return;
+  const bar = state.chart?.bars?.[barIndex];
+  if (!bar) return;
+  state.chordBoundaryDrag = {
+    barIndex, eventIndex, body, left: rect.left, width: rect.width, pointerId: event.pointerId,
+    chart: state.chart, audio: state.audio, view: state.currentView, editorPanel: state.editorPanel,
+    bar, events: bar.chord_events
+  };
+  body.setPointerCapture?.(event.pointerId);
+}
+
+function chordBoundaryDragIsCurrent(drag) {
+  return Boolean(drag && state.chart === drag.chart && state.audio === drag.audio
+    && state.currentView === drag.view && state.editorPanel === drag.editorPanel
+    && state.chart?.bars?.[drag.barIndex] === drag.bar && drag.bar?.chord_events === drag.events);
+}
+
+function updateChordBoundaryDrag(event, body) {
+  const drag = state.chordBoundaryDrag;
+  if (!drag || drag.body !== body || drag.pointerId !== event.pointerId) return;
+  if (!chordBoundaryDragIsCurrent(drag)) {
+    state.chordBoundaryDrag = null;
+    return;
+  }
+  event.preventDefault();
+  const bar = state.chart?.bars?.[drag.barIndex];
+  if (!bar) return;
+  const time = Math.max(0, Math.min(getChartDuration(), (event.clientX - drag.left) / drag.width * getChartDuration()));
+  bar.chord_events = moveChordBoundary(bar.chord_events, drag.eventIndex, time);
+  drag.events = bar.chord_events;
+  syncBarChordSummary(bar);
+  const events = chordEventsForBar(drag.barIndex);
+  [...body.querySelectorAll(".chord-event-region")].forEach((region) => {
+    if (Number(region.dataset.index) !== drag.barIndex) return;
+    const eventIndex = Number(region.dataset.eventIndex);
+    const item = events[eventIndex];
+    if (item) {
+      region.style.left = `${percentAt(item.start)}%`;
+      region.style.width = `${Math.max(.1, percentAt(item.end) - percentAt(item.start))}%`;
+    }
+  });
+}
+
+function finishChordBoundaryDrag(event, body) {
+  const drag = state.chordBoundaryDrag;
+  if (!drag || drag.body !== body) return;
+  if (!chordBoundaryDragIsCurrent(drag)) {
+    state.chordBoundaryDrag = null;
+    return;
+  }
+  event.preventDefault(); event.stopPropagation();
+  const { barIndex, eventIndex } = drag;
+  state.chordBoundaryDrag = null;
+  renderBars();
+  focusChordBoundaryHandle(barIndex, eventIndex);
+}
+
+function handleChordBoundaryKeydown(event, barIndex, eventIndex) {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  const source = state.chart?.bars?.[barIndex];
+  const events = source?.chord_events;
+  if (!Array.isArray(events) || !events[eventIndex] || !events[eventIndex + 1]) return false;
+  const delta = event.key === "ArrowRight" ? .05 : -.05;
+  source.chord_events = moveChordBoundary(events, eventIndex, events[eventIndex].end + delta);
+  syncBarChordSummary(source);
+  renderBars();
+  focusChordBoundaryHandle(barIndex, eventIndex);
+  return true;
+}
+
+function focusChordBoundaryHandle(barIndex, eventIndex) {
+  const selector = `.chord-event-boundary[data-bar-index="${barIndex}"][data-event-index="${eventIndex}"]`;
+  document.querySelector(selector)?.focus?.();
+}
+
+function cancelChordBoundaryDrag(event, body) {
+  const drag = state.chordBoundaryDrag;
+  if (!drag || drag.body !== body || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
+  state.chordBoundaryDrag = null;
+}
+
+function cancelActiveChordBoundaryDrag() {
+  state.chordBoundaryDrag = null;
 }
 
 function barRegionLabel(bar, index, widthPercent) {
@@ -400,8 +526,13 @@ function drawArrangementWaveform(canvas, peaks, type) {
 function updateTimelineSelection() {
   document.querySelectorAll(".bar-marker, .chord-region").forEach((element) => {
     const index = Number(element.dataset.index);
+    const eventIndex = Number(element.dataset.eventIndex ?? 0);
     element.classList.toggle("selected", index === state.selectedIndex);
     element.classList.toggle("active", index === state.activeIndex);
+    if (element.classList.contains("chord-event-region")) {
+      element.classList.toggle("selected", index === state.selectedIndex && eventIndex === state.selectedChordEventIndex);
+      element.classList.toggle("active", index === state.activeIndex && eventIndex === state.activeChordEventIndex);
+    }
   });
 }
 
@@ -413,7 +544,8 @@ function updatePlayhead() {
     return;
   }
   const duration = getChartDuration();
-  const progress = Math.max(0, Math.min(1, Number(elements.audioPlayer.currentTime || 0) / duration));
+  const originalTime = Number(elements.audioPlayer.currentTime || 0) * (Number(state.audioPreview?.tempoRate) || 1);
+  const progress = Math.max(0, Math.min(1, originalTime / duration));
   const left = body.offsetLeft + (body.offsetWidth * progress);
   elements.playhead.style.left = `${left}px`;
   followPlayhead(left, body);

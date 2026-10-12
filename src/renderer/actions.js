@@ -324,7 +324,9 @@ async function analyzeAudio(settings = {}) {
     ensureChartTempoState(state.chart);
     state.audioPreview = null;
     state.selectedIndex = state.chart.bars.length ? 0 : -1;
+    state.selectedChordEventIndex = 0;
     state.activeIndex = state.selectedIndex;
+    state.activeChordEventIndex = 0;
     renderMeta();
     renderBars();
     renderStems(state.chart.stems);
@@ -358,7 +360,9 @@ function applyAnalyzedChart(chart, options = {}) {
   ensureChartTempoState(state.chart);
   if (options.resetSelection !== false) {
     state.selectedIndex = state.chart.bars.length ? 0 : -1;
+    state.selectedChordEventIndex = 0;
     state.activeIndex = state.selectedIndex;
+    state.activeChordEventIndex = 0;
   } else {
     state.selectedIndex = Math.max(-1, Math.min(state.selectedIndex, state.chart.bars.length - 1));
     state.activeIndex = Math.max(-1, Math.min(state.activeIndex, state.chart.bars.length - 1));
@@ -502,10 +506,20 @@ function addBar() {
     lyrics: "",
     notes: ""
   };
-  bar.start = selected ? selected.start + secondsPerBar() : 0;
+  const end = selected ? barEndTime(state.selectedIndex) || (selected.start + secondsPerBar()) : 0;
+  const middle = selected ? (Number(selected.start) + end) / 2 : 0;
+  if (selected) {
+    if (Array.isArray(selected.chord_events)) {
+      selected.chord_events = splitEventsAtBoundary(selected.chord_events, middle)[0];
+      bar.chord_events = retimeChordEvents(bar.chord_events, middle, end);
+    }
+    bar.start = middle;
+  } else bar.start = 0;
   state.chart.bars.splice(state.selectedIndex + 1 || state.chart.bars.length, 0, bar);
   state.selectedIndex = Math.max(0, state.selectedIndex + 1);
   state.activeIndex = state.selectedIndex;
+  if (Array.isArray(state.chart.bars[state.selectedIndex - 1]?.chord_events)) syncBarChordSummary(state.chart.bars[state.selectedIndex - 1]);
+  if (Array.isArray(bar.chord_events)) syncBarChordSummary(bar);
   renumberBars();
   renderBars();
 }
@@ -516,10 +530,18 @@ function duplicateBar() {
     return;
   }
   const next = cloneBar(selected);
-  next.start = selected.start + secondsPerBar();
+  const end = barEndTime(state.selectedIndex) || (selected.start + secondsPerBar());
+  const middle = (Number(selected.start) + end) / 2;
+  if (Array.isArray(selected.chord_events)) {
+    selected.chord_events = splitEventsAtBoundary(selected.chord_events, middle)[0];
+    next.chord_events = retimeChordEvents(next.chord_events, middle, end);
+  }
+  next.start = middle;
   state.chart.bars.splice(state.selectedIndex + 1, 0, next);
   state.selectedIndex += 1;
   state.activeIndex = state.selectedIndex;
+  if (Array.isArray(state.chart.bars[state.selectedIndex - 1]?.chord_events)) syncBarChordSummary(state.chart.bars[state.selectedIndex - 1]);
+  if (Array.isArray(next.chord_events)) syncBarChordSummary(next);
   renumberBars();
   renderBars();
 }
@@ -530,11 +552,24 @@ function splitBar() {
     return;
   }
   const secondHalf = cloneBar(selected);
+  const splitTime = (Number(selected.start) + barEndTime(state.selectedIndex)) / 2;
+  if (Array.isArray(selected.chord_events)) {
+    const [leftEvents, rightEvents] = splitEventsAtBoundary(selected.chord_events, splitTime);
+    selected.chord_events = leftEvents;
+    secondHalf.chord_events = rightEvents;
+    secondHalf.lyrics = "";
+    secondHalf.start = splitTime;
+  } else {
   selected.chord = `${selected.chord} /`;
   secondHalf.chord = `/ ${secondHalf.chord}`;
   secondHalf.lyrics = "";
   secondHalf.start = selected.start + secondsPerBar() / 2;
+  }
   state.chart.bars.splice(state.selectedIndex + 1, 0, secondHalf);
+  if (Array.isArray(selected.chord_events)) {
+    syncBarChordSummary(selected);
+    syncBarChordSummary(secondHalf);
+  }
   state.activeIndex = state.selectedIndex;
   renumberBars();
   renderBars();
@@ -546,12 +581,42 @@ function mergeBar() {
   }
   const current = state.chart.bars[state.selectedIndex];
   const next = state.chart.bars[state.selectedIndex + 1];
-  current.chord = `${current.chord} ${next.chord}`.trim();
+  if (Array.isArray(current.chord_events) || Array.isArray(next.chord_events)) {
+    current.chord_events = [...barChordEvents(current, Number(next.start)), ...barChordEvents(next, barEndTime(state.selectedIndex + 1))];
+    syncBarChordSummary(current);
+  } else current.chord = `${current.chord} ${next.chord}`.trim();
   current.lyrics = [current.lyrics, next.lyrics].filter(Boolean).join(" / ");
   current.notes = [current.notes, next.notes].filter(Boolean).join(" / ");
+  current.repeat_start = Boolean(current.repeat_start || next.repeat_start);
+  current.repeat_end = Number(next.repeat_end) || Number(current.repeat_end) || 0;
   state.chart.bars.splice(state.selectedIndex + 1, 1);
+  if (Array.isArray(current.chord_events)) syncBarChordSummary(current);
   state.activeIndex = state.selectedIndex;
   renumberBars();
+  renderBars();
+}
+
+function splitSelectedChordEvent() {
+  const bar = getSelectedBar();
+  if (!bar) return;
+  const events = barChordEvents(bar, barEndTime(state.selectedIndex));
+  const index = Math.max(0, Math.min(Number(state.selectedChordEventIndex) || 0, events.length - 1));
+  const event = events[index];
+  bar.chord_events = splitChordEvent(events, index, (event.start + event.end) / 2);
+  state.selectedChordEventIndex = index;
+  syncBarChordSummary(bar);
+  renderBars();
+}
+
+function mergeSelectedChordEvents() {
+  const bar = getSelectedBar();
+  if (!bar) return;
+  const events = barChordEvents(bar, barEndTime(state.selectedIndex));
+  const index = Math.max(0, Math.min(Number(state.selectedChordEventIndex) || 0, events.length - 2));
+  if (events.length < 2) return;
+  bar.chord_events = mergeChordEvents(events, index);
+  state.selectedChordEventIndex = index;
+  syncBarChordSummary(bar);
   renderBars();
 }
 
@@ -559,7 +624,19 @@ function deleteBar() {
   if (!hasChart() || state.selectedIndex < 0) {
     return;
   }
-  state.chart.bars.splice(state.selectedIndex, 1);
+  const deletedIndex = state.selectedIndex;
+  const previous = state.chart.bars[deletedIndex - 1];
+  const next = state.chart.bars[deletedIndex + 1];
+  state.chart.bars.splice(deletedIndex, 1);
+  if (previous && Array.isArray(previous.chord_events) && previous.chord_events.length) {
+    const nextBoundary = next ? Number(next.start) : Number(state.chart.duration);
+    const last = previous.chord_events[previous.chord_events.length - 1];
+    if (Number.isFinite(nextBoundary) && nextBoundary > last.start) {
+      last.end = nextBoundary;
+      last.evidence_stale = true;
+      syncBarChordSummary(previous);
+    }
+  }
   state.selectedIndex = Math.min(state.selectedIndex, state.chart.bars.length - 1);
   state.activeIndex = state.selectedIndex;
   renumberBars();
@@ -618,6 +695,7 @@ function buildSessionPayload() {
     },
     ui: {
       selectedIndex: state.selectedIndex,
+      selectedChordEventIndex: state.selectedChordEventIndex,
       activeIndex: state.activeIndex,
       editorPanel: state.editorPanel,
       masterVolume: state.masterVolume,
@@ -674,6 +752,7 @@ function restoreSessionPayload(session) {
   ensureChartKeyState(state.chart);
   ensureChartTempoState(state.chart);
   state.selectedIndex = Number.isInteger(session.ui?.selectedIndex) ? session.ui.selectedIndex : (hasChart() ? 0 : -1);
+  state.selectedChordEventIndex = Number.isInteger(session.ui?.selectedChordEventIndex) ? session.ui.selectedChordEventIndex : 0;
   state.activeIndex = Number.isInteger(session.ui?.activeIndex) ? session.ui.activeIndex : state.selectedIndex;
   state.masterVolume = Number.isFinite(Number(session.ui?.masterVolume)) ? Number(session.ui.masterVolume) : state.masterVolume;
   state.playbackRate = Number.isFinite(Number(session.ui?.playbackRate)) ? Number(session.ui.playbackRate) : 1;
@@ -684,7 +763,7 @@ function restoreSessionPayload(session) {
   state.followTimeCursor = session.ui?.followTimeCursor !== false;
   state.detailPaneWidth = Number(session.ui?.detailPaneWidth) || state.detailPaneWidth;
   elements.analysisModeInput.value = session.analysis?.mode || state.chart?.analysis_engine?.mode || "fast";
-  applyAnalysisOptions(session.analysis?.options || state.chart?.analysis_engine?.options || {});
+  applyAnalysisOptions(session.analysis?.options || state.chart?.analysis_engine?.options || {}, { legacyDefaults: true });
 
   clearStems();
   if (state.audio?.url && state.audio.exists !== false) {

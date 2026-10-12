@@ -1,5 +1,119 @@
 from chordpilot_common import *
 
+def bar_chord_events(chart: dict[str, Any], index: int) -> list[dict[str, Any]]:
+    """Return valid complete timed events, or a non-mutating legacy bar view."""
+    bars = chart.get("bars", [])
+    if not 0 <= index < len(bars):
+        return []
+    bar = bars[index]
+    try:
+        start = float(bar.get("start", 0) or 0)
+        if index + 1 < len(bars):
+            end = float(bars[index + 1].get("start", start) or start)
+        else:
+            end = float(chart.get("duration") or 0)
+            if end <= start:
+                beats, _ = parse_time_signature(chart.get("time_signature", "4/4"))
+                end = start + (60.0 / max(1, int(chart.get("tempo", 120) or 120))) * beats
+    except (TypeError, ValueError, OverflowError):
+        return []
+    if not math.isfinite(start) or not math.isfinite(end):
+        return []
+    source = bar.get("chord_events")
+    if isinstance(source, list) and source and end > start:
+        events = []
+        cursor = start
+        for event in source:
+            if not isinstance(event, dict):
+                events = []
+                break
+            try:
+                event_start = float(event.get("start", -1))
+                event_end = float(event.get("end", -1))
+            except (TypeError, ValueError, OverflowError):
+                events = []
+                break
+            chord = event.get("chord")
+            if (not math.isfinite(event_start) or not math.isfinite(event_end)
+                    or abs(event_start - cursor) > 1e-6 or event_end <= event_start or event_end > end + 1e-6
+                    or not isinstance(chord, str) or not chord.strip()
+                    or ("alternatives" in event and not isinstance(event["alternatives"], list))):
+                events = []
+                break
+            events.append(dict(event))
+            cursor = event_end
+        if events and abs(cursor - end) <= 1e-6:
+            return events
+    if end <= start:
+        return []
+    legacy = {"start": start, "end": end, "chord": bar.get("chord") or "N.C."}
+    for key in ("confidence", "chord_confidence", "pitch_confidence", "alternatives", "evidence", "bass_reference", "debug"):
+        if key in bar:
+            legacy[key] = bar[key]
+    return [legacy]
+
+def has_valid_stored_events(chart: dict[str, Any], index: int) -> bool:
+    bars = chart.get("bars", [])
+    if not (0 <= index < len(bars)):
+        return False
+    bar = bars[index]
+    source = bars[index].get("chord_events")
+    if not isinstance(source, list) or not source:
+        return False
+    try:
+        start = float(bar.get("start", 0) or 0)
+        end = float(bars[index + 1].get("start", start) or start) if index + 1 < len(bars) else float(chart.get("duration") or 0)
+        if end <= start:
+            beats, _ = parse_time_signature(chart.get("time_signature", "4/4"))
+            end = start + (60.0 / max(1, int(chart.get("tempo", 120) or 120))) * beats
+        if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+            return False
+        cursor = start
+        for event in source:
+            if not isinstance(event, dict):
+                return False
+            event_start = float(event["start"])
+            event_end = float(event["end"])
+            if (not math.isfinite(event_start) or not math.isfinite(event_end) or abs(event_start - cursor) > 1e-6
+                    or event_end <= event_start or event_end > end + 1e-6
+                    or not isinstance(event.get("chord"), str) or not event["chord"].strip()
+                    or ("alternatives" in event and not isinstance(event["alternatives"], list))):
+                return False
+            cursor = event_end
+        return abs(cursor - end) <= 1e-6
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+def chart_bar_end(chart: dict[str, Any], index: int) -> float:
+    events = bar_chord_events(chart, index)
+    return float(events[-1]["end"]) if events else float(chart.get("duration", 0) or 0)
+
+def event_offset_quarters(chart: dict[str, Any], bar_start: float, event_start: float) -> float:
+    """Map original seconds to MusicXML quarter-note offsets, following beat_times when available."""
+    _, denominator = parse_time_signature(chart.get("time_signature", "4/4"))
+    beat_scale = 4.0 / max(1, denominator)
+    beats = sorted({float(value) for value in chart.get("beat_times", [])
+                    if isinstance(value, (int, float)) and math.isfinite(float(value))})
+    if len(beats) >= 2:
+        def beat_position(time: float) -> float:
+            if time <= beats[0]:
+                return (time - beats[0]) / (beats[1] - beats[0]) if beats[1] > beats[0] else 0.0
+            for beat_index in range(1, len(beats)):
+                if time <= beats[beat_index]:
+                    span = beats[beat_index] - beats[beat_index - 1]
+                    fraction = (time - beats[beat_index - 1]) / span if span > 0 else 0.0
+                    return beat_index - 1 + fraction
+            span = beats[-1] - beats[-2]
+            return len(beats) - 1 + (time - beats[-1]) / span if span > 0 else len(beats) - 1
+        return max(0.0, beat_position(event_start) - beat_position(bar_start)) * beat_scale
+    tempo = max(1, int(chart.get("tempo", 120) or 120))
+    return max(0.0, (event_start - bar_start) * tempo / 60.0 * beat_scale)
+
+def display_beat_offset(chart: dict[str, Any], bar_start: float, event_start: float) -> str:
+    _, denominator = parse_time_signature(chart.get("time_signature", "4/4"))
+    units = event_offset_quarters(chart, bar_start, event_start) / (4.0 / max(1, denominator))
+    return f"{units:.3g}"
+
 def export_chart(chart_path: str, format_name: str, output_path: str) -> dict[str, Any]:
     chart = json.loads(Path(chart_path).read_text(encoding="utf8"))
     destination = Path(output_path)
@@ -25,7 +139,7 @@ def render_txt(chart: dict[str, Any]) -> str:
         "",
     ]
     current_section = None
-    for bar in chart.get("bars", []):
+    for bar_index, bar in enumerate(chart.get("bars", [])):
         section = bar.get("section") or "Section"
         if section != current_section:
             current_section = section
@@ -33,19 +147,36 @@ def render_txt(chart: dict[str, Any]) -> str:
         repeat_start = "|:" if bar.get("repeat_start") else "|"
         repeat_end = f" x{bar.get('repeat_end')}" if bar.get("repeat_end") else ""
         lyric = f"  {bar.get('lyrics', '')}" if bar.get("lyrics") else ""
-        lines.append(f"{repeat_start} {bar.get('number', ''):>3}  {bar.get('chord', ''):<12} {repeat_end}{lyric}")
+        if has_valid_stored_events(chart, bar_index):
+            symbols = " / ".join(f"{display_beat_offset(chart, float(bar.get('start', 0) or 0), float(event['start']))}: {event['chord']}" for event in bar_chord_events(chart, bar_index))
+        else:
+            symbols = str(bar.get("chord", ""))
+        lines.append(f"{repeat_start} {bar.get('number', ''):>3}  {symbols:<24} {repeat_end}{lyric}")
     lines.append("")
     return "\n".join(lines)
 
 def write_csv(chart: dict[str, Any], destination: Path) -> None:
+    has_timed_events = any(has_valid_stored_events(chart, index) for index, _ in enumerate(chart.get("bars", [])))
+    fields = ["number", "section", "chord", "lyrics", "start"]
+    if has_timed_events:
+        fields.append("end")
+    fields.extend(["repeat_start", "repeat_end", "notes", "confidence"])
     with destination.open("w", newline="", encoding="utf8") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["number", "section", "chord", "lyrics", "start", "repeat_start", "repeat_end", "notes", "confidence"],
+            fieldnames=fields,
         )
         writer.writeheader()
-        for bar in chart.get("bars", []):
-            writer.writerow({key: bar.get(key, "") for key in writer.fieldnames})
+        for index, bar in enumerate(chart.get("bars", [])):
+            if not has_timed_events:
+                writer.writerow({key: bar.get(key, "") for key in writer.fieldnames})
+                continue
+            events = bar_chord_events(chart, index)
+            timed = has_valid_stored_events(chart, index)
+            for event in (events if timed else [{"chord": bar.get("chord", ""), "start": bar.get("start", ""), "end": "", "confidence": bar.get("confidence", "")} ]):
+                row = {key: bar.get(key, "") for key in writer.fieldnames}
+                row.update({"chord": event["chord"], "start": event["start"], "end": event["end"], "confidence": event.get("confidence", "")})
+                writer.writerow(row)
 
 def render_musicxml(chart: dict[str, Any]) -> str:
     score = ET.Element("score-partwise", version="3.1")
@@ -64,7 +195,7 @@ def render_musicxml(chart: dict[str, Any]) -> str:
         measure = ET.SubElement(part, "measure", number=str(bar.get("number", index)))
         if index == 1:
             attributes = ET.SubElement(measure, "attributes")
-            ET.SubElement(attributes, "divisions").text = "1"
+            ET.SubElement(attributes, "divisions").text = "96"
             key = ET.SubElement(attributes, "key")
             ET.SubElement(key, "fifths").text = str(key_to_fifths(chart.get("key", "C")))
             time = ET.SubElement(attributes, "time")
@@ -74,8 +205,13 @@ def render_musicxml(chart: dict[str, Any]) -> str:
             ET.SubElement(clef, "sign").text = "G"
             ET.SubElement(clef, "line").text = "2"
 
-        harmony = chord_to_harmony(bar.get("chord", "C"))
-        measure.append(harmony)
+        events = bar_chord_events(chart, index - 1)
+        for event in events:
+            harmony = chord_to_harmony(event["chord"])
+            offset = round(event_offset_quarters(chart, float(bar.get("start", 0) or 0), float(event["start"])) * 96)
+            if offset:
+                ET.SubElement(harmony, "offset").text = str(offset)
+            measure.append(harmony)
 
         if bar.get("lyrics"):
             direction = ET.SubElement(measure, "direction", placement="above")
@@ -84,8 +220,9 @@ def render_musicxml(chart: dict[str, Any]) -> str:
 
         note = ET.SubElement(measure, "note")
         ET.SubElement(note, "rest")
-        ET.SubElement(note, "duration").text = str(beats)
-        ET.SubElement(note, "type").text = duration_type(beats)
+        quarter_notes = beats * 4 / max(1, beat_type)
+        ET.SubElement(note, "duration").text = str(round(quarter_notes * 96))
+        ET.SubElement(note, "type").text = duration_type(round(quarter_notes))
 
         if bar.get("repeat_start") or bar.get("repeat_end"):
             barline = ET.SubElement(measure, "barline", location="right")
@@ -98,6 +235,12 @@ def render_musicxml(chart: dict[str, Any]) -> str:
     return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + ET.tostring(score, encoding="unicode")
 
 def chord_to_harmony(symbol: str) -> ET.Element:
+    if (symbol or "").strip().lower() in {"n.c.", "nc", "no chord", "no-chord"}:
+        harmony = ET.Element("harmony")
+        kind = ET.SubElement(harmony, "kind")
+        kind.text = "none"
+        kind.set("text", symbol or "N.C.")
+        return harmony
     root_name, kind_text = parse_chord_symbol(symbol)
     harmony = ET.Element("harmony")
     root = ET.SubElement(harmony, "root")

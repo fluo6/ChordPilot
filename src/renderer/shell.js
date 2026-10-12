@@ -280,6 +280,7 @@ function addJob(message, status = "done") {
 }
 
 function setView(view) {
+  if (view !== state.currentView && typeof cancelActiveChordBoundaryDrag === "function") cancelActiveChordBoundaryDrag();
   if (view !== "song" && typeof stopStudyPlayback === "function") stopStudyPlayback();
   updateProjectNavigation();
   if (view === "song" && !hasProject()) {
@@ -301,6 +302,7 @@ function setView(view) {
 }
 
 function setEditorPanel(name) {
+  if ((name || "arrange") !== state.editorPanel && typeof cancelActiveChordBoundaryDrag === "function") cancelActiveChordBoundaryDrag();
   if (name !== "study" && typeof stopStudyPlayback === "function") stopStudyPlayback();
   state.editorPanel = name || "arrange";
   elements.editorView.dataset.panel = state.editorPanel;
@@ -657,6 +659,8 @@ function syncMetaToState() {
 
 function collectAnalysisOptions() {
   return {
+    chord_timing: elements.chordTimingInput.value || "auto",
+    chord_grid: elements.chordGridInput.value || "beat",
     known_key: elements.analysisKeyInput.value || "",
     min_bpm: Number(elements.minBpmInput.value) || 60,
     max_bpm: Number(elements.maxBpmInput.value) || 190,
@@ -677,7 +681,10 @@ function collectAnalysisOptions() {
   };
 }
 
-function applyAnalysisOptions(options = {}) {
+function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
+  elements.chordTimingInput.value = options.chord_timing || (legacyDefaults ? "legacy" : "auto");
+  elements.chordGridInput.value = options.chord_grid || "beat";
+  updateChordTimingControlState();
   elements.analysisKeyInput.value = options.known_key || "";
   elements.minBpmInput.value = options.min_bpm ?? 60;
   elements.maxBpmInput.value = options.max_bpm ?? 190;
@@ -695,6 +702,10 @@ function applyAnalysisOptions(options = {}) {
   elements.lyricsSourceInput.value = options.lyrics_source || "auto";
   elements.lyricsModelInput.value = options.lyrics_model || "tiny";
   elements.lyricsLanguageInput.value = options.lyrics_language || "";
+}
+
+function updateChordTimingControlState() {
+  if (elements.chordGridInput) elements.chordGridInput.disabled = elements.chordTimingInput?.value === "legacy";
 }
 
 function applyMasterVolume() {
@@ -749,6 +760,12 @@ function updateButtons() {
   elements.duplicateBarBtn.disabled = !chartReady || state.selectedIndex < 0;
   elements.splitBarBtn.disabled = !chartReady || state.selectedIndex < 0;
   elements.mergeBarBtn.disabled = !chartReady || state.selectedIndex < 0 || state.selectedIndex >= state.chart.bars.length - 1;
+  if (elements.splitChordEventBtn && elements.mergeChordEventsBtn) {
+    const selectedEvents = chartReady && state.selectedIndex >= 0 ? barChordEvents(state.chart.bars[state.selectedIndex], barEndTime(state.selectedIndex)) : [];
+    const selectedEventIndex = Math.max(0, Number(state.selectedChordEventIndex) || 0);
+    elements.splitChordEventBtn.disabled = !chartReady || selectedEventIndex >= selectedEvents.length || (selectedEvents[selectedEventIndex]?.end - selectedEvents[selectedEventIndex]?.start) < 0.1;
+    elements.mergeChordEventsBtn.disabled = !chartReady || selectedEventIndex >= selectedEvents.length - 1;
+  }
   elements.deleteBarBtn.disabled = !chartReady || state.selectedIndex < 0;
   const canReanalyze = Boolean(state.audio?.path);
   elements.reanalyzeChordsBtn.disabled = !canReanalyze;

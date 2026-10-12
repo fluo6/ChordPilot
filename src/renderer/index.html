@@ -444,6 +444,22 @@
           <fieldset class="option-group">
             <legend>Timing + Key</legend>
             <div class="option-group-grid">
+          <label title="Auto groups supported chord changes; Fixed keeps each grid cell; Legacy analyzes one chord per bar. Older sessions without this setting are shown as Legacy.">
+            Chord Timing
+            <select id="chordTimingInput">
+              <option value="auto" selected>Auto changes</option>
+              <option value="fixed">Fixed grid</option>
+              <option value="legacy">Legacy, one per bar</option>
+            </select>
+          </label>
+          <label title="Subdivision grid for Auto and Fixed. Boundaries follow detected beats when available and tempo otherwise.">
+            Chord Grid
+            <select id="chordGridInput">
+              <option value="half_bar">Half bar</option>
+              <option value="beat" selected>One beat</option>
+              <option value="half_beat">Half beat</option>
+            </select>
+          </label>
           <label>
             Analysis Key
             <select id="analysisKeyInput" title="Known key for chord analysis">
@@ -610,6 +626,8 @@
           <button id="duplicateBarBtn" type="button" disabled>Duplicate</button>
           <button id="splitBarBtn" type="button" disabled>Split</button>
           <button id="mergeBarBtn" type="button" disabled>Merge With Next</button>
+          <button id="splitChordEventBtn" type="button" disabled>Split Chord</button>
+          <button id="mergeChordEventsBtn" type="button" disabled>Merge Chords</button>
           <button id="deleteBarBtn" type="button" disabled>Delete</button>
           <div class="export-actions">
             <button data-export="txt" type="button" disabled>TXT</button>
@@ -915,6 +933,7 @@
     <script src="./transpose.js"></script>
     <script src="./shell.js"></script>
     <script src="./formatters.js"></script>
+    <script src="./chord-events.js"></script>
     <script src="./bars.js"></script>
     <script src="./timeline.js"></script>
     <script src="./stems.js"></script>

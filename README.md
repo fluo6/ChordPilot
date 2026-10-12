@@ -6,10 +6,26 @@ ChordPilot is an Electron desktop MVP for creating editable chord charts from MP
 
 - Select MP3/WAV audio from the desktop app.
 - Run a Python analysis backend to estimate key, BPM, time signature, bars, chords, and rough sections.
+- Detect and edit supported chord changes inside a measure, with Auto changes, Fixed grid, and Legacy one-chord-per-bar timing modes.
 - Choose a fast full-mix analysis path now, with a planned high-quality stem-separated path for cleaner results.
 - Edit key, tempo, time signature, section names, bar numbers, chord symbols, repeats, and notes.
 - Split, merge, add, duplicate, and delete bars while listening to the audio.
 - Export cleaned charts to TXT, CSV, JSON, and MusicXML.
+
+## Chord timing
+
+Under **Analysis Options**, choose **Auto changes** to keep supported chord changes
+inside each bar, **Fixed grid** to retain a chord for every subdivision cell, or
+**Legacy, one per bar** for the original bar-level analysis. New analysis defaults
+to Auto changes with a **One beat** grid. **Half bar** and **Half beat** provide
+coarser or finer cells. Beat boundaries follow the detected beat timestamps; when
+the beat detector has gaps, the grid falls back to the song tempo. Auto groups
+matching neighbors and suppresses only a weak isolated passing estimate; a brief
+confident change and silence remain separate events.
+
+Older sessions without timing options continue to display their saved bar chords
+and are identified as Legacy when reopened. Changing a chord event preserves its
+original analysis evidence and marks timing-adjusted evidence as historical.
 
 ## Local Study
 

@@ -50,6 +50,21 @@ test("sessions preserve study result history and reject non-array study payloads
   assert.throws(() => storage.assertSessionSchema({ app: "ChordPilot", version: 1, studies: {} }), /invalid/);
 });
 
+test("sessions round-trip edited chord-event timing, evidence history, and selected event", async (t) => {
+  const { storage } = await makeStorage(t);
+  const chart = { duration: 2, bars: [{ number: 1, start: 0, chord: "G", chord_events: [
+    { start: 0, end: .75, chord: "C", evidence: { detected_notes: ["C"] }, alternatives: [{ chord: "Am", score: .4 }] },
+    { start: .75, end: 2, chord: "G", evidence: { detected_notes: ["G"] }, evidence_stale: true,
+      evidence_history: [{ start: 1, end: 2, evidence: { detected_notes: ["D"] } }], alternatives: [{ chord: "D", score: .2 }] }
+  ] }] };
+  const payload = { app: "ChordPilot", version: 1, chart, ui: { selectedIndex: 0, selectedChordEventIndex: 1 }, analysis: { options: { chord_timing: "fixed", chord_grid: "half_beat" } } };
+  const saved = await storage.saveSession(payload);
+  const reopened = await storage.openSession(saved.id);
+  assert.deepEqual(reopened.session.chart, chart);
+  assert.equal(reopened.session.ui.selectedChordEventIndex, 1);
+  assert.deepEqual(reopened.session.analysis.options, payload.analysis.options);
+});
+
 test("session stem names remain semantic names rather than registered filenames", async (t) => {
   const { storage } = await makeStorage(t);
   const input = storage.createTempPath(".wav"); fs.writeFileSync(input, "audio");

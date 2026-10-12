@@ -420,7 +420,7 @@ def chord_evidence(chroma: Any, start: float, end: float, source: str, np: Any) 
 def chroma_for_segment(audio: Any, sr: int, start: float, end: float, np: Any, options: dict[str, Any] | None = None) -> Any:
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
     start_sample = max(0, int(start * sr))
-    end_sample = min(len(audio), max(start_sample + 2048, int(end * sr)))
+    end_sample = min(len(audio), max(start_sample, int(end * sr)))
     segment = audio[start_sample:end_sample]
     frame = 4096
     hop = 2048

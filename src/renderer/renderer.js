@@ -94,6 +94,8 @@ elements.addBarBtn.addEventListener("click", addBar);
 elements.duplicateBarBtn.addEventListener("click", duplicateBar);
 elements.splitBarBtn.addEventListener("click", splitBar);
 elements.mergeBarBtn.addEventListener("click", mergeBar);
+elements.splitChordEventBtn.addEventListener("click", splitSelectedChordEvent);
+elements.mergeChordEventsBtn.addEventListener("click", mergeSelectedChordEvents);
 elements.deleteBarBtn.addEventListener("click", deleteBar);
 elements.reanalyzeChordsBtn.addEventListener("click", () => reanalyzeSection("chords"));
 elements.reanalyzeLyricsBtn.addEventListener("click", () => reanalyzeSection("lyrics"));
@@ -122,6 +124,7 @@ elements.arrangementKeyInput.addEventListener("change", () => {
 });
 elements.tuningReferenceInput.addEventListener("input", () => setTuningReferenceHz(elements.tuningReferenceInput.value));
 elements.tuningResetBtn.addEventListener("click", () => setTuningReferenceHz(440));
+elements.chordTimingInput.addEventListener("change", updateChordTimingControlState);
 elements.chartRendererInput.addEventListener("change", () => {
   state.chartRenderer = elements.chartRendererInput.value || "table";
   renderChartPreview();

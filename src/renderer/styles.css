@@ -1974,6 +1974,36 @@ body.resizing-detail-pane {
   box-shadow: inset 0 0 0 2px #ff775c;
 }
 
+.chord-event-boundary {
+  background: #f6c65b;
+  cursor: col-resize;
+  height: 100%;
+  position: absolute;
+  right: -4px;
+  top: 0;
+  touch-action: none;
+  width: 8px;
+  z-index: 4;
+}
+
+.bar-chord-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.bar-chord-event {
+  font-size: 10px;
+  padding: 2px 4px;
+}
+
+.evidence-stale {
+  color: #f6c65b;
+  display: block;
+  font-size: 11px;
+}
+
 .lyric-region {
   align-items: center;
   background: rgba(91, 72, 37, 0.82);

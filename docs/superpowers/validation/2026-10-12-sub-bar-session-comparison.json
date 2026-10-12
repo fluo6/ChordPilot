@@ -1,0 +1,951 @@
+{
+  "source": "浪費時間 Waste Of Time [w_jtUvdBjFo].mp3",
+  "validation": "read-only 4-bar comparison using cached Other and Bass stems; not listened",
+  "tempo": 103,
+  "time_signature": "4/4",
+  "sample_seconds": [
+    0.255,
+    9.576097087378642
+  ],
+  "modes": {
+    "legacy/beat": [
+      {
+        "bar": 1,
+        "legacy_chord": "Abmaj7",
+        "events": [
+          {
+            "start": 0.255,
+            "end": 2.586,
+            "chord": "Abmaj7",
+            "confidence": 0.698,
+            "notes": [
+              "C",
+              "Ab",
+              "C#",
+              "G"
+            ],
+            "bass": null
+          }
+        ]
+      },
+      {
+        "bar": 2,
+        "legacy_chord": "C7",
+        "events": [
+          {
+            "start": 2.586,
+            "end": 4.916,
+            "chord": "C7",
+            "confidence": 0.808,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "Ab"
+            ],
+            "bass": null
+          }
+        ]
+      },
+      {
+        "bar": 3,
+        "legacy_chord": "Cm7",
+        "events": [
+          {
+            "start": 4.916,
+            "end": 7.246,
+            "chord": "Cm7",
+            "confidence": 0.81,
+            "notes": [
+              "C",
+              "Bb",
+              "G",
+              "Eb"
+            ],
+            "bass": null
+          }
+        ]
+      },
+      {
+        "bar": 4,
+        "legacy_chord": "Fmaj7",
+        "events": [
+          {
+            "start": 7.246,
+            "end": 9.576,
+            "chord": "Fmaj7",
+            "confidence": 0.88,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "G"
+            ],
+            "bass": null
+          }
+        ]
+      }
+    ],
+    "fixed/beat": [
+      {
+        "bar": 1,
+        "legacy_chord": "Abmaj7",
+        "events": [
+          {
+            "start": 0.255,
+            "end": 0.838,
+            "chord": "Cm7",
+            "confidence": 0.855,
+            "notes": [
+              "C",
+              "G",
+              "Eb",
+              "Bb"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 0.838,
+            "end": 1.42,
+            "chord": "Cm7",
+            "confidence": 0.873,
+            "notes": [
+              "Eb",
+              "C",
+              "G",
+              "Bb"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 1.42,
+            "end": 2.003,
+            "chord": "C#maj7",
+            "confidence": 0.851,
+            "notes": [
+              "C#",
+              "Ab",
+              "F",
+              "C"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 2.003,
+            "end": 2.586,
+            "chord": "C#maj7",
+            "confidence": 0.527,
+            "notes": [
+              "C",
+              "Ab",
+              "A",
+              "E"
+            ],
+            "bass": "F"
+          }
+        ]
+      },
+      {
+        "bar": 2,
+        "legacy_chord": "C7",
+        "events": [
+          {
+            "start": 2.586,
+            "end": 3.168,
+            "chord": "Am7",
+            "confidence": 0.9,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 3.168,
+            "end": 3.751,
+            "chord": "Am7",
+            "confidence": 0.956,
+            "notes": [
+              "C",
+              "E",
+              "G",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 3.751,
+            "end": 4.333,
+            "chord": "Am7",
+            "confidence": 0.893,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 4.333,
+            "end": 4.916,
+            "chord": "C#maj7",
+            "confidence": 0.853,
+            "notes": [
+              "C#",
+              "Ab",
+              "F",
+              "C"
+            ],
+            "bass": "F#"
+          }
+        ]
+      },
+      {
+        "bar": 3,
+        "legacy_chord": "Cm7",
+        "events": [
+          {
+            "start": 4.916,
+            "end": 5.498,
+            "chord": "Cm7",
+            "confidence": 0.834,
+            "notes": [
+              "C",
+              "G",
+              "Eb",
+              "Bb"
+            ],
+            "bass": "Ab"
+          },
+          {
+            "start": 5.498,
+            "end": 6.081,
+            "chord": "Cm7",
+            "confidence": 0.841,
+            "notes": [
+              "C",
+              "Eb",
+              "Bb",
+              "G"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 6.081,
+            "end": 6.663,
+            "chord": "F7",
+            "confidence": 0.772,
+            "notes": [
+              "F",
+              "A",
+              "C",
+              "C#"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 6.663,
+            "end": 7.246,
+            "chord": "Fm",
+            "confidence": 0.834,
+            "notes": [
+              "C",
+              "Ab",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          }
+        ]
+      },
+      {
+        "bar": 4,
+        "legacy_chord": "Fmaj7",
+        "events": [
+          {
+            "start": 7.246,
+            "end": 7.828,
+            "chord": "Am7",
+            "confidence": 0.868,
+            "notes": [
+              "C",
+              "G",
+              "A",
+              "E"
+            ],
+            "bass": "Bb"
+          },
+          {
+            "start": 7.828,
+            "end": 8.411,
+            "chord": "Am7",
+            "confidence": 0.901,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "G"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 8.411,
+            "end": 8.993,
+            "chord": "Fmaj7",
+            "confidence": 0.858,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "F#"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 8.993,
+            "end": 9.576,
+            "chord": "Fmaj7",
+            "confidence": 0.884,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "F"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 9.576,
+            "end": 9.576,
+            "chord": "F7",
+            "confidence": 0.213,
+            "notes": [
+              "A",
+              "Ab",
+              "G",
+              "E"
+            ],
+            "bass": null
+          }
+        ]
+      }
+    ],
+    "fixed/half_beat": [
+      {
+        "bar": 1,
+        "legacy_chord": "Abmaj7",
+        "events": [
+          {
+            "start": 0.255,
+            "end": 0.546,
+            "chord": "Cm7",
+            "confidence": 0.829,
+            "notes": [
+              "C",
+              "G",
+              "Eb",
+              "Ab"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 0.546,
+            "end": 0.838,
+            "chord": "Cm7",
+            "confidence": 0.85,
+            "notes": [
+              "Eb",
+              "C",
+              "G",
+              "Bb"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 0.838,
+            "end": 1.129,
+            "chord": "Cm7",
+            "confidence": 0.851,
+            "notes": [
+              "Eb",
+              "C",
+              "D",
+              "G"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 1.129,
+            "end": 1.42,
+            "chord": "Cm7",
+            "confidence": 0.891,
+            "notes": [
+              "Eb",
+              "C",
+              "Bb",
+              "G"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 1.42,
+            "end": 1.712,
+            "chord": "C#maj7",
+            "confidence": 0.833,
+            "notes": [
+              "C#",
+              "Ab",
+              "C",
+              "F"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 1.712,
+            "end": 2.003,
+            "chord": "Bbm7",
+            "confidence": 0.877,
+            "notes": [
+              "C#",
+              "Ab",
+              "F",
+              "Bb"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 2.003,
+            "end": 2.295,
+            "chord": "Bbm7",
+            "confidence": 0.84,
+            "notes": [
+              "C#",
+              "F",
+              "Bb",
+              "Ab"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 2.295,
+            "end": 2.586,
+            "chord": "Am7",
+            "confidence": 0.845,
+            "notes": [
+              "C",
+              "E",
+              "G",
+              "A"
+            ],
+            "bass": "F"
+          }
+        ]
+      },
+      {
+        "bar": 2,
+        "legacy_chord": "C7",
+        "events": [
+          {
+            "start": 2.586,
+            "end": 2.877,
+            "chord": "Am7",
+            "confidence": 0.826,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "B"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 2.877,
+            "end": 3.168,
+            "chord": "Am7",
+            "confidence": 0.917,
+            "notes": [
+              "C",
+              "E",
+              "G",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 3.168,
+            "end": 3.459,
+            "chord": "Am7",
+            "confidence": 0.94,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "G"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 3.459,
+            "end": 3.751,
+            "chord": "Am7",
+            "confidence": 0.966,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 3.751,
+            "end": 4.042,
+            "chord": "Am7",
+            "confidence": 0.866,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 4.042,
+            "end": 4.333,
+            "chord": "Am7",
+            "confidence": 0.903,
+            "notes": [
+              "C",
+              "E",
+              "G",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 4.333,
+            "end": 4.625,
+            "chord": "C#maj7",
+            "confidence": 0.833,
+            "notes": [
+              "C#",
+              "Ab",
+              "F",
+              "C"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 4.625,
+            "end": 4.916,
+            "chord": "C#maj7",
+            "confidence": 0.87,
+            "notes": [
+              "Ab",
+              "C#",
+              "F",
+              "C"
+            ],
+            "bass": "F#"
+          }
+        ]
+      },
+      {
+        "bar": 3,
+        "legacy_chord": "Cm7",
+        "events": [
+          {
+            "start": 4.916,
+            "end": 5.207,
+            "chord": "Cm7",
+            "confidence": 0.824,
+            "notes": [
+              "C",
+              "G",
+              "D",
+              "Eb"
+            ],
+            "bass": "Ab"
+          },
+          {
+            "start": 5.207,
+            "end": 5.498,
+            "chord": "Cm7",
+            "confidence": 0.843,
+            "notes": [
+              "C",
+              "Eb",
+              "Bb",
+              "G"
+            ],
+            "bass": "Ab"
+          },
+          {
+            "start": 5.498,
+            "end": 5.79,
+            "chord": "Cm7",
+            "confidence": 0.835,
+            "notes": [
+              "C",
+              "G",
+              "Eb",
+              "Bb"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 5.79,
+            "end": 6.081,
+            "chord": "Cm7",
+            "confidence": 0.872,
+            "notes": [
+              "Bb",
+              "Eb",
+              "C",
+              "G"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 6.081,
+            "end": 6.372,
+            "chord": "F7",
+            "confidence": 0.845,
+            "notes": [
+              "A",
+              "F",
+              "C",
+              "C#"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 6.372,
+            "end": 6.663,
+            "chord": "Bbm7",
+            "confidence": 0.861,
+            "notes": [
+              "F",
+              "Bb",
+              "C#",
+              "C"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 6.663,
+            "end": 6.955,
+            "chord": "Bbm7",
+            "confidence": 0.83,
+            "notes": [
+              "F",
+              "Bb",
+              "C#",
+              "C"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 6.955,
+            "end": 7.246,
+            "chord": "Am7",
+            "confidence": 0.878,
+            "notes": [
+              "C",
+              "Ab",
+              "E",
+              "B"
+            ],
+            "bass": "F"
+          }
+        ]
+      },
+      {
+        "bar": 4,
+        "legacy_chord": "Fmaj7",
+        "events": [
+          {
+            "start": 7.246,
+            "end": 7.537,
+            "chord": "Am7",
+            "confidence": 0.859,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "Bb"
+          },
+          {
+            "start": 7.537,
+            "end": 7.828,
+            "chord": "Am7/C",
+            "confidence": 0.883,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "G"
+            ],
+            "bass": "C"
+          },
+          {
+            "start": 7.828,
+            "end": 8.12,
+            "chord": "Am7",
+            "confidence": 0.839,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "F"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 8.12,
+            "end": 8.411,
+            "chord": "Am7",
+            "confidence": 0.918,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "G"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 8.411,
+            "end": 8.702,
+            "chord": "Am7",
+            "confidence": 0.852,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "C#"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 8.702,
+            "end": 8.993,
+            "chord": "Fmaj7",
+            "confidence": 0.855,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "F"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 8.993,
+            "end": 9.284,
+            "chord": "Fmaj7",
+            "confidence": 0.867,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "F"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 9.284,
+            "end": 9.576,
+            "chord": "Fmaj7",
+            "confidence": 0.847,
+            "notes": [
+              "C",
+              "E",
+              "F",
+              "G"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 9.576,
+            "end": 9.576,
+            "chord": "N.C.",
+            "confidence": 0.0,
+            "notes": [],
+            "bass": null
+          },
+          {
+            "start": 9.576,
+            "end": 9.576,
+            "chord": "N.C.",
+            "confidence": 0.0,
+            "notes": [],
+            "bass": null
+          }
+        ]
+      }
+    ],
+    "auto/beat": [
+      {
+        "bar": 1,
+        "legacy_chord": "Abmaj7",
+        "events": [
+          {
+            "start": 0.255,
+            "end": 1.42,
+            "chord": "Cm7",
+            "confidence": 0.855,
+            "notes": [
+              "Eb",
+              "C",
+              "G",
+              "Bb"
+            ],
+            "bass": "A"
+          },
+          {
+            "start": 1.42,
+            "end": 2.586,
+            "chord": "C#maj7",
+            "confidence": 0.818,
+            "notes": [
+              "Ab",
+              "C#",
+              "C",
+              "F"
+            ],
+            "bass": "F#"
+          }
+        ]
+      },
+      {
+        "bar": 2,
+        "legacy_chord": "C7",
+        "events": [
+          {
+            "start": 2.586,
+            "end": 4.333,
+            "chord": "Am7",
+            "confidence": 0.917,
+            "notes": [
+              "C",
+              "G",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 4.333,
+            "end": 4.916,
+            "chord": "C#maj7",
+            "confidence": 0.853,
+            "notes": [
+              "C#",
+              "Ab",
+              "F",
+              "C"
+            ],
+            "bass": "F#"
+          }
+        ]
+      },
+      {
+        "bar": 3,
+        "legacy_chord": "Cm7",
+        "events": [
+          {
+            "start": 4.916,
+            "end": 6.081,
+            "chord": "Cm7",
+            "confidence": 0.832,
+            "notes": [
+              "C",
+              "G",
+              "Eb",
+              "Bb"
+            ],
+            "bass": "Ab"
+          },
+          {
+            "start": 6.081,
+            "end": 6.663,
+            "chord": "F7",
+            "confidence": 0.772,
+            "notes": [
+              "F",
+              "A",
+              "C",
+              "C#"
+            ],
+            "bass": "F#"
+          },
+          {
+            "start": 6.663,
+            "end": 7.246,
+            "chord": "Fm",
+            "confidence": 0.834,
+            "notes": [
+              "C",
+              "Ab",
+              "E",
+              "A"
+            ],
+            "bass": "F"
+          }
+        ]
+      },
+      {
+        "bar": 4,
+        "legacy_chord": "Fmaj7",
+        "events": [
+          {
+            "start": 7.246,
+            "end": 8.411,
+            "chord": "Am7",
+            "confidence": 0.882,
+            "notes": [
+              "C",
+              "A",
+              "E",
+              "G"
+            ],
+            "bass": "Bb"
+          },
+          {
+            "start": 8.411,
+            "end": 9.576,
+            "chord": "Fmaj7",
+            "confidence": 0.871,
+            "notes": [
+              "C",
+              "E",
+              "A",
+              "F"
+            ],
+            "bass": "F"
+          },
+          {
+            "start": 9.576,
+            "end": 9.576,
+            "chord": "F7",
+            "confidence": 0.213,
+            "notes": [
+              "A",
+              "Ab",
+              "G",
+              "E"
+            ],
+            "bass": null
+          }
+        ]
+      }
+    ]
+  }
+}

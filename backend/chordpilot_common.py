@@ -81,7 +81,8 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-05-02-lyrics-reference-v1"
+BACKEND_CACHE_VERSION = "2026-10-12-sub-bar-chords-v1"
+CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v1"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {
     "known_key": "",
@@ -93,6 +94,8 @@ DEFAULT_ANALYSIS_OPTIONS = {
     "chroma_low_hz": 65.0,
     "chroma_high_hz": 1800.0,
     "chord_alternatives": 6,
+    "chord_timing": "auto",
+    "chord_grid": "beat",
     "simplify_chords": True,
     "chord_source": "auto",
     "demucs_model": "htdemucs",
@@ -169,6 +172,13 @@ def normalize_analysis_options(raw: dict[str, Any] | None = None) -> dict[str, A
     if options["chroma_high_hz"] <= options["chroma_low_hz"]:
         options["chroma_high_hz"] = options["chroma_low_hz"] + 500
     options["chord_alternatives"] = int(clamp_number(raw.get("chord_alternatives"), options["chord_alternatives"], 1, 12))
+    options["chord_timing"] = str(raw.get("chord_timing") or options["chord_timing"]).strip().lower().replace("-", "_")
+    if options["chord_timing"] not in {"auto", "fixed", "legacy"}:
+        options["chord_timing"] = "auto"
+    options["chord_grid"] = str(raw.get("chord_grid") or options["chord_grid"]).strip().lower().replace("-", "_")
+    if options["chord_grid"] not in {"half_bar", "beat", "half_beat"}:
+        options["chord_grid"] = "beat"
+    options["chord_timing_algorithm"] = CHORD_TIMING_ALGORITHM_VERSION
     options["simplify_chords"] = bool(raw.get("simplify_chords", options["simplify_chords"]))
     chord_source = str(raw.get("chord_source") or options["chord_source"]).strip().lower().replace("-", "_")
     if chord_source not in {"auto", "other", "accompaniment", "bass", "vocals", "drums", "full_mix"}:

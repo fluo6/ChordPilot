@@ -4,6 +4,7 @@ from chordpilot_cache import read_analysis_cache, write_analysis_cache, append_h
 from chordpilot_chords import *
 from chordpilot_lyrics import generate_lyrics_reference, apply_lyrics_to_bars
 from chordpilot_stems import run_demucs
+from chordpilot_timing import analysis_cell_bounds, group_chord_cells
 
 def estimate_with_librosa(path: Path) -> dict[str, Any]:
     result: dict[str, Any] = {}
@@ -45,9 +46,10 @@ def estimate_builtin(path: Path, options: dict[str, Any] | None = None) -> dict[
     log(f"analysis: beat grid {len(beat_times)} beats")
     log("analysis: estimating bar chords from chroma")
     bars = estimate_bars_from_audio(audio, sr, tempo, "4/4", beat_times, np, "full mix", options)
-    estimated_key = estimate_key_from_chroma(sum((bar["_chroma"] for bar in bars), np.zeros(12)), np) if bars else "C"
+    estimated_key = estimate_key_from_chroma(duration_weighted_cell_chroma(audio, sr, bars, tempo, "4/4", beat_times, np, options), np) if bars else "C"
     key = str(options.get("known_key") or estimated_key or "C")
     normalize_bars_chords(bars, key, np, options, "full mix", None)
+    attach_timed_chord_events(bars, audio, sr, tempo, "4/4", beat_times, np, options, "full mix", key=key)
     if options.get("known_key"):
         log(f"analysis: using known key {key}; estimate was {estimated_key}; bars {len(bars)}")
     else:
@@ -132,7 +134,7 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
     beats_per_bar = parse_beats_per_bar(time_signature)
     seconds_per_bar = (60.0 / max(tempo, 1)) * beats_per_bar
     duration = len(audio) / float(sr)
-    starts = [beat_times[index] for index in range(0, len(beat_times), beats_per_bar)] if beat_times else []
+    starts = sorted({float(beat_times[index]) for index in range(0, len(beat_times), beats_per_bar) if math.isfinite(float(beat_times[index])) and float(beat_times[index]) >= 0}) if beat_times else []
     if not starts:
         starts = [index * seconds_per_bar for index in range(max(8, int(math.ceil(duration / seconds_per_bar))))]
 
@@ -140,7 +142,7 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
     sections = expand_sections(len(starts))
     bars = []
     for index, start in enumerate(starts):
-        end = starts[index + 1] if index + 1 < len(starts) else min(duration, start + seconds_per_bar)
+        end = min(duration, starts[index + 1] if index + 1 < len(starts) else start + seconds_per_bar)
         chroma = chroma_for_segment(audio, sr, start, end, np, options)
         chord, confidence = estimate_chord(chroma, np)
         alternatives = chord_alternatives(chroma, np, int(options.get("chord_alternatives", 6)))
@@ -188,6 +190,8 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
     rhythm_path = stem_paths.get("drums") or source_path
     chord_path, chord_source = select_high_quality_chord_source(source_path, stem_paths, options)
     bass_path = stem_paths.get("bass")
+    bass_audio = None
+    bass_sr = None
 
     log("hq: estimating beat grid from drums/full mix")
     rhythm_result = estimate_builtin(rhythm_path, options)
@@ -204,9 +208,10 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
         bass_audio, bass_sr = load_audio(bass_path)
         add_bass_reference_to_bars(bars, bass_audio, bass_sr, np, "bass stem")
 
-    estimated_key = estimate_key_from_chroma(sum((bar["_chroma"] for bar in bars), np.zeros(12)), np) if bars else "C"
+    estimated_key = estimate_key_from_chroma(duration_weighted_cell_chroma(chord_audio, chord_sr, bars, tempo, "4/4", beat_times, np, options), np) if bars else "C"
     key = str(options.get("known_key") or estimated_key or "C")
     normalize_bars_chords(bars, key, np, options, chord_source, "bass stem" if bass_path else None)
+    attach_timed_chord_events(bars, chord_audio, chord_sr, tempo, "4/4", beat_times, np, options, chord_source, bass_audio, bass_sr, key)
     clean_bars = []
     for bar in bars:
         clean_bar = {key_name: value for key_name, value in bar.items() if key_name != "_chroma"}
@@ -224,7 +229,7 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
 def add_bass_reference_to_bars(bars: list[dict[str, Any]], bass_audio: Any, bass_sr: int, np: Any, source: str = "bass stem") -> None:
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
-        end = float(bars[index + 1].get("start", start + 2.0)) if index + 1 < len(bars) else start + 2.0
+        end = min(len(bass_audio) / float(bass_sr), float(bars[index + 1].get("start", start + 2.0)) if index + 1 < len(bars) else start + 2.0)
         bass_reference = estimate_bass_reference(bass_audio, bass_sr, start, end, np)
         if bass_reference is None:
             continue
@@ -232,13 +237,105 @@ def add_bass_reference_to_bars(bars: list[dict[str, Any]], bass_audio: Any, bass
         bar["bass_root"] = bass_reference["note"]
         bar["bass_reference"] = bass_reference
 
+def duration_weighted_bar_chroma(bars: list[dict[str, Any]], duration: float, tempo: int, time_signature: str, np: Any) -> Any:
+    seconds_per_bar = (60.0 / max(tempo, 1)) * parse_beats_per_bar(time_signature)
+    total = np.zeros(12)
+    for index, bar in enumerate(bars):
+        start = float(bar.get("start", 0.0))
+        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + seconds_per_bar)
+        total += bar["_chroma"] * max(0.0, end - start)
+    return total
+
+def duration_weighted_cell_chroma(audio: Any, sr: int, bars: list[dict[str, Any]], tempo: int,
+                                  time_signature: str, beat_times: list[float], np: Any,
+                                  options: dict[str, Any]) -> Any:
+    from chordpilot_chords import chroma_for_segment
+    total = np.zeros(12)
+    duration = len(audio) / float(sr) if sr else 0.0
+    if options.get("chord_timing", "legacy") == "legacy":
+        return duration_weighted_bar_chroma(bars, duration, tempo, time_signature, np)
+    beats_per_bar = parse_beats_per_bar(time_signature)
+    for index, bar in enumerate(bars):
+        start = float(bar.get("start", 0.0))
+        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + (60.0 / max(tempo, 1)) * beats_per_bar)
+        for cell_start, cell_end in analysis_cell_bounds(start, end, beat_times, options.get("chord_grid", "beat"), beats_per_bar, tempo):
+            total += chroma_for_segment(audio, sr, cell_start, cell_end, np, options) * (cell_end - cell_start)
+    return total
+
+def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, tempo: int,
+                              time_signature: str, beat_times: list[float], np: Any,
+                              options: dict[str, Any], evidence_source: str,
+                              bass_audio: Any = None, bass_sr: int | None = None, key: str = "C") -> None:
+    mode = options.get("chord_timing", "legacy")
+    if mode == "legacy":
+        return
+    from chordpilot_chords import chroma_for_segment
+    beats_per_bar = parse_beats_per_bar(time_signature)
+    song_duration = len(audio) / float(sr) if sr else 0.0
+    cells: list[dict[str, Any]] = []
+    cells_by_bar: list[list[dict[str, Any]]] = []
+    for index, bar in enumerate(bars):
+        start = float(bar.get("start", 0.0))
+        end = min(song_duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + (60.0 / max(tempo, 1)) * beats_per_bar)
+        bounds = analysis_cell_bounds(start, end, beat_times, str(options.get("chord_grid", "beat")), beats_per_bar, tempo)
+        bar_cells = []
+        for cell_start, cell_end in bounds:
+            chroma = chroma_for_segment(audio, sr, cell_start, cell_end, np, options)
+            reference = estimate_bass_reference(bass_audio, int(bass_sr), cell_start, cell_end, np) if bass_audio is not None and bass_sr else None
+            evidence = chord_evidence(chroma, cell_start, cell_end, evidence_source, np)
+            cell = {"start": cell_start, "end": cell_end, "chord": "N.C.", "confidence": 0.0,
+                    "chord_confidence": 0.0, "pitch_confidence": detected_pitch_confidence(chroma, np),
+                    "alternatives": [], "evidence": evidence, "bass_reference": reference, "_chroma": chroma}
+            bar_cells.append(cell)
+            cells.append(cell)
+        cells_by_bar.append(bar_cells)
+    if not cells:
+        return
+    provisional = [rank_chord_candidates(cell["_chroma"], key, None, None, cell.get("bass_reference"), np, options)[0][0]["chord"] for cell in cells]
+    limit = int(options.get("chord_alternatives", 6))
+    for index, cell in enumerate(cells):
+        ranked, libraries = rank_chord_candidates(cell["_chroma"], key, provisional[index - 1] if index else None,
+            provisional[index + 1] if index + 1 < len(cells) else None, cell.get("bass_reference"), np, options)
+        best = ranked[0]
+        alternatives = [{"chord": item["chord"], "score": item["score"], "raw_score": item["raw_score"], "reasons": item.get("reasons", [])} for item in ranked[:limit]]
+        pitch_confidence = detected_pitch_confidence(cell["_chroma"], np)
+        confidence = round(max(0.0, min(0.98, float(best["score"]) * .72 + pitch_confidence * .28)), 3)
+        cell.update({"chord": best["chord"], "confidence": confidence, "chord_confidence": confidence,
+                     "pitch_confidence": pitch_confidence, "alternatives": alternatives,
+                     "debug": {"chosen_chord": best["chord"], "chosen_score": best["score"], "alternatives": alternatives,
+                               "library_candidates": libraries or ["internal templates"]}})
+    for bar, bar_cells in zip(bars, cells_by_bar):
+        grouped = group_chord_cells(bar_cells, np) if mode == "auto" else bar_cells
+        events = []
+        for group in grouped:
+            ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, group.get("bass_reference"), np, options)
+            selected = next((item for item in ranked if item["chord"] == group["chord"]), ranked[0])
+            pitch_confidence = detected_pitch_confidence(group["_chroma"], np)
+            evidence = chord_evidence(group["_chroma"], group["start"], group["end"], evidence_source, np)
+            raw_cells = group.get("cells", [group])
+            alternatives = [{"chord": item["chord"], "score": item["score"], "raw_score": item["raw_score"], "reasons": item.get("reasons", [])} for item in ranked[:limit]]
+            events.append({"start": round(float(group["start"]), 3), "end": round(float(group["end"]), 3),
+                "chord": group["chord"], "confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3),
+                "chord_confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3), "pitch_confidence": pitch_confidence,
+                "alternatives": alternatives, "evidence": evidence, "bass_reference": group.get("bass_reference"),
+                "debug": {"cells": [{"start": cell["start"], "end": cell["end"], "chord": cell["chord"],
+                    "detected_chord": cell.get("detected_chord", cell["chord"]), "confidence": cell["confidence"], "alternatives": cell["alternatives"], "evidence": cell["evidence"],
+                    "bass_reference": cell.get("bass_reference")} for cell in raw_cells], "library_candidates": libraries}})
+        if not events:
+            continue
+        bar["chord_events"] = events
+        dominant = max(enumerate(events), key=lambda pair: (pair[1]["end"] - pair[1]["start"], -pair[0]))[1]
+        for field in ("chord", "confidence", "chord_confidence", "pitch_confidence", "alternatives", "evidence", "bass_reference", "debug"):
+            if field in dominant:
+                bar[field] = dominant[field]
+
 def estimate_bass_root(audio: Any, sr: int, start: float, end: float, np: Any) -> int | None:
     reference = estimate_bass_reference(audio, sr, start, end, np)
     return None if reference is None else int(reference["pitch_class"])
 
 def estimate_bass_reference(audio: Any, sr: int, start: float, end: float, np: Any) -> dict[str, Any] | None:
     start_sample = max(0, int(start * sr))
-    end_sample = min(len(audio), max(start_sample + 2048, int(end * sr)))
+    end_sample = min(len(audio), max(start_sample, int(end * sr)))
     segment = audio[start_sample:end_sample]
     if len(segment) < 1024:
         return None

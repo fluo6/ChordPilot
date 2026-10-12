@@ -13,13 +13,64 @@ function findActiveBarIndex(time) {
   return state.chart.bars.length ? 0 : -1;
 }
 
+function chordEventsForBar(index) {
+  if (!hasChart() || index < 0 || index >= state.chart.bars.length) return [];
+  const bar = state.chart.bars[index];
+  return barChordEvents(bar, barEndTime(index));
+}
+
+function getSelectedChordEvent(index = state.selectedIndex) {
+  const bar = hasChart() ? state.chart.bars[index] : null;
+  const events = chordEventsForBar(index);
+  if (!events.length) return null;
+  const selected = Number(state.selectedChordEventIndex);
+  const eventIndex = Number.isInteger(selected) && selected >= 0 && selected < events.length ? selected : 0;
+  const source = bar?.chord_events;
+  if (Array.isArray(source) && source.length === events.length && source.every((event, position) => event?.start === events[position].start && event?.end === events[position].end && event?.chord === events[position].chord)) {
+    return source[eventIndex];
+  }
+  return events[eventIndex];
+}
+
+function selectedChordTarget(index = state.selectedIndex) {
+  const bar = hasChart() ? state.chart.bars[index] : null;
+  return validStoredChordEvents(bar, index) ? getSelectedChordEvent(index) : bar;
+}
+
+function validStoredChordEvents(bar, index) {
+  if (!Array.isArray(bar?.chord_events) || !bar.chord_events.length) return false;
+  return JSON.stringify(bar.chord_events) === JSON.stringify(barChordEvents(bar, barEndTime(index)));
+}
+
+function syncBarChordSummary(bar) {
+  const events = barChordEvents(bar, barEndTime(state.chart.bars.indexOf(bar)));
+  const dominant = summarizeChordEvents(events);
+  if (!dominant) return;
+  for (const field of ["chord", "confidence", "chord_confidence", "pitch_confidence", "alternatives", "evidence", "bass_reference", "debug", "evidence_stale", "evidence_history"]) {
+    if (dominant[field] !== undefined) bar[field] = dominant[field];
+  }
+}
+
 function updateActiveBarFromPlayback() {
-  const nextIndex = findActiveBarIndex(elements.audioPlayer.currentTime || 0);
-  if (nextIndex === state.activeIndex) {
+  const originalTime = Number(elements.audioPlayer.currentTime || 0) * (Number(state.audioPreview?.tempoRate) || 1);
+  let nextIndex = findActiveBarIndex(originalTime);
+  let events = chordEventsForBar(nextIndex);
+  let nextEventIndex = activeChordEvent(events, originalTime);
+  if (nextEventIndex < 0 && hasChart()) {
+    const containingIndex = state.chart.bars.findIndex((bar, index) => originalTime >= Number(bar.start)
+      && originalTime < barEndTime(index));
+    if (containingIndex >= 0) {
+      nextIndex = containingIndex;
+      events = chordEventsForBar(nextIndex);
+      nextEventIndex = activeChordEvent(events, originalTime);
+    }
+  }
+  if (nextIndex === state.activeIndex && nextEventIndex === state.activeChordEventIndex) {
     return;
   }
 
   state.activeIndex = nextIndex;
+  state.activeChordEventIndex = nextEventIndex;
   updateRowState({ scroll: true });
 }
 
@@ -62,13 +113,36 @@ function renderBars() {
 
     const chordCell = document.createElement("td");
     const chordInput = createInput(bar.chord, (value) => {
-      bar.chord = value;
+      if (Array.isArray(bar.chord_events) && bar.chord_events.length) {
+        const dominantIndex = bar.chord_events.reduce((best, event, eventIndex, all) => event.end - event.start > all[best].end - all[best].start ? eventIndex : best, 0);
+        bar.chord_events[dominantIndex].chord = value;
+        syncBarChordSummary(bar);
+      } else bar.chord = value;
       renderTimeline();
     });
     if (Array.isArray(bar.alternatives) && bar.alternatives.length) {
       chordInput.title = `Alternatives: ${bar.alternatives.map((item) => `${item.chord} ${Math.round(item.score * 100)}%`).join(", ")}`;
     }
     chordCell.appendChild(chordInput);
+    const events = chordEventsForBar(index);
+    if (events.length > 1) {
+      const eventList = document.createElement("div");
+      eventList.className = "bar-chord-events";
+      events.forEach((item, eventIndex) => {
+        const eventButton = document.createElement("button");
+        eventButton.type = "button";
+        eventButton.className = "bar-chord-event";
+        eventButton.textContent = `${eventIndex + 1}: ${item.chord}`;
+        eventButton.title = `${formatSeconds(item.start)}–${formatSeconds(item.end)}s · click to inspect this chord`;
+        eventButton.setAttribute("aria-label", `Chord event ${eventIndex + 1}: ${item.chord}`);
+        eventButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectBar(index, true, eventIndex);
+        });
+        eventList.appendChild(eventButton);
+      });
+      chordCell.appendChild(eventList);
+    }
 
     const confidenceCell = document.createElement("td");
     confidenceCell.className = confidenceClass(bar.confidence);
@@ -403,7 +477,7 @@ function renderMeasureGridPreview(container) {
       number.className = "measure-number";
       number.textContent = bar.number || index + 1;
       const chord = document.createElement("strong");
-      chord.textContent = barChordText(bar);
+      chord.textContent = chordEventsForBar(index).map((item) => item.chord).join(" · ");
       const meta = document.createElement("em");
       meta.textContent = [section, barRepeatText(bar)].filter(Boolean).join(" / ");
       const lyrics = document.createElement("span");
@@ -442,7 +516,11 @@ function renderIrealPreview(container) {
       leftBar.classList.toggle("repeat", Boolean(bar.repeat_start));
       leftBar.textContent = bar.repeat_start ? "|:" : "|";
       const chord = document.createElement("strong");
-      appendIrealChord(chord, barChordText(bar));
+      const chordEvents = chordEventsForBar(index);
+      chordEvents.forEach((item, eventIndex) => {
+        if (eventIndex) chord.appendChild(document.createTextNode(" / "));
+        appendIrealChord(chord, item.chord);
+      });
       const rightBar = document.createElement("span");
       rightBar.className = "ireal-barline right";
       rightBar.classList.toggle("repeat", Number(bar.repeat_end) > 0);
@@ -473,7 +551,10 @@ function renderChordProPreview(container) {
     if (section) {
       lines.push(`[${section}]`);
     }
-    lines.push(row.map(({ bar }) => `| [${barChordText(bar)}]`).join(" ") + " |");
+    lines.push(row.map(({ bar, index }) => {
+      const symbols = chordEventsForBar(index).map((item) => item.chord).join(" / ");
+      return `| [${symbols || barChordText(bar)}]`;
+    }).join(" ") + " |");
     const lyricLine = row.map(({ bar }) => barLyricText(bar)).filter(Boolean).join(" / ");
     if (lyricLine) {
       lines.push(lyricLine);
@@ -546,12 +627,14 @@ function updateDetailPane() {
     return;
   }
 
-  elements.detailBarLabel.textContent = `Bar ${bar.number || state.selectedIndex + 1}`;
+  const event = validStoredChordEvents(bar, state.selectedIndex) ? getSelectedChordEvent() : null;
+  const display = event || bar;
+  elements.detailBarLabel.textContent = `Bar ${bar.number || state.selectedIndex + 1}${event ? ` · ${event.chord}` : ""}`;
   if (document.activeElement !== elements.detailSectionInput) {
     elements.detailSectionInput.value = bar.section || "";
   }
   if (document.activeElement !== elements.detailChordInput) {
-    elements.detailChordInput.value = bar.chord || "";
+    elements.detailChordInput.value = display.chord || "";
   }
   if (document.activeElement !== elements.detailStartInput) {
     elements.detailStartInput.value = formatSeconds(Number(bar.start) || 0);
@@ -566,24 +649,38 @@ function updateDetailPane() {
     elements.detailLyricsInput.value = bar.lyrics || "";
   }
   if (document.activeElement !== elements.detailNotesInput) {
-    elements.detailNotesInput.value = bar.notes || "";
+    elements.detailNotesInput.value = display.notes || bar.notes || "";
   }
 
   renderDetailLyricsReference(state.selectedIndex);
 
   elements.detailAlternatives.innerHTML = "";
   const confidence = document.createElement("span");
-  confidence.className = confidenceClass(bar.confidence);
-  confidence.textContent = `Chord ${formatConfidence(bar.chord_confidence ?? bar.confidence)} / pitch ${formatConfidence(bar.pitch_confidence ?? bar.evidence?.pitch_confidence)}`;
+  confidence.className = confidenceClass(display.confidence);
+  confidence.textContent = `Chord ${formatConfidence(display.chord_confidence ?? display.confidence)} / pitch ${formatConfidence(display.pitch_confidence ?? display.evidence?.pitch_confidence)}`;
   elements.detailAlternatives.appendChild(confidence);
+  if (display.evidence_stale) {
+    const stale = document.createElement("em");
+    stale.className = "evidence-stale";
+    stale.textContent = "Timing edited · analysis evidence is historical";
+    elements.detailAlternatives.appendChild(stale);
+  }
+  if (event && typeof openChordEventStudy === "function") {
+    const studyButton = document.createElement("button");
+    studyButton.type = "button";
+    studyButton.textContent = "Study this chord";
+    studyButton.addEventListener("click", () => openChordEventStudy(state.selectedIndex, state.selectedChordEventIndex));
+    elements.detailAlternatives.appendChild(studyButton);
+  }
 
-  const alternatives = Array.isArray(bar.alternatives) ? bar.alternatives.slice(0, 4) : [];
+  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.slice(0, 4) : [];
   alternatives.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = `${item.chord} ${formatConfidence(item.score)}`;
     button.addEventListener("click", () => {
-      bar.chord = item.chord;
+      display.chord = item.chord;
+      if (event) syncBarChordSummary(bar);
       renderBars();
     });
     elements.detailAlternatives.appendChild(button);
@@ -595,11 +692,11 @@ function updateDetailPane() {
   const evidenceTitle = document.createElement("strong");
   evidenceTitle.textContent = "Why";
   const evidenceRange = document.createElement("span");
-  evidenceRange.textContent = chordEvidenceText(bar, state.selectedIndex);
+  evidenceRange.textContent = chordEvidenceText(display, state.selectedIndex);
   evidence.append(evidenceTitle, evidenceRange);
-  evidence.appendChild(createPianoEvidence(bar));
+  evidence.appendChild(createPianoEvidence(display));
 
-  const notes = Array.isArray(bar.evidence?.detected_notes) ? bar.evidence.detected_notes.slice(0, 6) : [];
+  const notes = Array.isArray(display.evidence?.detected_notes) ? display.evidence.detected_notes.slice(0, 6) : [];
   if (notes.length) {
     const noteStrip = document.createElement("div");
     noteStrip.className = "note-strip";
@@ -610,9 +707,9 @@ function updateDetailPane() {
     });
     evidence.appendChild(noteStrip);
   }
-  evidence.appendChild(createChordDebug(bar));
+  evidence.appendChild(createChordDebug(display));
   elements.detailAlternatives.appendChild(evidence);
-  renderChartReasonPane(bar);
+  renderChartReasonPane(display);
 }
 
 function renderChartReasonPane(bar = getSelectedBar()) {
@@ -626,18 +723,20 @@ function renderChartReasonPane(bar = getSelectedBar()) {
     return;
   }
 
-  elements.chartReasonLabel.textContent = `Bar ${bar.number || state.selectedIndex + 1}`;
+  const display = bar === getSelectedBar() ? selectedChordTarget() || bar : bar;
+  const barNumber = getSelectedBar()?.number || state.selectedIndex + 1;
+  elements.chartReasonLabel.textContent = `Bar ${barNumber}${display !== bar ? ` · ${display.chord}` : ""}`;
   const chord = document.createElement("strong");
   chord.className = "chart-reason-chord";
-  chord.textContent = barChordText(bar);
+  chord.textContent = barChordText(display);
   const confidence = document.createElement("span");
-  confidence.className = confidenceClass(bar.chord_confidence ?? bar.confidence);
-  confidence.textContent = `Chord ${formatConfidence(bar.chord_confidence ?? bar.confidence)} / pitch ${formatConfidence(bar.pitch_confidence ?? bar.evidence?.pitch_confidence)}`;
+  confidence.className = confidenceClass(display.chord_confidence ?? display.confidence);
+  confidence.textContent = `Chord ${formatConfidence(display.chord_confidence ?? display.confidence)} / pitch ${formatConfidence(display.pitch_confidence ?? display.evidence?.pitch_confidence)}`;
   const why = document.createElement("p");
-  why.textContent = chordEvidenceText(bar, state.selectedIndex);
-  elements.chartReasonPane.append(chord, confidence, why, createPianoEvidence(bar));
+  why.textContent = chordEvidenceText(display, state.selectedIndex);
+  elements.chartReasonPane.append(chord, confidence, why, createPianoEvidence(display));
 
-  const alternatives = Array.isArray(bar.alternatives) ? bar.alternatives.slice(0, 6) : [];
+  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.slice(0, 6) : [];
   if (alternatives.length) {
     const list = document.createElement("div");
     list.className = "chart-reason-options";
@@ -646,7 +745,8 @@ function renderChartReasonPane(bar = getSelectedBar()) {
       option.type = "button";
       option.textContent = `${item.chord} ${formatConfidence(item.score)}`;
       option.addEventListener("click", () => {
-        bar.chord = item.chord;
+        display.chord = item.chord;
+        if (display !== bar) syncBarChordSummary(bar);
         renderBars();
       });
       list.appendChild(option);
@@ -916,7 +1016,8 @@ function hideChordSuggestion() {
 
 function showChordSuggestion(index, anchor) {
   const bar = hasChart() ? state.chart.bars[index] : null;
-  const items = suggestionItemsForBar(bar);
+  const target = selectedChordTarget(index) || bar;
+  const items = suggestionItemsForBar(target);
   elements.chordSuggestion.innerHTML = "";
 
   if (!bar || !items.length) {
@@ -931,14 +1032,14 @@ function showChordSuggestion(index, anchor) {
 
   const evidence = document.createElement("div");
   evidence.className = "suggestion-evidence";
-  evidence.textContent = chordEvidenceText(bar, index);
+  evidence.textContent = chordEvidenceText(target, index);
   elements.chordSuggestion.appendChild(evidence);
-  elements.chordSuggestion.appendChild(createPianoEvidence(bar));
+  elements.chordSuggestion.appendChild(createPianoEvidence(target));
 
   items.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = item.chord === bar.chord ? "suggestion-option current" : "suggestion-option";
+    button.className = item.chord === target.chord ? "suggestion-option current" : "suggestion-option";
     const score = Number.isFinite(item.score) ? formatConfidence(item.score) : "-";
     const chord = document.createElement("span");
     chord.textContent = item.chord;
@@ -948,10 +1049,11 @@ function showChordSuggestion(index, anchor) {
     button.title = `${item.source}: ${item.chord} (${score})`;
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      bar.chord = item.chord;
+      target.chord = item.chord;
       if (Number.isFinite(item.score)) {
-        bar.confidence = Math.max(0, Math.min(0.95, item.score));
+        target.confidence = Math.max(0, Math.min(0.95, item.score));
       }
+      if (target !== bar) syncBarChordSummary(bar);
       hideChordSuggestion();
       renderBars();
     });
@@ -967,13 +1069,16 @@ function showChordSuggestion(index, anchor) {
   elements.chordSuggestion.classList.remove("hidden");
 }
 
-function selectBar(index, seek) {
+function selectBar(index, seek, eventIndex = 0) {
   if (!hasChart() || index < 0 || index >= state.chart.bars.length) {
     return;
   }
   state.selectedIndex = index;
-  if (seek && Number.isFinite(state.chart.bars[index].start)) {
-    elements.audioPlayer.currentTime = Math.max(0, state.chart.bars[index].start);
+  const events = chordEventsForBar(index);
+  state.selectedChordEventIndex = Number.isInteger(eventIndex) && eventIndex >= 0 && eventIndex < events.length ? eventIndex : 0;
+  const event = events[state.selectedChordEventIndex];
+  if (seek && Number.isFinite(event?.start ?? state.chart.bars[index].start)) {
+    elements.audioPlayer.currentTime = Math.max(0, Number(event?.start ?? state.chart.bars[index].start) / (Number(state.audioPreview?.tempoRate) || 1));
     syncStemTimes();
   }
   updateRowState({ scroll: true });
@@ -988,7 +1093,7 @@ function updateSelectedBarFromDetail(field, value) {
   if (field === "section") {
     bar.section = value;
   } else if (field === "chord") {
-    bar.chord = value;
+    applySelectedChordCorrection("chord", value);
   } else if (field === "start") {
     bar.start = Number(value) || 0;
     state.chart.bars.sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0));
@@ -1002,8 +1107,18 @@ function updateSelectedBarFromDetail(field, value) {
     bar.lyrics = value;
     bar.lyrics_source = "manual";
   } else if (field === "notes") {
-    bar.notes = value;
+    applySelectedChordCorrection("notes", value);
   }
 
   renderBars();
+}
+
+function applySelectedChordCorrection(field, value) {
+  const bar = getSelectedBar();
+  if (!bar) return;
+  const target = selectedChordTarget();
+  if (field === "chord") target.chord = value;
+  else if (field === "notes" && target !== bar) target.notes = value;
+  else if (field === "notes") bar.notes = value;
+  if (target !== bar && field === "chord") syncBarChordSummary(bar);
 }
