@@ -959,6 +959,16 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
     ? new Map((bar?.evidence?.detected_pitches || []).map((item) => [item.midi, item.strength]))
     : detectedStrengthMap(bar);
   const chordTones = chordToneSet(chordSymbol);
+  const playableKey = (note, octave, midi) => {
+    const key = document.createElement("button");
+    key.type = "button";
+    key.setAttribute("aria-label", `Play ${note}${octave}`);
+    key.addEventListener("click", () => playPianoNote(midi));
+    key.addEventListener("keydown", (event) => {
+      if (event.code === "Space" || event.key === "Enter") event.stopPropagation();
+    });
+    return key;
+  };
   const keys = document.createElement("div");
   keys.className = "piano-keys";
 
@@ -966,7 +976,7 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   const whites = octaves.flatMap((octave) => WHITE_KEYS.map((note) => ({ note, octave, midi: (octave + 1) * 12 + pitchIndex(note) })))
     .filter((item) => !options.exactPitches || item.midi >= 21 && item.midi <= 108);
   whites.forEach(({ note, octave, midi }) => {
-      const key = document.createElement("div");
+      const key = playableKey(note, octave, midi);
       const strength = strengths.get(options.exactPitches ? midi : note) || 0;
       key.className = "piano-key white-key";
       key.dataset.midi = String(midi); key.style.width = `${100 / whites.length}%`;
@@ -983,9 +993,9 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
 
   octaves.forEach((octave, octaveIndex) => {
     BLACK_KEYS.forEach((item) => {
-      const key = document.createElement("div");
       const midi = (octave + 1) * 12 + pitchIndex(item.note);
       if (options.exactPitches && (midi < 21 || midi > 108)) return;
+      const key = playableKey(item.note, octave, midi);
       const strength = strengths.get(options.exactPitches ? midi : item.note) || 0;
       const whiteIndex = options.exactPitches ? whites.findIndex((white) => white.octave === octave && white.note === WHITE_KEYS[item.afterWhite]) + 1 : (octaveIndex * WHITE_KEYS.length) + item.afterWhite + 1;
       key.className = "piano-key black-key";
@@ -1006,6 +1016,7 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   const legend = document.createElement("div");
   legend.className = "piano-legend";
   legend.textContent = options.exactPitches ? "Glow = detected pitch estimate, outline = detected chord tones, dot = detected bass pitch · scroll for all 88 keys" : `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
+  legend.textContent += " · click a key to hear its note";
   if (options.exactPitches) {
     piano.classList.toggle("piano-exact", true);
     const viewport = document.createElement("div"); viewport.className = "piano-viewport";

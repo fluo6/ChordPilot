@@ -15,11 +15,11 @@ function metronomeSecondsPerBeat() {
   return 60 / tempo;
 }
 
-function ensureMetronomeContext() {
+function ensureMetronomeContext(feature = "Metronome") {
   if (!metronomeContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
-      setStatus("Metronome is not available in this browser");
+      setStatus(`${feature} is not available in this browser`);
       return null;
     }
     metronomeContext = new AudioContextClass();
@@ -28,6 +28,27 @@ function ensureMetronomeContext() {
     metronomeContext.resume().catch(() => {});
   }
   return metronomeContext;
+}
+
+function playPianoNote(midi) {
+  if (!Number.isInteger(midi) || midi < 21 || midi > 108) return;
+  const volume = Math.max(0, Math.min(1, Number(state.masterVolume ?? 1) || 0));
+  if (!volume) return;
+  const context = ensureMetronomeContext("Note playback");
+  if (!context) return;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const start = context.currentTime;
+  oscillator.type = "triangle";
+  oscillator.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), start);
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(volume * 0.15, start + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.65);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  oscillator.start(start);
+  oscillator.stop(start + 0.7);
 }
 
 function applyMetronomeSettings() {

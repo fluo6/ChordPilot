@@ -54,3 +54,39 @@ test("click scheduling validates context and silent volume", () => {
   m.playMetronomeClick(context, 1, true);
   assert.equal(created, 0);
 });
+
+test("piano audition plays the requested pitch, respects mute, and releases audio nodes", () => {
+  const voices = [];
+  let resumes = 0;
+  const state = { masterVolume: 0.5 };
+  const context = {
+    currentTime: 3, state: "suspended", destination: {},
+    resume() { resumes += 1; this.state = "running"; return Promise.resolve(); },
+    createOscillator() {
+      const voice = { frequency: { setValueAtTime(value) { voice.hz = value; } },
+        connect() {}, start(time) { this.started = time; }, stop(time) { this.stopped = time; },
+        disconnect() { this.disconnected = true; } };
+      voices.push(voice); return voice;
+    },
+    createGain() {
+      const gain = { gain: { setValueAtTime() {}, linearRampToValueAtTime(value) { gain.peak = value; }, exponentialRampToValueAtTime() {} },
+        connect() {}, disconnect() { this.disconnected = true; } };
+      voices.at(-1).gainNode = gain; return gain;
+    }
+  };
+  const m = loadScript("src/renderer/metronome.js", ["playPianoNote"], {
+    state, window: { AudioContext: function () { return context; } }, setStatus() {}
+  });
+  m.playPianoNote(69); m.playPianoNote(60); m.playPianoNote(61);
+  assert.equal(resumes, 1);
+  assert.equal(voices[0].hz, 440);
+  assert.ok(Math.abs(voices[1].hz - 261.626) < .001);
+  assert.ok(Math.abs(voices[2].hz - 277.183) < .001);
+  assert.ok(voices.every((voice) => voice.stopped > voice.started && voice.stopped - voice.started < 1));
+  assert.equal(voices[0].gainNode.peak, .075);
+  voices[0].onended();
+  assert.equal(voices[0].disconnected, true); assert.equal(voices[0].gainNode.disconnected, true);
+  state.masterVolume = 0;
+  m.playPianoNote(60); m.playPianoNote(20); m.playPianoNote(109); m.playPianoNote(NaN);
+  assert.equal(voices.length, 3);
+});

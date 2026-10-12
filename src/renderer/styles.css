@@ -586,7 +586,7 @@ button {
   min-height: 19px;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled):not(.piano-key) {
   background: #293341;
   border-color: #5a6b82;
 }
@@ -2298,6 +2298,10 @@ body.resizing-detail-pane {
 }
 
 .piano-key {
+  border-radius: 0;
+  cursor: pointer;
+  min-width: 0;
+  padding: 0;
   align-items: end;
   display: flex;
   font-size: 8px;
@@ -2306,6 +2310,15 @@ body.resizing-detail-pane {
   overflow: hidden;
   position: relative;
   user-select: none;
+}
+
+.piano-key:focus-visible {
+  outline: 2px solid #35d9bb;
+  outline-offset: -3px;
+}
+
+.piano-key:active {
+  filter: brightness(0.8);
 }
 
 .piano-key span {

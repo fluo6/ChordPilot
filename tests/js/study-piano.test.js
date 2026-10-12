@@ -2,16 +2,18 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { loadScript } = require("./helpers/load-script");
 
-function piano(evidence, options) {
-  function node() {
-    const value = { children: [], dataset: {}, style: { setProperty() {} },
+function piano(evidence, options, playPianoNote = () => {}) {
+  function node(tagName) {
+    const value = { tagName, children: [], dataset: {}, listeners: {}, attributes: {}, style: { setProperty() {} },
+      addEventListener(name, handler) { this.listeners[name] = handler; },
+      setAttribute(name, value) { this.attributes[name] = value; },
       append(...items) { this.children.push(...items); }, appendChild(item) { this.children.push(item); } };
     const flags = new Set();
     value.classList = { toggle(name, enabled) { enabled ? flags.add(name) : flags.delete(name); }, contains(name) { return flags.has(name); } };
     return value;
   }
   const { createPianoEvidence } = loadScript("src/renderer/bars.js", ["createPianoEvidence"], {
-    document: { createElement: node }, formatConfidence: (value) => `${Math.round(value * 100)}%`,
+    document: { createElement: node }, playPianoNote, formatConfidence: (value) => `${Math.round(value * 100)}%`,
     PITCH_NAMES: ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"],
     ENHARMONIC_TO_PITCH: { DB: "C#", "D#": "Eb", GB: "F#", "G#": "Ab", "A#": "Bb" },
     WHITE_KEYS: ["C", "D", "E", "F", "G", "A", "B"],
@@ -41,4 +43,20 @@ test("legacy pitch class evidence does not invent octaves", () => {
   const keys = piano({ detected_notes: [{ note: "C", strength: .5 }] }, { pitchClassesOnly: true });
   assert.equal(keys.length, 12);
   assert.equal(keys.find((key) => key.className.includes("white-key")).children[0].textContent, "C");
+});
+
+test("all piano keys are accessible buttons that audition their exact MIDI pitch", () => {
+  const played = [];
+  const keys = piano({}, { exactPitches: true }, (midi) => played.push(midi));
+  for (const midi of [21, 60, 61, 108]) {
+    const key = keys.find((item) => Number(item.dataset.midi) === midi);
+    assert.equal(key.tagName, "button");
+    assert.equal(key.type, "button");
+    assert.match(key.attributes["aria-label"], /^Play /);
+    let stopped = false;
+    key.listeners.keydown({ code: "Space", key: " ", stopPropagation() { stopped = true; } });
+    assert.equal(stopped, true);
+    key.listeners.click();
+  }
+  assert.deepEqual(played, [21, 60, 61, 108]);
 });
