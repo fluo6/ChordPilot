@@ -47,9 +47,13 @@ def parse_candidate_symbol(symbol: str) -> dict[str, Any] | None:
 
 def normalize_quality_suffix(value: str) -> str:
     suffix = str(value or "").strip()
+    if suffix in {"M7", "M9", "M13"}:
+        return "maj" + suffix[1:]
     lower = suffix.lower().replace("minor", "m").replace("major", "maj")
     lower = lower.replace("min", "m").replace("-", "m").replace("Δ", "maj")
     lower = lower.replace("ø", "m7b5")
+    if lower in CHORD_QUALITIES:
+        return lower
     if lower in {"", "maj", "major"}:
         return ""
     if lower in {"m", "mi"}:
@@ -162,8 +166,7 @@ def library_candidate_symbols(chroma: Any, np: Any) -> tuple[set[str], list[str]
     return symbols, libraries
 
 def generate_chord_candidates(chroma: Any, bass_reference: dict[str, Any] | None, np: Any, options: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    simplify = bool(options.get("simplify_chords", True))
-    symbols = local_candidate_symbols(chroma, np, include_complex=not simplify)
+    symbols = local_candidate_symbols(chroma, np)
     library_symbols, libraries = library_candidate_symbols(chroma, np)
     symbols.update(library_symbols)
 
@@ -257,12 +260,12 @@ def score_chord_candidate(
             reasons.append(f"penalizes unexplained strong notes ({round(unexplained * 100)}%)")
 
     complexity = float(quality.get("complexity", 0.25))
-    if bool(options.get("simplify_chords", True)):
-        score -= complexity * 1.25
-        if complexity > 0.2:
-            reasons.append("simplify mode prefers triads and sevenths")
-    else:
-        score -= complexity * 0.45
+    score -= complexity * 0.45
+    # Extensions need their own evidence, rather than absorbing spectral noise.
+    for interval in quality["intervals"]:
+        if interval in {10, 11} or interval >= 12:
+            if float(normalized[(root + interval) % 12]) < 0.045:
+                score -= 0.35
 
     bass_pc = bass_reference.get("pitch_class") if bass_reference else None
     bass_confidence = float(bass_reference.get("confidence", 0.0)) if bass_reference else 0.0

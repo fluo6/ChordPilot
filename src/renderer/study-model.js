@@ -40,6 +40,12 @@ function createStudyState(settings = {}) {
   };
 }
 
+function studyDetectionSettings(settings, algorithmVersion) {
+  const normalized = studySettings(settings);
+  if (algorithmVersion === "local-study-v3") delete normalized.simplify_chords;
+  return normalized;
+}
+
 function normalizeStudyRun(run) {
   if (!run || typeof run.id !== "string" || !run.id || typeof run.chord !== "string" ||
       !Array.isArray(run.range) || studyRangeError(run.range[0], run.range[1]) ||
@@ -114,6 +120,6 @@ function saveStudyRecord(studies, draft, pendingRuns, openStudyId, now, createId
 }
 
 function compareStudyRuns(current, previous) {
-  const input = (run) => JSON.stringify({ range: run?.range, sources: [...(run?.sources || [])].sort(), settings: studySettings(run?.settings) });
+  const input = (run) => JSON.stringify({ range: run?.range, sources: [...(run?.sources || [])].sort(), settings: studyDetectionSettings(run?.settings, run?.algorithm_version) });
   return { sameInputs: input(current) === input(previous), current: studyCopy(current), previous: studyCopy(previous) };
 }

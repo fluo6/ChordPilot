@@ -132,7 +132,7 @@ function renderBars() {
         const eventButton = document.createElement("button");
         eventButton.type = "button";
         eventButton.className = "bar-chord-event";
-        eventButton.textContent = `${eventIndex + 1}: ${item.chord}`;
+        eventButton.textContent = `${eventIndex + 1}: ${displayChordSymbol(item.chord)}`;
         eventButton.title = `${formatSeconds(item.start)}–${formatSeconds(item.end)}s · click to inspect this chord`;
         eventButton.setAttribute("aria-label", `Chord event ${eventIndex + 1}: ${item.chord}`);
         eventButton.addEventListener("click", (event) => {
@@ -218,10 +218,19 @@ function chartRows(measuresPerRow = 4) {
   return rows;
 }
 
+function displayChordSymbol(symbol, simplify = elements.simplifyChordsInput?.checked ?? state.chart?.analysis_engine?.options?.simplify_chords ?? true) {
+  const canonical = String(symbol || "N.C.").replace(/^([A-G][#b]?)M(7|9|13)(?=\/|$)/, "$1maj$2");
+  if (!simplify) return canonical;
+  return canonical.replace(/^([A-G][#b]?)(maj(?:9|13)|m(?:9|11)|9|11|13|m?add9)(?=\/|$)/, (_, root, quality) => {
+    const simple = quality.startsWith("maj") ? "maj7" : quality.startsWith("madd") ? "m" : quality === "add9" ? "" : quality.startsWith("m") ? "m7" : "7";
+    return root + simple;
+  });
+}
+
 function barChordText(bar) {
   const choice = highestConfidenceChordChoice(bar);
   const chord = String(choice?.chord || bar?.chord || "").trim();
-  return chord || "N.C.";
+  return displayChordSymbol(chord);
 }
 
 function highestConfidenceChordChoice(bar) {
@@ -393,7 +402,7 @@ function barRepeatText(bar) {
 }
 
 function irealChordParts(symbol) {
-  const clean = barChordText({ chord: symbol });
+  const clean = String(symbol || "N.C.").trim();
   if (clean.toUpperCase() === "N.C.") {
     return { root: "N.C.", quality: "", extension: "", bass: "" };
   }
@@ -477,7 +486,7 @@ function renderMeasureGridPreview(container) {
       number.className = "measure-number";
       number.textContent = bar.number || index + 1;
       const chord = document.createElement("strong");
-      chord.textContent = chordEventsForBar(index).map((item) => item.chord).join(" · ");
+      chord.textContent = chordEventsForBar(index).map((item) => displayChordSymbol(item.chord)).join(" · ");
       const meta = document.createElement("em");
       meta.textContent = [section, barRepeatText(bar)].filter(Boolean).join(" / ");
       const lyrics = document.createElement("span");
@@ -519,7 +528,7 @@ function renderIrealPreview(container) {
       const chordEvents = chordEventsForBar(index);
       chordEvents.forEach((item, eventIndex) => {
         if (eventIndex) chord.appendChild(document.createTextNode(" / "));
-        appendIrealChord(chord, item.chord);
+        appendIrealChord(chord, displayChordSymbol(item.chord));
       });
       const rightBar = document.createElement("span");
       rightBar.className = "ireal-barline right";
@@ -897,7 +906,7 @@ function chordToneSet(symbol) {
   if (rootIndex < 0) {
     return new Set();
   }
-  const qualityText = clean.slice(root.length).toLowerCase();
+  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").toLowerCase();
   let intervals = [0, 4, 7];
   if (qualityText.includes("m7b5")) {
     intervals = [0, 3, 6, 10];
@@ -912,13 +921,20 @@ function chordToneSet(symbol) {
   } else if (qualityText.startsWith("m") && !qualityText.startsWith("maj")) {
     intervals = [0, 3, 7];
   }
-  if (qualityText.includes("maj7")) {
+  const extended = /^(maj(?:9|13)|m(?:9|11)|9|11|13)$/.test(qualityText);
+  if (extended) {
+    if (qualityText === "11") intervals = [0, 7];
+    intervals.push(qualityText.startsWith("maj") ? 11 : 10, 2);
+    if (qualityText.endsWith("11")) intervals.push(5);
+    if (qualityText.endsWith("13")) intervals.push(9);
+  } else if (qualityText.includes("maj7")) {
     intervals.push(11);
   } else if (qualityText.includes("7")) {
     intervals.push(10);
   } else if (qualityText.includes("6")) {
     intervals.push(9);
   }
+  if (qualityText.endsWith("add9")) intervals.push(2);
   return new Set(intervals.map((interval) => PITCH_NAMES[(rootIndex + interval) % 12]));
 }
 

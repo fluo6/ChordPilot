@@ -305,7 +305,7 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
                      "debug": {"chosen_chord": best["chord"], "chosen_score": best["score"], "alternatives": alternatives,
                                "library_candidates": libraries or ["internal templates"]}})
     for bar, bar_cells in zip(bars, cells_by_bar):
-        grouped = group_chord_cells(bar_cells, np) if mode == "auto" else bar_cells
+        grouped = group_chord_cells(bar_cells, np, {"beat_period": 60.0 / max(tempo, 1)}) if mode == "auto" else bar_cells
         events = []
         for group in grouped:
             ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, group.get("bass_reference"), np, options)
@@ -340,22 +340,28 @@ def estimate_bass_reference(audio: Any, sr: int, start: float, end: float, np: A
     if len(segment) < 1024:
         return None
 
-    frame = 4096
-    window = np.hanning(min(frame, len(segment)))
-    chunk = segment[:len(window)] * window
-    spectrum = np.abs(np.fft.rfft(chunk, n=frame))
-    freqs = np.fft.rfftfreq(frame, 1.0 / sr)
-    valid = (freqs >= 38.0) & (freqs <= 260.0)
-    if not valid.any():
-        return None
-    spectrum = spectrum[valid]
-    freqs = freqs[valid]
-    if float(spectrum.max()) <= 0:
-        return None
-    pitch_classes = np.round(12 * np.log2(freqs / 440.0) + 69).astype(int) % 12
+    frame = min(len(segment), max(1024, int(sr * 0.37)))
+    fft_size = 1 << (frame * 4 - 1).bit_length()
+    window = np.hanning(frame)
     chroma = np.zeros(12, dtype=np.float64)
-    for pc in range(12):
-        chroma[pc] = float(spectrum[pitch_classes == pc].sum())
+    starts = list(range(0, len(segment) - frame + 1, max(1, frame // 2)))
+    if starts[-1] != len(segment) - frame:
+        starts.append(len(segment) - frame)
+    for offset in starts:
+        spectrum = np.abs(np.fft.rfft(segment[offset:offset + frame] * window, n=fft_size))
+        peaks = np.flatnonzero((spectrum[1:-1] > spectrum[:-2]) & (spectrum[1:-1] >= spectrum[2:])) + 1
+        peak_max = float(spectrum.max())
+        for peak in peaks:
+            if spectrum[peak] < peak_max * 0.08:
+                continue
+            # Interpolate a spectral peak before mapping to a semitone.
+            left, center, right = np.log(np.maximum(spectrum[peak - 1:peak + 2], 1e-15))
+            denominator = left - 2 * center + right
+            delta = 0.5 * (left - right) / denominator if denominator else 0.0
+            frequency = (peak + float(np.clip(delta, -0.5, 0.5))) * sr / fft_size
+            if 27.0 <= frequency <= 260.0:
+                midi = int(round(12 * math.log2(frequency / 440.0) + 69))
+                chroma[midi % 12] += float(spectrum[peak])
     if chroma.max() <= 0:
         return None
     total = float(chroma.sum()) or 1.0

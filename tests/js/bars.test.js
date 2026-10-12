@@ -5,7 +5,7 @@ const { loadScript, plain } = require("./helpers/load-script");
 function load(chart = null) {
   const state = { chart, selectedIndex: -1, activeIndex: -1 };
   return loadScript("src/renderer/bars.js", [
-    "findActiveBarIndex", "chartRows", "barChordText", "highestConfidenceChordChoice",
+    "findActiveBarIndex", "chartRows", "barChordText", "highestConfidenceChordChoice", "displayChordSymbol",
     "barLyricText", "lyricEntries", "lyricSummaryText", "lyricReferenceLinesForBar",
     "barRepeatText", "irealChordParts", "barEndTime", "beatsPerBar", "beatTimes",
     "evidenceRangeText", "detectedNotesText", "normalizePitchName", "pitchIndex",
@@ -37,6 +37,22 @@ const chart = {
     { number: 4, start: 6, section: "Chorus", chord: "G", confidence: 0.8, lyrics: "four" }
   ]
 };
+
+test("extended chord labels preserve the stored chord and full keyboard tones", () => {
+  const b = load();
+  assert.equal(b.displayChordSymbol("Abmaj9/C", true), "Abmaj7/C");
+  assert.equal(b.displayChordSymbol("Abmaj9/C", false), "Abmaj9/C");
+  assert.equal(b.displayChordSymbol("Cm11", true), "Cm7");
+  assert.equal(b.displayChordSymbol("CM9", true), "Cmaj7");
+  assert.deepEqual([...b.chordToneSet("CM9")], ["C", "E", "G", "B", "D"]);
+  assert.deepEqual([...b.chordToneSet("CM13")], ["C", "E", "G", "B", "D", "A"]);
+  assert.deepEqual([...b.chordToneSet("Abmaj9/C")], ["Ab", "C", "Eb", "G", "Bb"]);
+  assert.deepEqual([...b.chordToneSet("Cm9")], ["C", "Eb", "G", "Bb", "D"]);
+  assert.deepEqual([...b.chordToneSet("Cadd9")], ["C", "E", "G", "D"]);
+  const bar = { chord: "Abmaj9" };
+  assert.equal(b.barChordText(bar), "Abmaj7");
+  assert.equal(bar.chord, "Abmaj9");
+});
 
 test("active bar lookup handles boundaries, tolerance, and empty charts", () => {
   const b = load(structuredClone(chart));

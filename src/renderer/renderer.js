@@ -1,5 +1,9 @@
 initializeStudy();
 elements.chooseBtn.addEventListener("click", chooseAudio);
+elements.simplifyChordsInput.addEventListener("change", () => {
+  renderBars();
+  renderTimeline();
+});
 elements.analyzeBtn.addEventListener("click", analyzeAudio);
 elements.openSessionBtn.addEventListener("click", openSession);
 elements.saveSessionBtn.addEventListener("click", saveSession);

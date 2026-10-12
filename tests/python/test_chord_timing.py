@@ -101,7 +101,7 @@ class ChordTimingTests(unittest.TestCase):
         bars = [{"start": 0, "chord": "C"}]
         analysis.attach_timed_chord_events(bars, audio, sr, 120, "4/4", [0, .5, 1, 1.5], np, options, "synthetic", key="C")
         self.assertEqual([(event["start"], event["end"], event["chord"]) for event in bars[0]["chord_events"]], [(0, 2, "C")])
-        self.assertEqual([cell["detected_chord"] for cell in bars[0]["chord_events"][0]["debug"]["cells"]], ["C", "C", "C", "C"])
+        self.assertEqual([cell["detected_chord"] for cell in bars[0]["chord_events"][0]["debug"]["cells"]], ["C", "Cadd9", "C", "C"])
 
     def test_bass_stem_adds_supported_inversion_and_partial_silence_stays_nc(self):
         sr = 8192

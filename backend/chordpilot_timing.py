@@ -42,16 +42,33 @@ def analysis_cell_bounds(start: float, end: float, beats: list[float], grid: str
 
 def group_chord_cells(cells: list[dict[str, Any]], np: Any = None,
                       options: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    del options
+    from chordpilot_chords import parse_candidate_symbol
+    options = options or {}
     grouped = [dict(cell, detected_chord=cell.get("detected_chord", cell.get("chord"))) for cell in cells]
     for index in range(1, len(grouped) - 1):
         left, middle, right = grouped[index - 1:index + 2]
         alternative = next((item for item in middle.get("alternatives", []) if item.get("chord") == left.get("chord")), None)
         winning = next((item for item in middle.get("alternatives", []) if item.get("chord") == middle.get("chord")), None)
+        # An isolated added ninth between identical triads is usually melody.
+        # Keep the original cell detection for inspection; fixed grids stay exact.
+        middle_candidate = parse_candidate_symbol(middle.get("chord", ""))
+        neighbor_candidate = parse_candidate_symbol(left.get("chord", ""))
+        passing_ninth = bool(middle_candidate and neighbor_candidate
+            and middle_candidate["quality"] in {"add9", "madd9"}
+            and neighbor_candidate["quality"] == ("m" if middle_candidate["quality"] == "madd9" else "")
+            and middle_candidate["root"] == neighbor_candidate["root"]
+            and middle_candidate["bass"] == neighbor_candidate["bass"])
+        if passing_ninth:
+            chroma = middle.get("_chroma")
+            root = middle_candidate["root"]
+            third = 3 if middle_candidate["quality"] == "madd9" else 4
+            passing_ninth = bool(chroma is not None
+                and float(middle["end"]) - float(middle["start"]) <= float(options.get("beat_period", 0)) * 1.05
+                and float(chroma[(root + 2) % 12]) < 0.8 * min(float(chroma[(root + third) % 12]), float(chroma[(root + 7) % 12])))
         if (left.get("chord") == right.get("chord") and middle.get("chord") != left.get("chord")
                 and middle.get("chord") != "N.C." and left.get("chord") != "N.C."
-                and float(middle.get("confidence", 0)) < 0.55 and alternative and winning
-                and float(alternative.get("score", 0)) >= float(winning.get("score", 0)) - 0.05):
+                and (passing_ninth or (float(middle.get("confidence", 0)) < 0.55 and alternative and winning
+                and float(alternative.get("score", 0)) >= float(winning.get("score", 0)) - 0.05))):
             middle["chord"] = left["chord"]
     result: list[dict[str, Any]] = []
     for cell in grouped:

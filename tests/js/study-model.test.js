@@ -4,6 +4,14 @@ const { loadScript, plain } = require("./helpers/load-script");
 const model = () => loadScript("src/renderer/study-model.js", ["studyRangeError", "advanceStudySelection", "normalizeStudies", "saveStudyRecord", "appendStudyRun", "compareStudyRuns", "createStudyState"]);
 const result = (chord = "C") => ({ chord, chord_confidence: .8, pitch_confidence: .6, range: [1, 2], sources: ["other"], settings: { song_key: "C" }, evidence: { detected_notes: [{ note: "C", strength: .4 }] }, algorithm_version: "v1" });
 
+test("simplified display does not invalidate new detections but retains legacy settings", () => {
+  const m = model();
+  const run = { ...result("Abmaj9"), algorithm_version: "local-study-v3", settings: { simplify_chords: true } };
+  const changed = { ...run, settings: { simplify_chords: false } };
+  assert.equal(m.compareStudyRuns(run, changed).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v2" }, { ...changed, algorithm_version: "local-study-v2" }).sameInputs, false);
+});
+
 test("range selection orders endpoints and validates exact 50ms minimum", () => {
   const m = model();
   assert.deepEqual(plain(m.advanceStudySelection(3, 1)), { anchor: null, range: [1, 3] });

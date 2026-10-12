@@ -69,6 +69,19 @@ CHORD_QUALITIES = {
     "m6": {"intervals": [0, 3, 7, 9], "third": 3, "fifth": 7, "complexity": 0.22},
     "m7b5": {"intervals": [0, 3, 6, 10], "third": 3, "fifth": 6, "complexity": 0.34},
 }
+# PyChord owns the formulas; limit audio candidates to common extensions.
+from pychord.quality import QualityManager
+
+for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13"]:
+    intervals = list(QualityManager().get_quality(quality_name).components)
+    if quality_name not in CHORD_QUALITIES:
+        CHORD_QUALITIES[quality_name] = {
+            "third": 3 if 3 in intervals else 4 if 4 in intervals else None,
+            "fifth": 7 if 7 in intervals else None,
+            "complexity": 0.18 + 0.08 * (len(intervals) - 3),
+        }
+    CHORD_QUALITIES[quality_name]["intervals"] = intervals
+
 MAJOR_SCALE_INTERVALS = {0, 2, 4, 5, 7, 9, 11}
 MINOR_SCALE_INTERVALS = {0, 2, 3, 5, 7, 8, 10}
 SECTION_PLAN = [
@@ -81,7 +94,7 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-10-12-sub-bar-chords-v1"
+BACKEND_CACHE_VERSION = "2026-10-13-extended-chords-v1"
 CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v1"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {

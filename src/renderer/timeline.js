@@ -171,7 +171,7 @@ function buildLane(lane, options) {
         region.dataset.eventIndex = String(eventIndex);
         region.style.left = `${eventLeft}%`;
         region.style.width = `${widthPercent}%`;
-        region.textContent = events.length > 1 ? `${bar.number || index + 1}.${eventIndex + 1} ${chordEvent.chord}` : barRegionLabel(bar, index, widthPercent);
+        region.textContent = events.length > 1 ? `${bar.number || index + 1}.${eventIndex + 1} ${barChordText({ chord: chordEvent.chord })}` : barRegionLabel(bar, index, widthPercent);
         region.classList.toggle("compact", region.textContent && !region.textContent.includes(" "));
         region.classList.toggle("unlabeled", !region.textContent);
         region.classList.toggle("selected", index === state.selectedIndex && eventIndex === state.selectedChordEventIndex);

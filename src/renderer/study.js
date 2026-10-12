@@ -296,8 +296,10 @@ function renderStudyResult() {
   history.value = run?.id || ""; comparison.value = state.study.comparisonRunId || "";
   if (!run) { container.append(studyText("p", "Choose a short passage and analyze it to inspect its harmony.", "study-muted")); return; }
   const draft = state.study.draft;
-  const matches = JSON.stringify(run.range) === JSON.stringify([draft.start, draft.end]) && JSON.stringify([...run.sources].sort()) === JSON.stringify([...draft.sources].sort()) && JSON.stringify(studySettings(run.settings)) === JSON.stringify(studySettings(draft.settings));
-  container.append(studyText("strong", run.chord, "study-chord"));
+  const matches = JSON.stringify(run.range) === JSON.stringify([draft.start, draft.end]) && JSON.stringify([...run.sources].sort()) === JSON.stringify([...draft.sources].sort()) && JSON.stringify(studyDetectionSettings(run.settings, run.algorithm_version)) === JSON.stringify(studyDetectionSettings(draft.settings, run.algorithm_version));
+  const displayedChord = displayChordSymbol(run.chord, draft.settings.simplify_chords);
+  container.append(studyText("strong", displayedChord, "study-chord"));
+  if (displayedChord !== run.chord) container.append(studyText("p", `Detected: ${run.chord}`, "study-muted"));
   container.append(studyText("p", `${run.range[0].toFixed(3)}–${run.range[1].toFixed(3)}s · ${run.sources.join(" + ")} · ${run.key_context?.key || run.settings?.known_key || "?"} key`));
   container.append(studyText("p", `Chord confidence ${Math.round(run.chord_confidence * 100)}% · Pitch focus ${Math.round(run.pitch_confidence * 100)}%`, "study-muted"));
   container.append(studyText("p", matches ? "Saved analysis snapshot · Original audio" : "This result uses earlier inputs. Analyze again for the current selection.", matches ? "study-muted" : "study-stale"));

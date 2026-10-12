@@ -250,6 +250,11 @@ def chord_to_harmony(symbol: str) -> ET.Element:
     kind = ET.SubElement(harmony, "kind")
     kind.text = kind_text
     kind.set("text", symbol or "C")
+    if re.match(r"^[A-G][#b]?m?add9(?:/|$)", symbol or ""):
+        degree = ET.SubElement(harmony, "degree")
+        ET.SubElement(degree, "degree-value").text = "9"
+        ET.SubElement(degree, "degree-alter").text = "0"
+        ET.SubElement(degree, "degree-type").text = "add"
     return harmony
 
 def parse_chord_symbol(symbol: str) -> tuple[str, str]:
@@ -262,6 +267,11 @@ def parse_chord_symbol(symbol: str) -> tuple[str, str]:
         suffix = clean[1:]
 
     suffix_lower = suffix.lower()
+    if suffix in {"M9", "M13"}:
+        suffix_lower = "maj" + suffix[1:]
+    extended_kinds = {"maj9": "major-ninth", "m9": "minor-ninth", "9": "dominant-ninth", "11": "dominant-11th", "m11": "minor-11th", "13": "dominant-13th", "maj13": "major-13th"}
+    if suffix_lower in extended_kinds:
+        return root, extended_kinds[suffix_lower]
     if suffix_lower.startswith("dim"):
         return root, "diminished"
     if suffix_lower.startswith("aug") or suffix_lower.startswith("+"):
