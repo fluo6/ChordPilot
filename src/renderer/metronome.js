@@ -31,40 +31,56 @@ function ensureMetronomeContext(feature = "Metronome") {
 }
 
 async function playPianoNote(midi) {
-  if (!Number.isInteger(midi) || midi < 21 || midi > 108) return;
+  return playPianoNotes([midi]);
+}
+
+async function playPianoNotes(notes) {
+  const midis = [...new Set((Array.isArray(notes) ? notes : []).filter((midi) => Number.isInteger(midi) && midi >= 21 && midi <= 108))];
+  if (!midis.length) return;
   const volume = Math.max(0, Math.min(1, Number(state.masterVolume ?? 1) || 0));
   if (!volume) return;
   const context = ensureMetronomeContext("Note playback");
   if (!context) return;
-  // Recordings every minor third keep pitch shifts within one semitone.
-  const sampleMidi = 21 + Math.round((midi - 21) / 3) * 3;
-  const sampleNote = { 0: "C", 3: "Ds", 6: "Fs", 9: "A" }[sampleMidi % 12];
-  const sampleOctave = Math.floor(sampleMidi / 12) - 1;
-  const audio = new Audio(`./piano-samples/${sampleNote}${sampleOctave}.mp3`);
-  audio.preservesPitch = false;
-  audio.playbackRate = 2 ** ((midi - sampleMidi) / 12);
-  const source = context.createMediaElementSource(audio);
-  const gain = context.createGain();
-  const bassPresence = Math.max(0, Math.min(1, (65 - midi) / 24));
-  gain.gain.setValueAtTime(volume * 0.65 * (1 + bassPresence * 0.5), context.currentTime);
-  source.connect(gain);
-  gain.connect(context.destination);
-  let timer = null;
-  const cleanup = () => {
-    clearTimeout(timer);
-    audio.onended = null;
-    audio.pause();
-    source.disconnect(); gain.disconnect();
-  };
-  audio.onended = cleanup;
+  const voices = midis.map((midi) => {
+    // Recordings every minor third keep pitch shifts within one semitone.
+    const sampleMidi = 21 + Math.round((midi - 21) / 3) * 3;
+    const sampleNote = { 0: "C", 3: "Ds", 6: "Fs", 9: "A" }[sampleMidi % 12];
+    const sampleOctave = Math.floor(sampleMidi / 12) - 1;
+    const audio = new Audio(`./piano-samples/${sampleNote}${sampleOctave}.mp3`);
+    audio.preservesPitch = false;
+    audio.playbackRate = 2 ** ((midi - sampleMidi) / 12);
+    audio.defaultPlaybackRate = audio.playbackRate;
+    const source = context.createMediaElementSource(audio);
+    const gain = context.createGain();
+    const bassPresence = Math.max(0, Math.min(1, (65 - midi) / 24));
+    const peak = volume * 0.65 * (1 + bassPresence * 0.5) / midis.length;
+    gain.gain.setValueAtTime(peak, context.currentTime);
+    source.connect(gain); gain.connect(context.destination);
+    let timer = null;
+    const cleanup = () => {
+      clearTimeout(timer);
+      audio.onended = null; audio.oncanplay = null; audio.onerror = null;
+      audio.pause(); source.disconnect(); gain.disconnect();
+    };
+    audio.onended = cleanup;
+    const ready = audio.readyState >= 3 ? Promise.resolve() : new Promise((resolve, reject) => {
+      audio.oncanplay = resolve;
+      audio.onerror = () => reject(new Error("Piano recording could not be loaded"));
+      audio.load();
+    });
+    return { audio, gain, peak, ready, cleanup, setTimer(value) { timer = value; } };
+  });
   try {
-    await audio.play();
+    await Promise.all(voices.map((voice) => voice.ready));
+    await Promise.all(voices.map((voice) => voice.audio.play()));
     const start = context.currentTime;
-    gain.gain.setValueAtTime(volume * 0.65 * (1 + bassPresence * 0.5), start + 2);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.5);
-    timer = setTimeout(cleanup, 2600);
+    voices.forEach((voice) => {
+      voice.gain.gain.setValueAtTime(voice.peak, start + 2);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.5);
+      voice.setTimer(setTimeout(voice.cleanup, 2600));
+    });
   } catch (error) {
-    cleanup();
+    voices.forEach((voice) => voice.cleanup());
     setStatus(`Piano note could not be played: ${error.message}`);
   }
 }

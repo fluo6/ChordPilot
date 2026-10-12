@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { loadScript } = require("./helpers/load-script");
 
-function piano(evidence, options, playPianoNote = () => {}) {
+function piano(evidence, options, playPianoNote = () => {}, playPianoNotes = () => {}) {
   function node(tagName) {
     const value = { tagName, children: [], dataset: {}, listeners: {}, attributes: {}, style: { setProperty() {} },
       addEventListener(name, handler) { this.listeners[name] = handler; },
@@ -13,7 +13,7 @@ function piano(evidence, options, playPianoNote = () => {}) {
     return value;
   }
   const { createPianoEvidence } = loadScript("src/renderer/bars.js", ["createPianoEvidence"], {
-    document: { createElement: node }, playPianoNote, formatConfidence: (value) => `${Math.round(value * 100)}%`,
+    document: { createElement: node }, playPianoNote, playPianoNotes, formatConfidence: (value) => `${Math.round(value * 100)}%`,
     PITCH_NAMES: ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"],
     ENHARMONIC_TO_PITCH: { DB: "C#", "D#": "Eb", GB: "F#", "G#": "Ab", "A#": "Bb" },
     WHITE_KEYS: ["C", "D", "E", "F", "G", "A", "B"],
@@ -21,7 +21,10 @@ function piano(evidence, options, playPianoNote = () => {}) {
   });
   const rendered = createPianoEvidence({ chord: "C", evidence }, "C", options);
   const all = (root) => [root, ...root.children.flatMap(all)];
-  return all(rendered).filter((key) => key.className?.includes("piano-key "));
+  const nodes = all(rendered);
+  const keys = nodes.filter((key) => key.className?.includes("piano-key "));
+  keys.playButton = nodes.find((key) => key.className === "piano-play-detected");
+  return keys;
 }
 
 test("study piano spans 88 keys and highlights only measured MIDI pitches", () => {
@@ -59,4 +62,14 @@ test("all piano keys are accessible buttons that audition their exact MIDI pitch
     key.listeners.click();
   }
   assert.deepEqual(played, [21, 60, 61, 108]);
+});
+
+test("play detected notes uses measured octaves, deduplicates notes, and disables empty evidence", () => {
+  const played = [];
+  const keys = piano({ detected_pitches: [{ midi: 40, strength: .2 }, { midi: 60, strength: .5 }, { midi: 60, strength: .3 }, { midi: 61, strength: .2 }] }, { exactPitches: true }, undefined, (midis) => played.push([...midis]));
+  assert.equal(keys.playButton.textContent, "Play detected notes");
+  assert.equal(keys.playButton.disabled, false);
+  keys.playButton.listeners.click();
+  assert.deepEqual(played, [[40, 60, 61]]);
+  assert.equal(piano({}, { exactPitches: true }).playButton.disabled, true);
 });

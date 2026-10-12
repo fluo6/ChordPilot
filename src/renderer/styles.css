@@ -2321,6 +2321,11 @@ body.resizing-detail-pane {
   filter: brightness(0.8);
 }
 
+.piano-play-detected {
+  justify-self: start;
+  margin-bottom: 6px;
+}
+
 .piano-key span {
   color: inherit;
   padding-bottom: 3px;

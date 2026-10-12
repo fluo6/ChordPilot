@@ -1014,6 +1014,20 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   });
 
   const legend = document.createElement("div");
+  const detectedMidis = options.exactPitches
+    ? [...strengths].filter(([midi, strength]) => Number.isInteger(midi) && midi >= 21 && midi <= 108 && strength > 0).map(([midi]) => midi)
+    : [...strengths].filter(([note, strength]) => pitchIndex(note) >= 0 && strength > 0).map(([note]) => (octaves[0] + 1) * 12 + pitchIndex(note));
+  const playDetected = document.createElement("button");
+  playDetected.type = "button";
+  playDetected.className = "piano-play-detected";
+  playDetected.textContent = options.exactPitches ? "Play detected notes" : "Play pitch classes";
+  playDetected.title = options.exactPitches ? "Hear all highlighted detected pitches together" : "Hear detected pitch classes together in the displayed octave";
+  playDetected.disabled = !detectedMidis.length;
+  playDetected.addEventListener("click", () => playPianoNotes(detectedMidis.sort((a, b) => a - b)));
+  playDetected.addEventListener("keydown", (event) => {
+    if (event.code === "Space" || event.key === "Enter") event.stopPropagation();
+  });
+  piano.appendChild(playDetected);
   legend.className = "piano-legend";
   legend.textContent = options.exactPitches ? "Glow = detected pitch estimate, outline = detected chord tones, dot = detected bass pitch · scroll for all 88 keys" : `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
   legend.textContent += " · click a key to hear its note";

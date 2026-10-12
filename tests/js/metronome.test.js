@@ -75,10 +75,13 @@ test("sampled piano uses nearby recordings at the correct pitch, respects mute, 
       voices.at(-1).gainNode = gain; return gain;
     }
   };
-  const m = loadScript("src/renderer/metronome.js", ["playPianoNote"], {
+  const m = loadScript("src/renderer/metronome.js", ["playPianoNote", "playPianoNotes"], {
     state, window: { AudioContext: function () { return context; } },
     Audio: function (src) {
       this.src = src; this.play = () => state.failPlay ? Promise.reject(new Error("sample unavailable")) : Promise.resolve(); this.pause = () => { this.paused = true; };
+      this.readyState = state.waitForLoad ? 0 : 4;
+      this.load = () => { this.playbackRate = this.defaultPlaybackRate ?? 1; };
+      this.play = () => { this.played = true; return state.failPlay ? Promise.reject(new Error("sample unavailable")) : Promise.resolve(); };
       voices.push(this);
     }, setTimeout: () => 1, clearTimeout() {}, setStatus(message) { status = message; }
   });
@@ -110,6 +113,24 @@ test("sampled piano uses nearby recordings at the correct pitch, respects mute, 
   assert.match(status, /sample unavailable/);
   assert.equal(voices.at(-1).paused, true);
   assert.equal(voices.at(-1).sourceNode.disconnected, true);
+  state.failPlay = false; state.waitForLoad = true;
+  const groupStart = voices.length;
+  const playingGroup = m.playPianoNotes([60, 64, 67, 60, 999]);
+  const group = voices.slice(groupStart);
+  assert.equal(group.length, 3);
+  group[0].oncanplay(); group[1].oncanplay();
+  await Promise.resolve();
+  assert.ok(group.every((voice) => !voice.played), "wait for every recording before starting the chord");
+  group[2].oncanplay();
+  await playingGroup;
+  assert.ok(group.every((voice) => voice.played));
+  assert.ok(Math.abs(group[1].playbackRate - 2 ** (1 / 12)) < 1e-8, "loading retains the target pitch");
+  assert.ok(group.reduce((sum, voice) => sum + voice.gainNode.peak, 0) <= .5, "chord gain is balanced");
+  const failedGroupStart = voices.length;
+  const failedGroup = m.playPianoNotes([60, 64]);
+  voices[failedGroupStart].onerror();
+  await failedGroup;
+  assert.ok(voices.slice(failedGroupStart).every((voice) => voice.paused && voice.sourceNode.disconnected && !voice.played));
   const voiceCount = voices.length;
   state.masterVolume = 0;
   m.playPianoNote(60); m.playPianoNote(20); m.playPianoNote(109); m.playPianoNote(NaN);
