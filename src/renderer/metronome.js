@@ -30,37 +30,43 @@ function ensureMetronomeContext(feature = "Metronome") {
   return metronomeContext;
 }
 
-function playPianoNote(midi) {
+async function playPianoNote(midi) {
   if (!Number.isInteger(midi) || midi < 21 || midi > 108) return;
   const volume = Math.max(0, Math.min(1, Number(state.masterVolume ?? 1) || 0));
   if (!volume) return;
   const context = ensureMetronomeContext("Note playback");
   if (!context) return;
-  const oscillator = context.createOscillator();
+  // Recordings every minor third keep pitch shifts within one semitone.
+  const sampleMidi = 21 + Math.round((midi - 21) / 3) * 3;
+  const sampleNote = { 0: "C", 3: "Ds", 6: "Fs", 9: "A" }[sampleMidi % 12];
+  const sampleOctave = Math.floor(sampleMidi / 12) - 1;
+  const audio = new Audio(`./piano-samples/${sampleNote}${sampleOctave}.mp3`);
+  audio.preservesPitch = false;
+  audio.playbackRate = 2 ** ((midi - sampleMidi) / 12);
+  const source = context.createMediaElementSource(audio);
   const gain = context.createGain();
-  const start = context.currentTime;
-  oscillator.type = "triangle";
-  // Upper harmonics make bass pitches audible when speakers lose the fundamental.
   const bassPresence = Math.max(0, Math.min(1, (65 - midi) / 24));
-  if (bassPresence > 0) {
-    const real = new Float32Array(9);
-    const imaginary = new Float32Array(9);
-    imaginary[1] = 1;
-    for (let harmonic = 2; harmonic < imaginary.length; harmonic += 1) {
-      const triangle = harmonic % 2 ? (-1) ** ((harmonic - 1) / 2) / harmonic ** 2 : 0;
-      imaginary[harmonic] = triangle + bassPresence * 0.8 / harmonic;
-    }
-    oscillator.setPeriodicWave(context.createPeriodicWave(real, imaginary));
-  }
-  oscillator.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), start);
-  gain.gain.setValueAtTime(0, start);
-  gain.gain.linearRampToValueAtTime(volume * 0.15 * (1 + bassPresence * 0.8), start + 0.008);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.65);
-  oscillator.connect(gain);
+  gain.gain.setValueAtTime(volume * 0.65 * (1 + bassPresence * 0.5), context.currentTime);
+  source.connect(gain);
   gain.connect(context.destination);
-  oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-  oscillator.start(start);
-  oscillator.stop(start + 0.7);
+  let timer = null;
+  const cleanup = () => {
+    clearTimeout(timer);
+    audio.onended = null;
+    audio.pause();
+    source.disconnect(); gain.disconnect();
+  };
+  audio.onended = cleanup;
+  try {
+    await audio.play();
+    const start = context.currentTime;
+    gain.gain.setValueAtTime(volume * 0.65 * (1 + bassPresence * 0.5), start + 2);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.5);
+    timer = setTimeout(cleanup, 2600);
+  } catch (error) {
+    cleanup();
+    setStatus(`Piano note could not be played: ${error.message}`);
+  }
 }
 
 function applyMetronomeSettings() {

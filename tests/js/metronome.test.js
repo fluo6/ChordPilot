@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { loadScript, plain } = require("./helpers/load-script");
 
 function load(chart, inputs = {}) {
@@ -55,46 +57,61 @@ test("click scheduling validates context and silent volume", () => {
   assert.equal(created, 0);
 });
 
-test("piano audition plays the requested pitch, respects mute, and releases audio nodes", () => {
+test("sampled piano uses nearby recordings at the correct pitch, respects mute, and cleans up", async () => {
   const voices = [];
   let resumes = 0;
+  let status = "";
   const state = { masterVolume: 0.5 };
   const context = {
     currentTime: 3, state: "suspended", destination: {},
-    createPeriodicWave(real, imaginary) { return { real, imaginary }; },
     resume() { resumes += 1; this.state = "running"; return Promise.resolve(); },
-    createOscillator() {
-      const voice = { frequency: { setValueAtTime(value) { voice.hz = value; } },
-        setPeriodicWave(wave) { this.wave = wave; },
-        connect() {}, start(time) { this.started = time; }, stop(time) { this.stopped = time; },
-        disconnect() { this.disconnected = true; } };
-      voices.push(voice); return voice;
+    createMediaElementSource(audio) {
+      const source = { connect() {}, disconnect() { this.disconnected = true; } };
+      audio.sourceNode = source; return source;
     },
     createGain() {
-      const gain = { gain: { setValueAtTime() {}, linearRampToValueAtTime(value) { gain.peak = value; }, exponentialRampToValueAtTime() {} },
+      const gain = { gain: { setValueAtTime(value) { gain.peak = value; }, linearRampToValueAtTime(value) { gain.peak = value; }, exponentialRampToValueAtTime() {} },
         connect() {}, disconnect() { this.disconnected = true; } };
       voices.at(-1).gainNode = gain; return gain;
     }
   };
   const m = loadScript("src/renderer/metronome.js", ["playPianoNote"], {
-    state, window: { AudioContext: function () { return context; } }, setStatus() {}
+    state, window: { AudioContext: function () { return context; } },
+    Audio: function (src) {
+      this.src = src; this.play = () => state.failPlay ? Promise.reject(new Error("sample unavailable")) : Promise.resolve(); this.pause = () => { this.paused = true; };
+      voices.push(this);
+    }, setTimeout: () => 1, clearTimeout() {}, setStatus(message) { status = message; }
   });
-  m.playPianoNote(69); m.playPianoNote(60); m.playPianoNote(61);
+  await m.playPianoNote(69); await m.playPianoNote(60); await m.playPianoNote(61);
   assert.equal(resumes, 1);
-  assert.equal(voices[0].hz, 440);
-  assert.ok(Math.abs(voices[1].hz - 261.626) < .001);
-  assert.ok(Math.abs(voices[2].hz - 277.183) < .001);
-  assert.ok(voices.every((voice) => voice.stopped > voice.started && voice.stopped - voice.started < 1));
-  assert.equal(voices[0].gainNode.peak, .075);
+  assert.equal(voices[0].src, "./piano-samples/A4.mp3");
+  assert.equal(voices[1].src, "./piano-samples/C4.mp3");
+  assert.equal(voices[2].src, "./piano-samples/C4.mp3");
+  assert.equal(voices[0].playbackRate, 1);
+  assert.ok(Math.abs(voices[2].playbackRate - 2 ** (1 / 12)) < 1e-8);
+  assert.ok(voices.every((voice) => voice.preservesPitch === false));
   voices[0].onended();
-  assert.equal(voices[0].disconnected, true); assert.equal(voices[0].gainNode.disconnected, true);
-  m.playPianoNote(33);
-  assert.equal(voices[3].hz, 55);
-  assert.ok(voices[3].wave.imaginary[2] > .2, "low notes have audible upper harmonics");
+  assert.equal(voices[0].sourceNode.disconnected, true); assert.equal(voices[0].gainNode.disconnected, true);
+  await m.playPianoNote(33);
+  assert.equal(voices[3].src, "./piano-samples/A1.mp3");
   assert.ok(voices[3].gainNode.peak > voices[0].gainNode.peak, "low notes receive bounded volume compensation");
-  assert.ok(voices[3].gainNode.peak <= .15);
-  assert.equal(voices[0].type, "triangle", "upper notes retain their existing sound");
+  assert.ok(voices[3].gainNode.peak <= 1);
+  for (let midi = 21; midi <= 108; midi += 1) {
+    await m.playPianoNote(midi);
+    const voice = voices.at(-1);
+    assert.ok(fs.existsSync(path.join(__dirname, '../../src/renderer', voice.src)), voice.src);
+    const [, note, octave] = voice.src.match(/(A|C|Ds|Fs)(\d)\.mp3$/);
+    const recordedMidi = (Number(octave) + 1) * 12 + { A: 9, C: 0, Ds: 3, Fs: 6 }[note];
+    assert.ok(Math.abs(recordedMidi + 12 * Math.log2(voice.playbackRate) - midi) < 1e-8);
+    assert.ok(Math.abs(recordedMidi - midi) <= 1);
+  }
+  state.failPlay = true;
+  await m.playPianoNote(60);
+  assert.match(status, /sample unavailable/);
+  assert.equal(voices.at(-1).paused, true);
+  assert.equal(voices.at(-1).sourceNode.disconnected, true);
+  const voiceCount = voices.length;
   state.masterVolume = 0;
   m.playPianoNote(60); m.playPianoNote(20); m.playPianoNote(109); m.playPianoNote(NaN);
-  assert.equal(voices.length, 4);
+  assert.equal(voices.length, voiceCount);
 });
