@@ -40,9 +40,21 @@ function playPianoNote(midi) {
   const gain = context.createGain();
   const start = context.currentTime;
   oscillator.type = "triangle";
+  // Upper harmonics make bass pitches audible when speakers lose the fundamental.
+  const bassPresence = Math.max(0, Math.min(1, (65 - midi) / 24));
+  if (bassPresence > 0) {
+    const real = new Float32Array(9);
+    const imaginary = new Float32Array(9);
+    imaginary[1] = 1;
+    for (let harmonic = 2; harmonic < imaginary.length; harmonic += 1) {
+      const triangle = harmonic % 2 ? (-1) ** ((harmonic - 1) / 2) / harmonic ** 2 : 0;
+      imaginary[harmonic] = triangle + bassPresence * 0.8 / harmonic;
+    }
+    oscillator.setPeriodicWave(context.createPeriodicWave(real, imaginary));
+  }
   oscillator.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), start);
   gain.gain.setValueAtTime(0, start);
-  gain.gain.linearRampToValueAtTime(volume * 0.15, start + 0.008);
+  gain.gain.linearRampToValueAtTime(volume * 0.15 * (1 + bassPresence * 0.8), start + 0.008);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.65);
   oscillator.connect(gain);
   gain.connect(context.destination);

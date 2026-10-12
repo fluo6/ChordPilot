@@ -61,9 +61,11 @@ test("piano audition plays the requested pitch, respects mute, and releases audi
   const state = { masterVolume: 0.5 };
   const context = {
     currentTime: 3, state: "suspended", destination: {},
+    createPeriodicWave(real, imaginary) { return { real, imaginary }; },
     resume() { resumes += 1; this.state = "running"; return Promise.resolve(); },
     createOscillator() {
       const voice = { frequency: { setValueAtTime(value) { voice.hz = value; } },
+        setPeriodicWave(wave) { this.wave = wave; },
         connect() {}, start(time) { this.started = time; }, stop(time) { this.stopped = time; },
         disconnect() { this.disconnected = true; } };
       voices.push(voice); return voice;
@@ -86,7 +88,13 @@ test("piano audition plays the requested pitch, respects mute, and releases audi
   assert.equal(voices[0].gainNode.peak, .075);
   voices[0].onended();
   assert.equal(voices[0].disconnected, true); assert.equal(voices[0].gainNode.disconnected, true);
+  m.playPianoNote(33);
+  assert.equal(voices[3].hz, 55);
+  assert.ok(voices[3].wave.imaginary[2] > .2, "low notes have audible upper harmonics");
+  assert.ok(voices[3].gainNode.peak > voices[0].gainNode.peak, "low notes receive bounded volume compensation");
+  assert.ok(voices[3].gainNode.peak <= .15);
+  assert.equal(voices[0].type, "triangle", "upper notes retain their existing sound");
   state.masterVolume = 0;
   m.playPianoNote(60); m.playPianoNote(20); m.playPianoNote(109); m.playPianoNote(NaN);
-  assert.equal(voices.length, 3);
+  assert.equal(voices.length, 4);
 });
