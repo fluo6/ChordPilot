@@ -2295,6 +2295,10 @@ body.resizing-detail-pane {
   width: calc(100% / 14);
 }
 
+.white-key.detected {
+  background-color: #b8c2cd;
+}
+
 .black-key {
   background:
     linear-gradient(180deg, rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.72)), rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.22))),
