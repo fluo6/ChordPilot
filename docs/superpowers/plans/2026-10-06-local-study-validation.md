@@ -74,3 +74,12 @@ These are octave-specific spectral pitch estimates, not guaranteed played-note t
 - Added four regression tests for centered zoom, bounds, panning, native scrolling, range edits, and unchanged evidence/dirty state. Observed failures before implementing the behavior; all 199 applicable JavaScript tests pass (the same two pre-existing Windows failures remain excluded).
 - Browser verification used an isolated synthetic 10-second WAV. Actual wheel events zoomed in and out, selection centering stayed within 2 pixels, panning preserved the mouse time within 0.003 seconds, and editing the range restored centering.
 - Visual proof: `local-study-wheel-zoom.jpg` in this task's visualization directory.
+
+### Study-current-moment shortcut · October 12
+
+- Added “Study this moment” buttons in Song's Source Playback and Analysis Options. Both open a fresh Local Study at the current playing or paused position ±0.5 seconds, clamped to original song boundaries, without starting analysis.
+- Earlier ranged drafts and analysis history are preserved in the session before creating the new passage. The new range remains adjustable and uses the default Bass + Other sources.
+- Rendered tempo preview positions and durations are converted to original audio seconds before selecting the passage.
+- Five new tests cover playing/paused positions, boundaries and short clips, invalid timing, prior study preservation, preview timing, both button bindings, and subsequent range adjustments. Observed the missing-action and preview-timing failures before implementation/fix.
+- All 204 applicable JavaScript tests passed with the same two pre-existing Windows cases excluded. Local HTTP tests required sandbox escalation; temporary test files used a non-hidden workspace directory so the static-file test could serve its fixture.
+- Focused read-only review found no remaining important issues. Native UI/browser verification was not performed for this shortcut; button wiring and navigation were exercised by renderer integration tests.

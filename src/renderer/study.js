@@ -1,6 +1,6 @@
 function studyElement(id) { return document.getElementById(id); }
 function studyDuration() {
-  const duration = Number(elements.audioPlayer.duration);
+  const duration = Number(elements.audioPlayer.duration) * (Number(state.audioPreview?.tempoRate) || 1);
   return Number.isFinite(duration) && duration > 0 ? duration : Number(state.chart?.duration || state.audio?.duration || 0);
 }
 function studyAudioIdentity() { return state.audio?.id || state.audio?.path || state.audio?.url || ""; }
@@ -35,8 +35,8 @@ function studySeedSettings() {
   return studySettings({ ...source, known_key: "", song_key: state.chart?.detected_key || state.chart?.native_key || state.chart?.key || "" });
 }
 function newStudy() {
-  if ((state.study.pendingRuns.length || state.study.openStudyId) && !saveCurrentStudy({ silent: true })) {
-    setStudyMessage("Complete the current study's range and sources before starting another study."); return;
+  if ((state.study.pendingRuns.length || state.study.openStudyId || state.study.draft.start !== null) && !saveCurrentStudy({ silent: true })) {
+    setStudyMessage("Complete the current study's range and sources before starting another study."); return false;
   }
   const dirty = state.study.dirty;
   const generation = state.study.requestGeneration + 1;
@@ -44,6 +44,20 @@ function newStudy() {
   state.study = createStudyState(studySeedSettings());
   state.study.dirty = dirty; state.study.requestGeneration = generation;
   renderStudy();
+  return true;
+}
+function studyCurrentMoment() {
+  const duration = studyDuration(); const time = Number(elements.audioPlayer.currentTime) * (Number(state.audioPreview?.tempoRate) || 1);
+  if (!state.audio || !Number.isFinite(duration) || duration < .05 || !Number.isFinite(time)) {
+    setStatus("Load audio and wait for its duration before studying this moment."); return;
+  }
+  const position = Math.max(0, Math.min(duration, time));
+  const start = Math.max(0, Math.round((position - .5) * 1000) / 1000);
+  const end = Math.min(duration, Math.round((position + .5) * 1000) / 1000);
+  if (!newStudy()) return;
+  setStudyRange(start, end);
+  openEditorPanel("study");
+  if (elements.studyPanel) zoomStudyWaveform(studyElement("studyZoomInput").value);
 }
 function setStudyRange(start, end) {
   state.study.draft.start = start; state.study.draft.end = end;
@@ -346,6 +360,7 @@ function renderStudy() {
 }
 function initializeStudy() {
   if (!elements.studyPanel) return;
+  document.querySelectorAll("[data-study-current]").forEach((button) => button.addEventListener("click", studyCurrentMoment));
   studyElement("studyNewBtn").addEventListener("click", newStudy);
   studyElement("studySelectBtn").addEventListener("click", () => { state.study.selectMode = !state.study.selectMode; state.study.selectionAnchor = null; renderStudy(); });
   studyElement("studyFullMixBtn").addEventListener("click", () => { state.study.draft.sources = ["full_mix"]; studyChanged(); renderStudy(); });

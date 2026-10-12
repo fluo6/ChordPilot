@@ -6,7 +6,7 @@ function environment(overrides = {}) {
   const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies"]);
   const state = { audio: { path: "song", url: "original" }, chart: { detected_key: "C", key: "D", stems: { ok: true, stems: [{ name: "bass", url: "bass-original" }, { name: "other", url: "other-original" }] } }, studies: [], study: helpers.createStudyState(), currentView: "song", editorPanel: "study", ...overrides.state };
   let panel;
-  const loaded = loadScript("src/renderer/study.js", ["handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
+  const loaded = loadScript("src/renderer/study.js", ["studyCurrentMoment", "handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
     ...helpers, state, elements: { audioPlayer: { duration: 10 }, studyPanel: null },
     window: { chordPilot: overrides.bridge || {} },
     crypto: { randomUUID: (() => { let id = 0; return () => `id${++id}`; })() },
@@ -244,4 +244,68 @@ test("native scrolling detaches centering but programmatic zoom scrolling does n
   env.handleStudyWaveScroll(); assert.equal(env.state.study.wavePanned, true);
   env.zoomStudyWaveform(5);
   assert.equal(env.viewport.scrollLeft, 1262.5);
+});
+
+test("study shortcut snapshots playing or paused position with half a second on each side", () => {
+  for (const paused of [true, false]) {
+    const audioPlayer = { duration: 10, currentTime: 4.25, paused };
+    const env = environment({ globals: { elements: { audioPlayer, studyPanel: null } } });
+    env.studyCurrentMoment();
+    assert.equal(env.panel(), "study");
+    assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [3.75, 4.75]);
+    assert.deepEqual(plain(env.state.study.draft.sources), ["bass", "other"]);
+    assert.equal(audioPlayer.currentTime, 4.25);
+    assert.equal(env.state.study.pendingRuns.length, 0);
+  }
+});
+
+test("study shortcut clamps song boundaries and rejects unavailable timing without losing a draft", () => {
+  for (const [time, duration, expected] of [[0, 10, [0, .5]], [9.9, 10, [9.4, 10]], [0, .2, [0, .2]]]) {
+    const env = environment({ globals: { elements: { audioPlayer: { duration, currentTime: time }, studyPanel: null } } });
+    env.studyCurrentMoment(); assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), expected);
+  }
+  const env = environment({ globals: { elements: { audioPlayer: { duration: NaN, currentTime: 0 }, studyPanel: null } } });
+  env.state.study.draft.notes = "keep draft"; env.studyCurrentMoment();
+  assert.equal(env.panel(), undefined); assert.equal(env.state.study.draft.notes, "keep draft");
+});
+
+test("study shortcut preserves the previous passage and starts a separate adjustable study", () => {
+  const env = environment({ globals: { elements: { audioPlayer: { duration: 10, currentTime: 7 }, studyPanel: null } } });
+  env.setStudyRange(2, 3); env.state.study.draft.name = "Earlier passage"; env.state.study.draft.notes = "keep this";
+  env.studyCurrentMoment();
+  assert.equal(env.state.studies.length, 1);
+  assert.equal(env.state.studies[0].name, "Earlier passage");
+  assert.equal(env.state.studies[0].notes, "keep this");
+  assert.equal(env.state.study.openStudyId, null);
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [6.5, 7.5]);
+});
+
+test("study shortcut maps rendered tempo preview positions back to original audio seconds", () => {
+  const env = environment({ state: { audioPreview: { tempoRate: 2 } }, globals: { elements: { audioPlayer: { duration: 10, currentTime: 9 }, studyPanel: null } } });
+  env.studyCurrentMoment();
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [17.5, 18.5]);
+});
+
+test("Song and Analysis buttons both open an adjustable local study", () => {
+  const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "../../src/renderer/index.html"), "utf8");
+  for (const section of ["transport", "analysis-options"]) {
+    const content = html.match(new RegExp(`<section class="${section}[^]*?</section>`))?.[0];
+    assert.match(content, /data-study-current[^>]*>Study this moment<\/button>/);
+  }
+  const buttons = [{}, {}].map(() => ({ addEventListener(name, action) { this[name] = action; } }));
+  const nodes = new Map();
+  const document = {
+    querySelectorAll(selector) { return selector === "[data-study-current]" ? buttons : []; },
+    getElementById(id) { if (!nodes.has(id)) nodes.set(id, { addEventListener() {} }); return nodes.get(id); }
+  };
+  const audioPlayer = { currentTime: 4, duration: 10 };
+  const env = environment({ globals: { document, elements: { audioPlayer, studyPanel: {} }, window: { addEventListener() {} } } });
+  env.context.renderStudy = () => {}; env.context.zoomStudyWaveform = () => {};
+  env.context.initializeStudy();
+  for (const button of buttons) {
+    button.click(); assert.equal(env.panel(), "study");
+    assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [3.5, 4.5]);
+    env.setStudyRange(3, 5); // range remains adjustable after opening
+    assert.equal(env.state.study.draft.start, 3);
+  }
 });
