@@ -23,3 +23,15 @@ Verification: 92 Python tests passed, including seventh/sharp-ninth comparisons
 in all twelve keys; 234 JavaScript tests passed with the two previously
 documented baseline exclusions. The installed SciPy emitted its existing
 NumPy compatibility warning. No song-specific rules were added.
+
+## Local Study applicability
+
+An additional end-to-end regression constructs one changing-harmony recording
+and a corresponding bass stem, then analyzes 36 different positions covering
+all twelve roots with plain sevenths, sharp-ninth sevenths, and major ninths.
+Each position is analyzed with Simplify both on and off: all 72 selections
+retain the expected detailed chord name through `analyze_range`, including
+ordinary sevenths where no altered note is present. Every selection uses the
+same shared scorer; no product-code change was needed to apply the strategy
+globally. Existing saved runs remain historical snapshots and require
+reanalyzing to obtain results from the current algorithm.

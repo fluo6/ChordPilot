@@ -32,6 +32,30 @@ class StudyTests(unittest.TestCase):
             with self.subTest(start=start, end=end), self.assertRaises(ValueError):
                 study.validate_range(start, end, 2)
 
+    def test_extended_chord_strategy_is_shared_across_positions_roots_and_display_settings(self):
+        from chordpilot_common import PITCH_NAMES
+        cases = [(root, quality, intervals) for root in range(12)
+                 for quality, intervals in [('7', [0, 4, 7, 10]), ('7#9', [0, 4, 7, 10, 15]), ('maj9', [0, 4, 7, 11, 14])]]
+        block = np.arange(round(1.4 * self.sr)) / self.sr
+        frequency = lambda midi: 440 * 2 ** ((midi - 69) / 12)
+        other_audio = np.concatenate([sum(.12 * np.sin(2 * np.pi * frequency(60 + root + interval) * block)
+                                           for interval in intervals) for root, _, intervals in cases])
+        bass_audio = np.concatenate([.5 * np.sin(2 * np.pi * frequency(36 + root) * block)
+                                     for root, _, _ in cases])
+        other, bass = self.root / 'changing-harmony.wav', self.root / 'changing-bass.wav'
+        write(other, self.sr, other_audio.astype(np.float32))
+        write(bass, self.sr, bass_audio.astype(np.float32))
+        for index, (root, quality, _) in enumerate(cases):
+            start, end = index * 1.4 + .2, index * 1.4 + 1.2
+            key = PITCH_NAMES[root if quality == 'maj9' else (root + 5) % 12]
+            for simplify in (True, False):
+                with self.subTest(root=PITCH_NAMES[root], quality=quality, start=start, simplify=simplify):
+                    result = study.analyze_range(str(other), {'other': str(other), 'bass': str(bass)}, start, end,
+                                                 {'song_key': key, 'simplify_chords': simplify})
+                    self.assertEqual(result['chord'], PITCH_NAMES[root] + quality)
+                    self.assertEqual(result['range'], [start, end])
+                    self.assertTrue(result['evidence']['detected_pitches'])
+
     def test_silence_and_settings(self):
         audio = self.wav("silent.wav")
         result = study.analyze_range(audio, {"full_mix": audio}, .2, .8, {"song_key": "G", "known_key": "Am"})
