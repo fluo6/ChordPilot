@@ -251,17 +251,30 @@ def chord_to_harmony(symbol: str) -> ET.Element:
     kind = ET.SubElement(harmony, "kind")
     kind.text = kind_text
     kind.set("text", symbol or "C")
+    candidate = parse_candidate_symbol(symbol)
+    if candidate and candidate["bass"] is not None:
+        bass_name = PITCH_NAMES[candidate["bass"]]
+        bass = ET.SubElement(harmony, "bass")
+        ET.SubElement(bass, "bass-step").text = bass_name[0]
+        if len(bass_name) > 1:
+            ET.SubElement(bass, "bass-alter").text = "1" if bass_name[1] == "#" else "-1"
     if re.match(r"^[A-G][#b]?m?add9(?:/|$)", symbol or ""):
         degree = ET.SubElement(harmony, "degree")
         ET.SubElement(degree, "degree-value").text = "9"
         ET.SubElement(degree, "degree-alter").text = "0"
         ET.SubElement(degree, "degree-type").text = "add"
-    candidate = parse_candidate_symbol(symbol)
     if candidate and candidate["quality"] == "7#9":
         degree = ET.SubElement(harmony, "degree")
         ET.SubElement(degree, "degree-value").text = "9"
         ET.SubElement(degree, "degree-alter").text = "1"
         ET.SubElement(degree, "degree-type").text = "add"
+    if candidate and candidate["quality"] in {"7sus4", "9sus4"}:
+        kind.text = "suspended-fourth"
+        for value, alteration in [(7, -1)] + ([(9, 0)] if candidate["quality"] == "9sus4" else []):
+            degree = ET.SubElement(harmony, "degree")
+            ET.SubElement(degree, "degree-value").text = str(value)
+            ET.SubElement(degree, "degree-alter").text = str(alteration)
+            ET.SubElement(degree, "degree-type").text = "add"
     return harmony
 
 def parse_chord_symbol(symbol: str) -> tuple[str, str]:

@@ -48,6 +48,7 @@ def parse_candidate_symbol(symbol: str) -> dict[str, Any] | None:
 def normalize_quality_suffix(value: str) -> str:
     suffix = str(value or "").strip().replace("♯", "#")
     suffix = re.sub(r"^7\(#9\)$", "7#9", suffix)
+    suffix = re.sub(r"^([79])\(sus4\)$", r"\1sus4", suffix, flags=re.IGNORECASE)
     if suffix in {"M7", "M9", "M13"}:
         return "maj" + suffix[1:]
     lower = suffix.lower().replace("minor", "m").replace("major", "maj")
@@ -177,13 +178,22 @@ def generate_chord_candidates(chroma: Any, bass_reference: dict[str, Any] | None
     for symbol in symbols:
         candidate = parse_candidate_symbol(symbol)
         if candidate:
+            # PyChord's thirdless 11 formula is the same pitch set as 9sus4.
+            # Use one name so identical voicings do not create false changes.
+            if candidate["quality"] == "11":
+                candidate["quality"] = "9sus4"
+                candidate["symbol"] = chord_symbol_for(candidate["root"], "9sus4", candidate["bass"])
             parsed[candidate["symbol"]] = candidate
 
     bass_pc = bass_reference.get("pitch_class") if bass_reference else None
     bass_confidence = float(bass_reference.get("confidence", 0.0)) if bass_reference else 0.0
     if bass_pc is not None and bass_confidence >= 0.62:
+        normalized = chroma / (float(chroma.sum()) or 1.0)
         for candidate in list(parsed.values()):
-            if candidate["root"] != bass_pc and bass_pc in chord_tones_for_candidate(candidate):
+            tones = chord_tones_for_candidate(candidate)
+            supported_upper_triad = (candidate["quality"] in {"", "m"}
+                and all(float(normalized[pc]) >= .06 for pc in tones))
+            if candidate["root"] != bass_pc and (bass_pc in tones or supported_upper_triad):
                 slash = dict(candidate)
                 slash["bass"] = int(bass_pc)
                 slash["symbol"] = chord_symbol_for(int(candidate["root"]), str(candidate["quality"]), int(bass_pc))
@@ -224,12 +234,16 @@ def score_chord_candidate(
         bass_weight = 0.3 * min(1.0, bass_confidence)
         normalized = normalized * (1 - bass_weight)
         normalized[int(bass_pc)] += bass_weight
+        if candidate.get("bass") == bass_pc:
+            tones.add(int(bass_pc))
     root = int(candidate["root"])
     quality = CHORD_QUALITIES.get(str(candidate["quality"]), CHORD_QUALITIES[""])
     essential = [root]
     if quality.get("third") is not None:
         essential.append((root + int(quality["third"])) % 12)
-    if quality.get("fifth") is not None:
+    if quality.get("suspension") is not None:
+        essential.append((root + int(quality["suspension"])) % 12)
+    if quality.get("fifth") is not None and not quality.get("optional_fifth"):
         essential.append((root + int(quality["fifth"])) % 12)
 
     coverage = float(sum(float(normalized[pc]) for pc in tones))
@@ -280,15 +294,15 @@ def score_chord_candidate(
 
     slash = candidate.get("bass")
     if bass_pc is not None and bass_confidence > 0:
-        if bass_pc == root:
-            score += 0.32 * bass_confidence
-            reasons.append("bass agrees with root")
+        if slash is not None and (slash != bass_pc or bass_confidence < .62):
+            score -= 0.65
+            reasons.append("slash chord rejected: bass evidence is weak or mismatched")
         elif slash == bass_pc and bass_confidence >= 0.62:
             score += 0.26 * bass_confidence
             reasons.append("slash bass accepted from high-confidence bass stem")
-        elif slash is not None:
-            score -= 0.65
-            reasons.append("slash chord rejected: bass evidence is weak or mismatched")
+        elif bass_pc == root:
+            score += 0.32 * bass_confidence
+            reasons.append("bass agrees with root")
         else:
             score -= 0.12 * bass_confidence
     elif slash is not None:

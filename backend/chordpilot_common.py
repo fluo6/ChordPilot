@@ -72,7 +72,7 @@ CHORD_QUALITIES = {
 # PyChord owns the formulas; limit audio candidates to common extensions.
 from pychord.quality import QualityManager
 
-for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13", "7#9"]:
+for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13", "7#9", "7sus4", "9sus4"]:
     intervals = list(QualityManager().get_quality(quality_name).components)
     if quality_name not in CHORD_QUALITIES:
         CHORD_QUALITIES[quality_name] = {
@@ -81,6 +81,8 @@ for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9",
             "complexity": 0.18 + 0.08 * (len(intervals) - 3),
         }
     CHORD_QUALITIES[quality_name]["intervals"] = intervals
+    CHORD_QUALITIES[quality_name]["suspension"] = 5 if "sus4" in quality_name else 2 if quality_name == "sus2" else None
+    CHORD_QUALITIES[quality_name]["optional_fifth"] = "sus4" in quality_name and 10 in intervals
 
 MAJOR_SCALE_INTERVALS = {0, 2, 4, 5, 7, 9, 11}
 MINOR_SCALE_INTERVALS = {0, 2, 3, 5, 7, 8, 10}
@@ -94,7 +96,7 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-10-13-root-timing-v1"
+BACKEND_CACHE_VERSION = "2026-10-13-suspended-slash-v1"
 CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v2"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {

@@ -221,7 +221,7 @@ function chartRows(measuresPerRow = 4) {
 function displayChordSymbol(symbol, simplify = elements.simplifyChordsInput?.checked ?? state.chart?.analysis_engine?.options?.simplify_chords ?? true) {
   const canonical = String(symbol || "N.C.").replace(/^([A-G][#b]?)M(7|9|13)(?=\/|$)/, "$1maj$2");
   if (!simplify) return canonical;
-  return canonical.replace(/^([A-G][#b]?)(maj(?:9|13)|m(?:9|11)|9|11|13|m?add9)(?=\/|$)/, (_, root, quality) => {
+  return canonical.replace(/^([A-G][#b]?)9sus4(?=\/|$)/, (_, root) => `${root}7sus4`).replace(/^([A-G][#b]?)(maj(?:9|13)|m(?:9|11)|9|11|13|m?add9)(?=\/|$)/, (_, root, quality) => {
     const simple = quality.startsWith("maj") ? "maj7" : quality.startsWith("madd") ? "m" : quality === "add9" ? "" : quality.startsWith("m") ? "m7" : "7";
     return root + simple;
   });
@@ -906,7 +906,7 @@ function chordToneSet(symbol) {
   if (rootIndex < 0) {
     return new Set();
   }
-  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").replace("♯", "#").replace(/^7\(#9\)$/, "7#9").toLowerCase();
+  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").replace("♯", "#").replace(/^7\(#9\)$/, "7#9").replace(/^([79])\(sus4\)$/i, "$1sus4").toLowerCase();
   let intervals = [0, 4, 7];
   if (qualityText.includes("m7b5")) {
     intervals = [0, 3, 6, 10];
@@ -916,12 +916,12 @@ function chordToneSet(symbol) {
     intervals = [0, 4, 8];
   } else if (qualityText.startsWith("sus2")) {
     intervals = [0, 2, 7];
-  } else if (qualityText.startsWith("sus")) {
+  } else if (qualityText.includes("sus4") || qualityText.startsWith("sus")) {
     intervals = [0, 5, 7];
   } else if (qualityText.startsWith("m") && !qualityText.startsWith("maj")) {
     intervals = [0, 3, 7];
   }
-  const extended = /^(maj(?:9|13)|m(?:9|11)|9|11|13)$/.test(qualityText);
+  const extended = /^(maj(?:9|13)|m(?:9|11)|9|11|13|9sus4)$/.test(qualityText);
   if (extended) {
     if (qualityText === "11") intervals = [0, 7];
     intervals.push(qualityText.startsWith("maj") ? 11 : 10, 2);
@@ -936,7 +936,10 @@ function chordToneSet(symbol) {
   }
   if (qualityText.endsWith("add9")) intervals.push(2);
   if (qualityText === "7#9") intervals.push(3);
-  return new Set(intervals.map((interval) => PITCH_NAMES[(rootIndex + interval) % 12]));
+  const tones = new Set(intervals.map((interval) => PITCH_NAMES[(rootIndex + interval) % 12]));
+  const bass = String(symbol || "").split("/")[1];
+  if (bass && pitchIndex(bass) >= 0) tones.add(PITCH_NAMES[pitchIndex(bass)]);
+  return tones;
 }
 
 function detectedStrengthMap(bar) {

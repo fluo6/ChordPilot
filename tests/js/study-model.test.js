@@ -11,6 +11,7 @@ test("simplified display does not invalidate new detections but retains legacy s
   assert.equal(m.compareStudyRuns(run, changed).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v4" }, { ...changed, algorithm_version: "local-study-v4" }).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v5" }, { ...changed, algorithm_version: "local-study-v5" }).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v6" }, { ...changed, algorithm_version: "local-study-v6" }).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v2" }, { ...changed, algorithm_version: "local-study-v2" }).sameInputs, false);
 });
 

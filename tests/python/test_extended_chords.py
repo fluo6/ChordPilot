@@ -11,6 +11,45 @@ from chordpilot_timing import group_chord_cells
 
 
 class ExtendedChordTests(unittest.TestCase):
+    def test_suspended_sevenths_and_ninths_keep_their_function(self):
+        for name, tones in [('B7sus4', {11, 4, 6, 9}), ('B9sus4', {11, 4, 6, 9, 1})]:
+            candidate = chords.parse_candidate_symbol(name)
+            self.assertEqual(candidate['symbol'], name)
+            self.assertEqual(chords.chord_tones_for_candidate(candidate), tones)
+            chroma = np.full(12, .001); chroma[list(tones)] = 1
+            ranked, _ = chords.rank_chord_candidates(chroma, 'Ab', None, None, {'pitch_class': 11, 'confidence': .95}, np, {})
+            self.assertEqual(ranked[0]['chord'], name)
+            harmony = chord_to_harmony(name)
+            self.assertEqual(harmony.findtext('kind'), 'suspended-fourth')
+            degrees = {degree.findtext('degree-value'): degree.findtext('degree-alter') for degree in harmony.findall('degree')}
+            self.assertEqual(degrees['7'], '-1')
+            if name == 'B9sus4': self.assertEqual(degrees['9'], '0')
+        for root in range(12):
+            for quality, intervals in [('7sus4', [0, 5, 7, 10]), ('9sus4', [0, 5, 7, 10, 14])]:
+                chroma = np.full(12, .001); chroma[[(root + n) % 12 for n in intervals]] = 1
+                ranked, _ = chords.rank_chord_candidates(chroma, chords.PITCH_NAMES[root], None, None, {'pitch_class': root, 'confidence': .95}, np, {})
+                self.assertEqual(ranked[0]['chord'], chords.PITCH_NAMES[root] + quality)
+        for alias in ('B7(sus4)', 'B9(sus4)'):
+            self.assertEqual(chords.parse_candidate_symbol(alias)['quality'], alias[1:].replace('(', '').replace(')', ''))
+
+    def test_non_chord_bass_slash_candidates_are_supported_by_upper_triad(self):
+        chroma = np.full(12, .001); chroma[[1, 5, 8]] = 1
+        bass = {'pitch_class': 3, 'confidence': .95}
+        candidates, _ = chords.generate_chord_candidates(chroma, bass, np, {})
+        self.assertIn('C#/Eb', {candidate['symbol'] for candidate in candidates})
+        ranked, _ = chords.rank_chord_candidates(chroma, 'Ab', None, None, bass, np, {})
+        self.assertEqual(ranked[0]['chord'], 'C#/Eb')
+        weak, _ = chords.generate_chord_candidates(chroma, {'pitch_class': 3, 'confidence': .2}, np, {})
+        self.assertNotIn('C#/Eb', {candidate['symbol'] for candidate in weak})
+        harmony = chord_to_harmony('Db/Eb')
+        self.assertEqual(harmony.findtext('bass/bass-step'), 'E')
+        self.assertEqual(harmony.findtext('bass/bass-alter'), '-1')
+        chroma = np.zeros(12); chroma[[9, 1, 4, 7]] = 1
+        bass = {'pitch_class': 9, 'confidence': .95}
+        plain = chords.score_chord_candidate(chords.parse_candidate_symbol('A7'), chroma, 'D', None, None, bass, np, {})
+        wrong = chords.score_chord_candidate(chords.parse_candidate_symbol('A7/E'), chroma, 'D', None, None, bass, np, {})
+        self.assertGreater(plain['raw_score'], wrong['raw_score'] + .5)
+
     def test_bass_supports_root_omitted_major_voicings_without_forcing_inversions(self):
         for root in range(12):
             for quality, intervals in [('maj7', [4, 7, 11]), ('maj9', [4, 7, 11, 14])]:

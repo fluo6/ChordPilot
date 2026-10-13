@@ -44,6 +44,11 @@ test("extended chord labels preserve the stored chord and full keyboard tones", 
   assert.equal(b.displayChordSymbol("Abmaj9/C", false), "Abmaj9/C");
   assert.equal(b.displayChordSymbol("Cm11", true), "Cm7");
   assert.equal(b.displayChordSymbol("Eb7#9", true), "Eb7#9");
+  assert.equal(b.displayChordSymbol("B9sus4", true), "B7sus4");
+  assert.deepEqual([...b.chordToneSet("B7sus4")], ["B", "E", "F#", "A"]);
+  assert.deepEqual([...b.chordToneSet("B9sus4")], ["B", "E", "F#", "A", "C#"]);
+  assert.deepEqual([...b.chordToneSet("B9(sus4)")], ["B", "E", "F#", "A", "C#"]);
+  assert.deepEqual([...b.chordToneSet("Db/Eb")], ["C#", "F", "Ab", "Eb"]);
   assert.deepEqual([...b.chordToneSet("Eb7#9")], ["Eb", "G", "Bb", "C#", "F#"]);
   assert.deepEqual([...b.chordToneSet("Eb7(#9)")], ["Eb", "G", "Bb", "C#", "F#"]);
   assert.equal(b.displayChordSymbol("CM9", true), "Cmaj7");
