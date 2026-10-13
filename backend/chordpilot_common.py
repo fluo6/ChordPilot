@@ -72,7 +72,7 @@ CHORD_QUALITIES = {
 # PyChord owns the formulas; limit audio candidates to common extensions.
 from pychord.quality import QualityManager
 
-for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13"]:
+for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13", "7#9"]:
     intervals = list(QualityManager().get_quality(quality_name).components)
     if quality_name not in CHORD_QUALITIES:
         CHORD_QUALITIES[quality_name] = {
@@ -94,7 +94,7 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-10-13-extended-chords-v1"
+BACKEND_CACHE_VERSION = "2026-10-13-sharp-ninth-v1"
 CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v1"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {

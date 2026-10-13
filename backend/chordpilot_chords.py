@@ -46,7 +46,8 @@ def parse_candidate_symbol(symbol: str) -> dict[str, Any] | None:
     }
 
 def normalize_quality_suffix(value: str) -> str:
-    suffix = str(value or "").strip()
+    suffix = str(value or "").strip().replace("♯", "#")
+    suffix = re.sub(r"^7\(#9\)$", "7#9", suffix)
     if suffix in {"M7", "M9", "M13"}:
         return "maj" + suffix[1:]
     lower = suffix.lower().replace("minor", "m").replace("major", "maj")
@@ -54,6 +55,8 @@ def normalize_quality_suffix(value: str) -> str:
     lower = lower.replace("ø", "m7b5")
     if lower in CHORD_QUALITIES:
         return lower
+    if "#" in lower or re.search(r"b\d", lower):
+        return lower  # Unsupported alterations must not silently become plain sevenths.
     if lower in {"", "maj", "major"}:
         return ""
     if lower in {"m", "mi"}:

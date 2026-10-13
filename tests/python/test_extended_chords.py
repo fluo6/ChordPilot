@@ -11,6 +11,27 @@ from chordpilot_timing import group_chord_cells
 
 
 class ExtendedChordTests(unittest.TestCase):
+    def test_sharp_ninth_formula_aliases_and_export(self):
+        self.assertIsNone(chords.parse_candidate_symbol('Eb7#9b5'))
+        for symbol in ('Eb7#9', 'Eb7(#9)', 'Eb7♯9'):
+            candidate = chords.parse_candidate_symbol(symbol)
+            self.assertEqual(candidate['symbol'], 'Eb7#9')
+            self.assertEqual(chords.chord_tones_for_candidate(candidate), {3, 7, 10, 1, 6})
+            harmony = chord_to_harmony(symbol)
+            self.assertEqual(harmony.findtext('kind'), 'dominant')
+            self.assertEqual(harmony.findtext('degree/degree-value'), '9')
+            self.assertEqual(harmony.findtext('degree/degree-alter'), '1')
+
+    def test_sharp_ninth_requires_evidence_and_works_in_every_key(self):
+        for root in range(12):
+            for has_ninth in (False, True):
+                chroma = np.full(12, .001)
+                chroma[[(root + n) % 12 for n in [0, 4, 7, 10]]] = .2
+                if has_ninth: chroma[(root + 3) % 12] = .2
+                bass = {'pitch_class': root, 'confidence': .9}
+                ranked, _ = chords.rank_chord_candidates(chroma, chords.PITCH_NAMES[(root + 5) % 12], None, None, bass, np, {'simplify_chords': True})
+                self.assertEqual(ranked[0]['chord'], chords.PITCH_NAMES[root] + ('7#9' if has_ninth else '7'))
+
     def test_musicxml_preserves_extensions(self):
         self.assertEqual(chord_to_harmony('Abmaj9').findtext('kind'), 'major-ninth')
         self.assertEqual(chord_to_harmony('Cm9').findtext('kind'), 'minor-ninth')

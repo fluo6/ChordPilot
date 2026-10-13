@@ -1,4 +1,5 @@
 from chordpilot_common import *
+from chordpilot_chords import parse_candidate_symbol
 
 def bar_chord_events(chart: dict[str, Any], index: int) -> list[dict[str, Any]]:
     """Return valid complete timed events, or a non-mutating legacy bar view."""
@@ -254,6 +255,12 @@ def chord_to_harmony(symbol: str) -> ET.Element:
         degree = ET.SubElement(harmony, "degree")
         ET.SubElement(degree, "degree-value").text = "9"
         ET.SubElement(degree, "degree-alter").text = "0"
+        ET.SubElement(degree, "degree-type").text = "add"
+    candidate = parse_candidate_symbol(symbol)
+    if candidate and candidate["quality"] == "7#9":
+        degree = ET.SubElement(harmony, "degree")
+        ET.SubElement(degree, "degree-value").text = "9"
+        ET.SubElement(degree, "degree-alter").text = "1"
         ET.SubElement(degree, "degree-type").text = "add"
     return harmony
 

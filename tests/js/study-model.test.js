@@ -9,6 +9,7 @@ test("simplified display does not invalidate new detections but retains legacy s
   const run = { ...result("Abmaj9"), algorithm_version: "local-study-v3", settings: { simplify_chords: true } };
   const changed = { ...run, settings: { simplify_chords: false } };
   assert.equal(m.compareStudyRuns(run, changed).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v4" }, { ...changed, algorithm_version: "local-study-v4" }).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v2" }, { ...changed, algorithm_version: "local-study-v2" }).sameInputs, false);
 });
 

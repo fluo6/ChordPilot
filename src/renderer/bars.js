@@ -906,7 +906,7 @@ function chordToneSet(symbol) {
   if (rootIndex < 0) {
     return new Set();
   }
-  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").toLowerCase();
+  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").replace("♯", "#").replace(/^7\(#9\)$/, "7#9").toLowerCase();
   let intervals = [0, 4, 7];
   if (qualityText.includes("m7b5")) {
     intervals = [0, 3, 6, 10];
@@ -935,6 +935,7 @@ function chordToneSet(symbol) {
     intervals.push(9);
   }
   if (qualityText.endsWith("add9")) intervals.push(2);
+  if (qualityText === "7#9") intervals.push(3);
   return new Set(intervals.map((interval) => PITCH_NAMES[(rootIndex + interval) % 12]));
 }
 

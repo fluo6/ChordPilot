@@ -14,7 +14,7 @@ from chordpilot_chords import (
 )
 from chordpilot_analysis import estimate_bass_reference
 
-STUDY_ALGORITHM_VERSION = "local-study-v3"
+STUDY_ALGORITHM_VERSION = "local-study-v4"
 SOURCE_NAMES = {"full_mix", "bass", "other", "vocals", "drums"}
 
 
