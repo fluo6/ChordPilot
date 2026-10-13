@@ -216,6 +216,14 @@ def score_chord_candidate(
 ) -> dict[str, Any]:
     normalized = chroma / (float(chroma.sum()) or 1.0)
     tones = chord_tones_for_candidate(candidate)
+    bass_pc = bass_reference.get("pitch_class") if bass_reference else None
+    bass_confidence = float(bass_reference.get("confidence", 0.0)) if bass_reference else 0.0
+    # A separated accompaniment often omits the root played by the bass.
+    # Blend independent bass evidence for every candidate, including inversions.
+    if bass_pc is not None and bass_confidence >= 0.62:
+        bass_weight = 0.3 * min(1.0, bass_confidence)
+        normalized = normalized * (1 - bass_weight)
+        normalized[int(bass_pc)] += bass_weight
     root = int(candidate["root"])
     quality = CHORD_QUALITIES.get(str(candidate["quality"]), CHORD_QUALITIES[""])
     essential = [root]
@@ -226,7 +234,7 @@ def score_chord_candidate(
 
     coverage = float(sum(float(normalized[pc]) for pc in tones))
     essential_strength = float(sum(float(normalized[pc]) for pc in essential))
-    active = active_pitch_classes(chroma, np, threshold=0.055)
+    active = active_pitch_classes(normalized, np, threshold=0.055)
     unexplained = float(sum(float(normalized[pc]) for pc in active if pc not in tones))
     key_pcs = key_pitch_classes(key)
     key_fit = (sum(1 for pc in tones if pc in key_pcs) / max(1, len(tones)))
@@ -234,7 +242,7 @@ def score_chord_candidate(
     score = 0.0
     reasons: list[str] = []
     score += coverage * 3.2
-    reasons.append(f"covers {round(coverage * 100)}% of detected pitch energy")
+    reasons.append(f"covers {round(coverage * 100)}% of {'combined bass/accompaniment evidence' if bass_pc is not None and bass_confidence >= 0.62 else 'detected pitch energy'}")
     score += essential_strength * 1.55
 
     for pc in essential:
@@ -270,8 +278,6 @@ def score_chord_candidate(
             if float(normalized[(root + interval) % 12]) < 0.045:
                 score -= 0.35
 
-    bass_pc = bass_reference.get("pitch_class") if bass_reference else None
-    bass_confidence = float(bass_reference.get("confidence", 0.0)) if bass_reference else 0.0
     slash = candidate.get("bass")
     if bass_pc is not None and bass_confidence > 0:
         if bass_pc == root:

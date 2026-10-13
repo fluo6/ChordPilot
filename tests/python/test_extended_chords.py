@@ -11,6 +11,21 @@ from chordpilot_timing import group_chord_cells
 
 
 class ExtendedChordTests(unittest.TestCase):
+    def test_bass_supports_root_omitted_major_voicings_without_forcing_inversions(self):
+        for root in range(12):
+            for quality, intervals in [('maj7', [4, 7, 11]), ('maj9', [4, 7, 11, 14])]:
+                chroma = np.full(12, .001)
+                chroma[[(root + interval) % 12 for interval in intervals]] = 1
+                ranked, _ = chords.rank_chord_candidates(chroma, chords.PITCH_NAMES[root], None, None,
+                    {'pitch_class': root, 'confidence': .95}, np, {})
+                self.assertEqual(ranked[0]['chord'], chords.PITCH_NAMES[root] + quality)
+        chroma = np.zeros(12); chroma[[0, 4, 7]] = 1
+        ranked, _ = chords.rank_chord_candidates(chroma, 'C', None, None, {'pitch_class': 4, 'confidence': .95}, np, {})
+        self.assertEqual(ranked[0]['chord'], 'C/E')
+        chroma = np.zeros(12); chroma[[0, 4, 7, 11]] = 1
+        ranked, _ = chords.rank_chord_candidates(chroma, 'C', None, None, {'pitch_class': 6, 'confidence': .2}, np, {})
+        self.assertEqual(ranked[0]['chord'], 'Cmaj7')
+
     def test_sharp_ninth_formula_aliases_and_export(self):
         self.assertIsNone(chords.parse_candidate_symbol('Eb7#9b5'))
         for symbol in ('Eb7#9', 'Eb7(#9)', 'Eb7♯9'):

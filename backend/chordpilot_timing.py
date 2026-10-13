@@ -37,7 +37,16 @@ def analysis_cell_bounds(start: float, end: float, beats: list[float], grid: str
         boundaries = beat_grid
         if grid == "half_beat":
             boundaries = [point for left, right in zip(beat_grid, beat_grid[1:]) for point in (left, (left + right) / 2)] + [end]
-    return [(round(left, 6), round(right, 6)) for left, right in zip(boundaries, boundaries[1:]) if right - left > 1e-6]
+    # Stored events use milliseconds; collapse near-duplicate beat/end points.
+    precise = [start]
+    for point in boundaries[1:-1]:
+        if round(point, 3) > round(precise[-1], 3):
+            precise.append(point)
+    if round(end, 3) == round(precise[-1], 3):
+        precise[-1] = end
+    else:
+        precise.append(end)
+    return [(round(left, 6), round(right, 6)) for left, right in zip(precise, precise[1:]) if right - left > 1e-6]
 
 
 def group_chord_cells(cells: list[dict[str, Any]], np: Any = None,
@@ -49,6 +58,9 @@ def group_chord_cells(cells: list[dict[str, Any]], np: Any = None,
         left, middle, right = grouped[index - 1:index + 2]
         alternative = next((item for item in middle.get("alternatives", []) if item.get("chord") == left.get("chord")), None)
         winning = next((item for item in middle.get("alternatives", []) if item.get("chord") == middle.get("chord")), None)
+        basses = [item.get("bass_reference") or {} for item in (left, middle, right)]
+        supported_bass_change = (all(float(bass.get("confidence", 0)) >= .62 for bass in basses)
+            and basses[0].get("pitch_class") == basses[2].get("pitch_class") != basses[1].get("pitch_class"))
         # An isolated added ninth between identical triads is usually melody.
         # Keep the original cell detection for inspection; fixed grids stay exact.
         middle_candidate = parse_candidate_symbol(middle.get("chord", ""))
@@ -66,6 +78,7 @@ def group_chord_cells(cells: list[dict[str, Any]], np: Any = None,
                 and float(middle["end"]) - float(middle["start"]) <= float(options.get("beat_period", 0)) * 1.05
                 and float(chroma[(root + 2) % 12]) < 0.8 * min(float(chroma[(root + third) % 12]), float(chroma[(root + 7) % 12])))
         if (left.get("chord") == right.get("chord") and middle.get("chord") != left.get("chord")
+                and not supported_bass_change
                 and middle.get("chord") != "N.C." and left.get("chord") != "N.C."
                 and (passing_ninth or (float(middle.get("confidence", 0)) < 0.55 and alternative and winning
                 and float(alternative.get("score", 0)) >= float(winning.get("score", 0)) - 0.05))):

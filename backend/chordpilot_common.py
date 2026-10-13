@@ -94,8 +94,8 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-10-13-sharp-ninth-v1"
-CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v1"
+BACKEND_CACHE_VERSION = "2026-10-13-root-timing-v1"
+CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v2"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {
     "known_key": "",

@@ -42,7 +42,7 @@ function createStudyState(settings = {}) {
 
 function studyDetectionSettings(settings, algorithmVersion) {
   const normalized = studySettings(settings);
-  if (["local-study-v3", "local-study-v4"].includes(algorithmVersion)) delete normalized.simplify_chords;
+  if (["local-study-v3", "local-study-v4", "local-study-v5"].includes(algorithmVersion)) delete normalized.simplify_chords;
   return normalized;
 }
 

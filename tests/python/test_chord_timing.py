@@ -13,6 +13,47 @@ import numpy as np
 
 
 class ChordTimingTests(unittest.TestCase):
+    def test_refinement_can_find_changes_late_in_a_mixed_cell(self):
+        sr = 8192
+        t = np.arange(sr) / sr
+        audio = np.where(t < .81, np.sin(2 * np.pi * 65.406 * t), np.sin(2 * np.pi * 87.307 * t))
+        cells = [{'start': 0, 'end': .5, 'bass_reference': {'pitch_class': 0, 'confidence': .95}},
+                 {'start': .5, 'end': 1, 'bass_reference': {'pitch_class': 5, 'confidence': .95}}]
+        self.assertTrue(analysis.refine_cell_bass_boundaries(cells, audio, sr, np))
+        self.assertAlmostEqual(cells[0]['end'], .81, delta=.05)
+        self.assertEqual(cells[0]['end'], cells[1]['start'])
+        cells = [{'start': 0, 'end': .5, 'bass_reference': {'pitch_class': 0, 'confidence': .2}},
+                 {'start': .5, 'end': 1, 'bass_reference': {'pitch_class': 5, 'confidence': .2}}]
+        self.assertFalse(analysis.refine_cell_bass_boundaries(cells, audio, sr, np))
+        self.assertEqual(cells[0]['end'], .5)
+
+    def test_millisecond_rounding_does_not_create_zero_length_tail_events(self):
+        bounds = timing.analysis_cell_bounds(0, 2.00001, [0, .5, 1, 1.5, 2], 'beat', 4, 120)
+        self.assertEqual(bounds[-1], (1.5, 2.00001))
+        self.assertTrue(all(round(end, 3) > round(start, 3) for start, end in bounds))
+
+    def test_auto_refines_off_grid_root_changes_and_keeps_brief_passing_chords(self):
+        sr = 8192
+        t = np.arange(sr * 2) / sr
+        other, bass = np.zeros_like(t), np.zeros_like(t)
+        for start, end, root in [(0, .62, 0), (.62, .96, 5), (.96, 2, 0)]:
+            mask = (t >= start) & (t < end)
+            other[mask] = sum(.2 * np.sin(2 * np.pi * (440 * 2 ** ((60 + root + n - 69) / 12)) * t[mask]) for n in [4, 7, 11])
+            bass[mask] = np.sin(2 * np.pi * (440 * 2 ** ((36 + root - 69) / 12)) * t[mask])
+        bars = [{'start': 0, 'chord': 'C'}]
+        options = common.normalize_analysis_options({'chord_timing': 'auto', 'chord_grid': 'beat'})
+        analysis.attach_timed_chord_events(bars, other, sr, 120, '4/4', [0, .5, 1, 1.5], np, options, 'other', bass, sr, 'C')
+        events = bars[0]['chord_events']
+        self.assertEqual([event['chord'] for event in events], ['Cmaj7', 'Fmaj7', 'Cmaj7'])
+        self.assertAlmostEqual(events[1]['start'], .62, delta=.05)
+        self.assertAlmostEqual(events[1]['end'], .96, delta=.05)
+        self.assertEqual(events[0]['start'], 0); self.assertEqual(events[-1]['end'], 2)
+        for left, right in zip(events, events[1:]): self.assertEqual(left['end'], right['start'])
+        fixed = [{'start': 0, 'chord': 'C'}]
+        options['chord_timing'] = 'fixed'
+        analysis.attach_timed_chord_events(fixed, other, sr, 120, '4/4', [0, .5, 1, 1.5], np, options, 'other', bass, sr, 'C')
+        self.assertEqual([(event['start'], event['end']) for event in fixed[0]['chord_events']], [(0, .5), (.5, 1), (1, 1.5), (1.5, 2)])
+
     def test_timing_options_are_normalized_and_cache_distinctly(self):
         base = common.normalize_analysis_options({})
         self.assertEqual(base["chord_timing"], "auto")
@@ -56,6 +97,10 @@ class ChordTimingTests(unittest.TestCase):
         self.assertEqual([(item["start"], item["end"], item["chord"]) for item in result], [(0, 1.5, "C"), (1.5, 2, "G")])
         passing = timing.group_chord_cells([{"start": 0, "end": .5, "chord": "C", "confidence": .8}, {"start": .5, "end": 1, "chord": "G", "confidence": .8, "alternatives": [{"chord": "G", "score": .9}, {"chord": "C", "score": .6}]}, {"start": 1, "end": 1.5, "chord": "C", "confidence": .8}])
         self.assertEqual([item["chord"] for item in passing], ["C", "G", "C"])
+        supported = [dict(cell) for cell in cells[:3]]
+        for cell, pc in zip(supported, [0, 7, 0]):
+            cell['bass_reference'] = {'pitch_class': pc, 'confidence': .95}
+        self.assertEqual([item['chord'] for item in timing.group_chord_cells(supported)], ['C', 'G', 'C'])
         silence = timing.group_chord_cells([{"start": 0, "end": .5, "chord": "C", "confidence": .8}, {"start": .5, "end": 1, "chord": "N.C.", "confidence": .1, "alternatives": [{"chord": "C", "score": .95}]}, {"start": 1, "end": 1.5, "chord": "C", "confidence": .8}])
         self.assertEqual([item["chord"] for item in silence], ["C", "N.C.", "C"])
 

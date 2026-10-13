@@ -262,6 +262,51 @@ def duration_weighted_cell_chroma(audio: Any, sr: int, bars: list[dict[str, Any]
             total += chroma_for_segment(audio, sr, cell_start, cell_end, np, options) * (cell_end - cell_start)
     return total
 
+def refine_cell_bass_boundaries(cells: list[dict[str, Any]], bass_audio: Any, sr: int, np: Any) -> bool:
+    """Refine supported root changes within a bar using local bass evidence."""
+    changed = False
+    if len(cells) < 2:
+        return changed
+    bar_start, bar_end = float(cells[0]["start"]), float(cells[-1]["end"])
+    for left, right in zip(cells, cells[1:]):
+        old, new = left.get("bass_reference") or {}, right.get("bass_reference") or {}
+        old_pc, new_pc = old.get("pitch_class"), new.get("pitch_class")
+        if old_pc is None or new_pc is None or old_pc == new_pc or min(float(old.get("confidence", 0)), float(new.get("confidence", 0))) < .62:
+            continue
+        boundary = float(right["start"])
+        minimum = min(boundary - float(left["start"]), float(right["end"]) - boundary)
+        radius = max(0, min(minimum * .8, minimum - .08))
+        samples = []
+        for center in np.arange(boundary - radius, boundary + radius + .001, .02):
+            reference = estimate_bass_reference(bass_audio, sr, max(bar_start, center - .09), min(bar_end, center + .09), np)
+            if not reference or reference["pitch_class"] not in {old_pc, new_pc} or float(reference["confidence"]) < .62:
+                continue
+            strengths = {item["note"]: float(item["strength"]) for item in reference["detected_notes"]}
+            samples.append((float(center), strengths.get(PITCH_NAMES[new_pc], 0) - strengths.get(PITCH_NAMES[old_pc], 0)))
+        crossings = []
+        handled_negative = None
+        for index in range(1, len(samples) - 2):
+            after = samples[index]
+            before = next((sample for sample in reversed(samples[:index]) if sample[1] < 0), None)
+            if before is None or before[0] == handled_negative:
+                continue
+            gap = after[0] - before[0]
+            if before[1] < 0 <= after[1] and gap <= .22 and samples[index + 2][0] - after[0] <= .045 and all(value >= 0 for _, value in samples[index:index + 3]):
+                # During a noisy/gliding attack, use the first stable new pitch
+                # rather than interpolating across unsupported intermediate notes.
+                crossing = after[0] if gap > .025 else before[0] + gap * (-before[1]) / (after[1] - before[1])
+                crossings.append((crossing, [before[0], after[0]]))
+                handled_negative = before[0]
+        if crossings:
+            crossing, bracket = min(crossings, key=lambda value: abs(value[0] - boundary))
+            refined = round(crossing, 6)
+            if abs(refined - boundary) > .005:
+                left["end"] = right["start"] = refined
+                right["_boundary_refinement"] = {"grid_time": boundary, "time": refined, "bass_bracket": bracket}
+                changed = True
+    return changed
+
+
 def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, tempo: int,
                               time_signature: str, beat_times: list[float], np: Any,
                               options: dict[str, Any], evidence_source: str,
@@ -288,6 +333,11 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
                     "alternatives": [], "evidence": evidence, "bass_reference": reference, "_chroma": chroma}
             bar_cells.append(cell)
             cells.append(cell)
+        if mode == "auto" and bass_audio is not None and bass_sr and refine_cell_bass_boundaries(bar_cells, bass_audio, int(bass_sr), np):
+            for cell in bar_cells:
+                chroma = chroma_for_segment(audio, sr, cell["start"], cell["end"], np, options)
+                cell.update({"_chroma": chroma, "evidence": chord_evidence(chroma, cell["start"], cell["end"], evidence_source, np),
+                    "bass_reference": estimate_bass_reference(bass_audio, int(bass_sr), cell["start"], cell["end"], np)})
         cells_by_bar.append(bar_cells)
     if not cells:
         return
@@ -308,7 +358,8 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
         grouped = group_chord_cells(bar_cells, np, {"beat_period": 60.0 / max(tempo, 1)}) if mode == "auto" else bar_cells
         events = []
         for group in grouped:
-            ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, group.get("bass_reference"), np, options)
+            reference = estimate_bass_reference(bass_audio, int(bass_sr), group["start"], group["end"], np) if bass_audio is not None and bass_sr else group.get("bass_reference")
+            ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, reference, np, options)
             selected = next((item for item in ranked if item["chord"] == group["chord"]), ranked[0])
             pitch_confidence = detected_pitch_confidence(group["_chroma"], np)
             evidence = chord_evidence(group["_chroma"], group["start"], group["end"], evidence_source, np)
@@ -317,8 +368,9 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
             events.append({"start": round(float(group["start"]), 3), "end": round(float(group["end"]), 3),
                 "chord": group["chord"], "confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3),
                 "chord_confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3), "pitch_confidence": pitch_confidence,
-                "alternatives": alternatives, "evidence": evidence, "bass_reference": group.get("bass_reference"),
+                "alternatives": alternatives, "evidence": evidence, "bass_reference": reference,
                 "debug": {"cells": [{"start": cell["start"], "end": cell["end"], "chord": cell["chord"],
+                    "boundary_refinement": cell.get("_boundary_refinement"),
                     "detected_chord": cell.get("detected_chord", cell["chord"]), "confidence": cell["confidence"], "alternatives": cell["alternatives"], "evidence": cell["evidence"],
                     "bass_reference": cell.get("bass_reference")} for cell in raw_cells], "library_candidates": libraries}})
         if not events:
