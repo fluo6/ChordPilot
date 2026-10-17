@@ -4,6 +4,7 @@ function renderTimeline() {
   elements.beatLane.innerHTML = "";
   elements.visualStemLanes.innerHTML = "";
   applyTimelineZoom();
+  if (typeof syncWaveformViewControls === 'function') syncWaveformViewControls();
 
   if (!hasChart()) {
     elements.timelineSummary.textContent = "Analyze a song to show bars and chords.";
@@ -21,7 +22,7 @@ function renderTimeline() {
   const lyricText = lyricCount ? ` - ${lyricCount} lyric lines` : "";
   elements.timelineSummary.textContent = `${state.chart.bars.length} bars - ${chartKeyText(state.chart) || "?"} - ${state.chart.tempo || "?"} BPM${stemText}${lyricText}`;
   buildLane(elements.chordLane, {
-    name: "Bars",
+    name: "Chords",
     waveform: [],
     type: "chord"
   });
@@ -145,8 +146,8 @@ function buildLane(lane, options) {
   const canvas = document.createElement("canvas");
   canvas.className = "lane-waveform";
   canvas.width = Math.max(1200, timelineBodyWidth());
-  canvas.height = options.type === "chord" ? 34 : options.type === "lyrics" ? 40 : 48;
-  drawArrangementWaveform(canvas, options.waveform || [], options.type);
+  canvas.height = options.type === "chord" ? 34 : options.type === "lyrics" ? 40 : 64;
+  drawWaveform(canvas, options.waveform || [], options.type);
   body.appendChild(canvas);
 
   state.chart.bars.forEach((bar, index) => {
@@ -171,8 +172,8 @@ function buildLane(lane, options) {
         region.dataset.eventIndex = String(eventIndex);
         region.style.left = `${eventLeft}%`;
         region.style.width = `${widthPercent}%`;
-        region.textContent = events.length > 1 ? `${bar.number || index + 1}.${eventIndex + 1} ${barChordText({ chord: chordEvent.chord })}` : barRegionLabel(bar, index, widthPercent);
-        region.classList.toggle("compact", region.textContent && !region.textContent.includes(" "));
+        region.textContent = barRegionLabel({ chord: chordEvent.chord }, index, widthPercent);
+        region.classList.toggle("compact", widthPercent / 100 * timelineBodyWidth() < 76);
         region.classList.toggle("unlabeled", !region.textContent);
         region.classList.toggle("selected", index === state.selectedIndex && eventIndex === state.selectedChordEventIndex);
         region.classList.toggle("active", index === state.activeIndex && eventIndex === state.activeChordEventIndex);
@@ -222,7 +223,7 @@ function buildLane(lane, options) {
           if (barIndex >= 0) {
             state.selectedIndex = barIndex;
           }
-          syncStemTimes();
+          syncStemTimes({ isSeek: true });
           updateActiveBarFromPlayback();
           updatePlayhead();
           updateRowState({ scroll: true });
@@ -251,6 +252,7 @@ function buildLane(lane, options) {
   }
 
   lane.appendChild(body);
+  if (options.type === 'waveform' && typeof initializeWaveformLane === 'function') initializeWaveformLane(lane, options);
 }
 
 function startChordBoundaryDrag(event, barIndex, eventIndex, body) {
@@ -345,18 +347,8 @@ function cancelActiveChordBoundaryDrag() {
 }
 
 function barRegionLabel(bar, index, widthPercent) {
-  const displayChord = barChordText(bar);
-  const barNumber = String(bar.number || index + 1);
   const widthPixels = (widthPercent / 100) * timelineBodyWidth();
-  const denseInterval = barLabelInterval();
-
-  if (widthPixels >= 76) {
-    return `${barNumber}. ${displayChord}`;
-  }
-  if (widthPixels >= 34 || index % denseInterval === 0) {
-    return barNumber;
-  }
-  return "";
+  return widthPixels >= 34 ? barChordText(bar) : "";
 }
 
 function barLabelInterval() {
@@ -417,7 +409,7 @@ function buildBeatLane() {
     marker.title = index % beatsInBar === 0 ? `Downbeat ${formatSeconds(time)}s` : `Beat ${formatSeconds(time)}s`;
     marker.addEventListener("click", () => {
       elements.audioPlayer.currentTime = Math.max(0, time);
-      syncStemTimes();
+      syncStemTimes({ isSeek: true });
       updateActiveBarFromPlayback();
       updatePlayhead();
     });
@@ -434,93 +426,6 @@ function buildBeatLane() {
   });
 
   elements.beatLane.appendChild(body);
-}
-
-function drawArrangementWaveform(canvas, peaks, type) {
-  const context = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = type === "chord" || type === "lyrics" ? "#10151c" : "#080c11";
-  context.fillRect(0, 0, width, height);
-
-  context.strokeStyle = "rgba(148, 163, 184, 0.14)";
-  context.lineWidth = 1;
-  for (let x = 0; x < width; x += 80) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
-  }
-
-  const mid = height / 2;
-  context.strokeStyle = type === "chord" ? "rgba(148, 163, 184, 0.2)" : type === "lyrics" ? "rgba(246, 198, 91, 0.24)" : "rgba(53, 217, 187, 0.22)";
-  context.beginPath();
-  context.moveTo(0, mid);
-  context.lineTo(width, mid);
-  context.stroke();
-
-  if (type === "chord" || type === "lyrics" || !peaks.length) {
-    return;
-  }
-
-  const source = peaks.map((value) => Math.max(0, Math.min(1, Number(value) || 0)));
-  const step = width / Math.max(1, source.length - 1);
-  context.fillStyle = "rgba(38, 185, 159, 0.38)";
-  context.strokeStyle = "#35d9bb";
-  context.lineWidth = 1.2;
-
-  context.beginPath();
-  context.moveTo(0, mid);
-  source.forEach((peak, index) => {
-    const x = index * step;
-    const y = Math.max(1, peak * mid * 0.9);
-    context.lineTo(x, mid - y);
-  });
-  for (let index = source.length - 1; index >= 0; index -= 1) {
-    const peak = source[index];
-    const x = index * step;
-    const y = Math.max(1, peak * mid * 0.9);
-    context.lineTo(x, mid + y);
-  }
-  context.closePath();
-  context.fill();
-
-  context.beginPath();
-  source.forEach((peak, index) => {
-    const x = index * step;
-    const y = Math.max(1, peak * mid * 0.9);
-    if (index === 0) {
-      context.moveTo(x, mid - y);
-    } else {
-      context.lineTo(x, mid - y);
-    }
-  });
-  context.stroke();
-
-  context.beginPath();
-  source.forEach((peak, index) => {
-    const x = index * step;
-    const y = Math.max(1, peak * mid * 0.9);
-    if (index === 0) {
-      context.moveTo(x, mid + y);
-    } else {
-      context.lineTo(x, mid + y);
-    }
-  });
-  context.stroke();
-
-  if (source.length < 80) {
-    context.strokeStyle = "rgba(229, 240, 248, 0.45)";
-    source.forEach((peak, index) => {
-      const x = index * step;
-      const y = Math.max(1, peak * mid * 0.9);
-      context.beginPath();
-      context.moveTo(x, mid - y);
-      context.lineTo(x, mid + y);
-      context.stroke();
-    });
-  }
 }
 
 function updateTimelineSelection() {

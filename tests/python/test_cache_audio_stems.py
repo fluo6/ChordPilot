@@ -107,6 +107,18 @@ class AudioTests(unittest.TestCase):
         with patch.object(audio, "load_audio", return_value=(np.asarray([], dtype=np.float32), 4)):
             self.assertEqual(audio.waveform_peaks(Path("x.wav")), [])
 
+    def test_waveform_detail_preserves_short_transients_in_long_audio(self):
+        import numpy as np
+        values = np.zeros(1000 * 120, dtype=np.float32)
+        values[60000] = 1
+        values[60100] = .5
+        with patch.object(audio, "load_audio", return_value=(values, 1000)):
+            peaks = audio.waveform_peaks(Path("x.wav"))
+        self.assertEqual(len(peaks), 12000)
+        self.assertEqual(peaks[6000], 1)
+        self.assertEqual(peaks[6010], .5)
+        self.assertEqual(peaks[6005], 0)
+
     def test_pcm_conversion_handles_integer_and_float(self):
         try:
             import numpy as np

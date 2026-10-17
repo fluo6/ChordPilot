@@ -72,17 +72,24 @@ CHORD_QUALITIES = {
 # PyChord owns the formulas; limit audio candidates to common extensions.
 from pychord.quality import QualityManager
 
-for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13", "7#9", "7sus4", "9sus4"]:
-    intervals = list(QualityManager().get_quality(quality_name).components)
+for quality_name in list(CHORD_QUALITIES) + ["add9", "madd9", "9", "m9", "maj9", "11", "m11", "13", "maj13", "7#9", "7sus4", "9sus4",
+        "6/9", "m6/9", "dim7", "mmaj7", "7b5", "7#5", "7b9", "7#11", "7b13", "maj7#11",
+        "9#11", "13#11", "13b9", "7b9#11", "7#9#11"]:
+    library_name = {"6/9": "69", "m6/9": "m69"}.get(quality_name, quality_name)
+    intervals = list(QualityManager().get_quality(library_name).components)
     if quality_name not in CHORD_QUALITIES:
         CHORD_QUALITIES[quality_name] = {
             "third": 3 if 3 in intervals else 4 if 4 in intervals else None,
-            "fifth": 7 if 7 in intervals else None,
+            "fifth": next((n for n in (7, 6, 8) if n in intervals), None),
             "complexity": 0.18 + 0.08 * (len(intervals) - 3),
         }
     CHORD_QUALITIES[quality_name]["intervals"] = intervals
     CHORD_QUALITIES[quality_name]["suspension"] = 5 if "sus4" in quality_name else 2 if quality_name == "sus2" else None
     CHORD_QUALITIES[quality_name]["optional_fifth"] = "sus4" in quality_name and 10 in intervals
+
+# PyChord has the requested dominant formulas, but not minor-major ninth.
+CHORD_QUALITIES["mmaj9"] = {"intervals": [0, 3, 7, 11, 14], "third": 3,
+    "fifth": 7, "complexity": 0.34, "suspension": None, "optional_fifth": False}
 
 MAJOR_SCALE_INTERVALS = {0, 2, 4, 5, 7, 9, 11}
 MINOR_SCALE_INTERVALS = {0, 2, 3, 5, 7, 8, 10}
@@ -96,8 +103,8 @@ SECTION_PLAN = [
     ("Chorus", 8),
     ("Outro", 4),
 ]
-BACKEND_CACHE_VERSION = "2026-10-13-suspended-slash-v1"
-CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v2"
+BACKEND_CACHE_VERSION = "2026-10-13-beat-spectrum-v1"
+CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v24"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
 DEFAULT_ANALYSIS_OPTIONS = {
     "known_key": "",
@@ -111,6 +118,10 @@ DEFAULT_ANALYSIS_OPTIONS = {
     "chord_alternatives": 6,
     "chord_timing": "auto",
     "chord_grid": "beat",
+    "chord_stability": "detailed",
+    "tail_reduction": 0.0,
+    "tail_half_life": 0.5,
+    "overtone_weighting": 0.5,
     "simplify_chords": True,
     "chord_source": "auto",
     "demucs_model": "htdemucs",
@@ -194,6 +205,15 @@ def normalize_analysis_options(raw: dict[str, Any] | None = None) -> dict[str, A
     if options["chord_grid"] not in {"half_bar", "beat", "half_beat"}:
         options["chord_grid"] = "beat"
     options["chord_timing_algorithm"] = CHORD_TIMING_ALGORITHM_VERSION
+    options['chord_stability'] = str(raw.get('chord_stability') or 'detailed').lower()
+    if options['chord_stability'] not in {'detailed', 'balanced', 'sustained'}:
+        options['chord_stability'] = 'detailed'
+    for name, default, minimum, maximum in [('tail_reduction', 0., 0., 1.), ('tail_half_life', .5, .1, 3.), ('overtone_weighting', .5, 0., 1.)]:
+        try:
+            value = float(raw.get(name, default))
+        except (TypeError, ValueError):
+            value = default
+        options[name] = round(max(minimum, min(maximum, value)), 3) if math.isfinite(value) else default
     options["simplify_chords"] = bool(raw.get("simplify_chords", options["simplify_chords"]))
     chord_source = str(raw.get("chord_source") or options["chord_source"]).strip().lower().replace("-", "_")
     if chord_source not in {"auto", "other", "accompaniment", "bass", "vocals", "drums", "full_mix"}:

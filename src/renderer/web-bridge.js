@@ -35,6 +35,12 @@
       result.cover = cover;
       result.coverUrl = cover.url || result.coverUrl || "";
     }
+    if (value.stems && typeof value.stems === "object") {
+      result.stems = {
+        ...value.stems,
+        stems: Array.isArray(value.stems.stems) ? value.stems.stems.map(browserMedia) : value.stems.stems
+      };
+    }
     return result;
   }
 

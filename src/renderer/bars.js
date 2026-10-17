@@ -51,6 +51,95 @@ function syncBarChordSummary(bar) {
   }
 }
 
+function detailSpectrumFrame(display, time) {
+  const cells = display?.debug?.cells || [];
+  const frame = cells.find((cell) => time >= cell.start && time < cell.end);
+  if (frame) return frame;
+  if (cells.length) return cells[0];
+  return display?.evidence?.spectrum ? display : null;
+}
+
+function measuredBassMidi(reference, pitches = []) {
+  if (!reference) return null;
+  const pitchClass = Number.isInteger(reference.pitch_class) ? reference.pitch_class : pitchIndex(reference.note);
+  if (reference.method === 'periodicity' && Number.isInteger(reference.midi) && reference.midi >= 21
+      && reference.midi <= 67 && reference.midi % 12 === pitchClass) return reference.midi;
+  const matching = pitches.filter(pitch => Number.isInteger(pitch.midi) && pitch.midi >= 21 && pitch.midi <= 108
+    && pitch.midi % 12 === pitchClass && pitch.strength > 0);
+  return matching.length ? Math.min(...matching.map(pitch => pitch.midi)) : null;
+}
+
+function stabilizedChordFrame(display) {
+  if (!display) return null;
+  if (!Number.isFinite(display.start) || !Number.isFinite(display.end)) return display;
+  const events = (state.chart?.bars || []).flatMap(bar => bar.chord_events || []);
+  const selected = events.findIndex(event => event.start === display.start && event.end === display.end && event.chord === display.chord);
+  let span = [display];
+  if (selected >= 0) {
+    let first = selected, last = selected;
+    const source = event => event.evidence?.source || event.debug?.cells?.[0]?.evidence?.source;
+    const adjacent = (left, right) => left.chord === right.chord && Math.abs(left.end - right.start) <= .005 && source(left) === source(right);
+    while (first > 0 && adjacent(events[first - 1], events[first])) first -= 1;
+    while (last + 1 < events.length && adjacent(events[last], events[last + 1])) last += 1;
+    span = events.slice(first, last + 1);
+  }
+  const cells = span.flatMap(event => (event.debug?.cells || [event]).map(cell => ({ ...cell,
+    start: Math.max(event.start, cell.start), end: Math.min(event.end, cell.end)
+  })).filter(cell => cell.end > cell.start));
+  const strengths = new Map();
+  for (const cell of cells) {
+    const weight = cell.end - cell.start;
+    for (const note of cell.evidence?.detected_notes || []) {
+      if (Number.isFinite(note.strength) && note.strength > 0) strengths.set(note.note, (strengths.get(note.note) || 0) + note.strength * weight);
+    }
+  }
+  const total = [...strengths.values()].reduce((sum, strength) => sum + strength, 0);
+  const detected = [...strengths].map(([note, strength]) => ({ note, strength: strength / total }))
+    .filter(note => note.strength > .02).sort((a, b) => b.strength - a.strength).slice(0, 6);
+  const pitches = new Map(), bassPitches = new Map();
+  let pitchDuration = 0, hasPitchEvidence = false;
+  for (const cell of cells) {
+    const spectrum = cell.evidence?.overtone_weighted_spectrum || cell.evidence?.tail_reduced_spectrum || cell.evidence?.spectrum;
+    let harmonic = cell.evidence?.detected_pitches;
+    if (!Array.isArray(harmonic) && Array.isArray(spectrum?.peaks)) {
+      const power = spectrum.peaks.reduce((sum, peak) => sum + 10 ** (peak.level_db / 10), 0);
+      harmonic = spectrum.peaks.map(peak => ({ ...peak, strength: power ? 10 ** (peak.level_db / 10) / power : 0 }));
+    }
+    const bass = cell.bass_reference?.detected_pitches;
+    hasPitchEvidence ||= Array.isArray(harmonic) || Array.isArray(bass);
+    const sources = [harmonic, bass].filter(source => Array.isArray(source) && source.length);
+    if (!sources.length) continue;
+    const duration = cell.end - cell.start;
+    pitchDuration += duration;
+    for (const source of sources) {
+      for (const pitch of source) {
+        if (!Number.isInteger(pitch.midi) || !Number.isFinite(pitch.strength) || pitch.strength <= 0) continue;
+        const weight = pitch.strength * duration / sources.length;
+        const item = pitches.get(pitch.midi) || { ...pitch, strength: 0 };
+        item.strength += weight; pitches.set(pitch.midi, item);
+        if (source === bass) bassPitches.set(pitch.midi, { ...item });
+      }
+    }
+  }
+  const combinedPitches = [...pitches.values()].map(pitch => ({ ...pitch, strength: pitch.strength / (pitchDuration || 1) }))
+    .sort((a, b) => b.strength - a.strength);
+  const bassReference = display.bass_reference || cells.find(cell => cell.bass_reference)?.bass_reference;
+  return { start: span[0].start, end: span.at(-1).end, chord: display.chord,
+    bassMidi: measuredBassMidi(bassReference, [...bassPitches.values()]),
+    bassOctaveMissing: Boolean(bassReference?.note && cells.some(cell => cell.bass_reference && !Array.isArray(cell.bass_reference.detected_pitches))),
+    evidence: {
+    source: display.evidence?.source || cells[0]?.evidence?.source,
+    detected_notes: detected,
+    scoring_pitch_classes: display.evidence?.scoring_pitch_classes,
+    scoring_bass_weight: display.evidence?.scoring_bass_weight,
+    scoring_source: display.evidence?.scoring_source,
+    overtone_weighted: cells.some(cell => cell.evidence?.overtone_weighting?.applied || cell.bass_reference?.overtone_weighting?.applied),
+    ...(hasPitchEvidence ? { detected_pitches: combinedPitches } : {}),
+    spectrum: averageSpectrumFrames(cells.map(cell => cell.evidence?.overtone_weighted_spectrum || cell.evidence?.tail_reduced_spectrum
+      ? { ...cell, evidence: { ...cell.evidence, spectrum: cell.evidence.overtone_weighted_spectrum || cell.evidence.tail_reduced_spectrum } } : cell))
+  } };
+}
+
 function updateActiveBarFromPlayback() {
   const originalTime = Number(elements.audioPlayer.currentTime || 0) * (Number(state.audioPreview?.tempoRate) || 1);
   let nextIndex = findActiveBarIndex(originalTime);
@@ -65,12 +154,32 @@ function updateActiveBarFromPlayback() {
       nextEventIndex = activeChordEvent(events, originalTime);
     }
   }
-  if (nextIndex === state.activeIndex && nextEventIndex === state.activeChordEventIndex) {
+  const nextBeatNumber = beatNumberAtTime(nextIndex, originalTime);
+  const nextSpectrumStart = detailSpectrumFrame(events[nextEventIndex], originalTime)?.start ?? null;
+  if (nextIndex === state.activeIndex
+    && nextEventIndex === state.activeChordEventIndex
+    && nextBeatNumber === state.activeBeatNumber
+    && nextSpectrumStart === state.activeDetailSpectrumStart
+    && nextIndex === state.selectedIndex
+    && Math.max(0, nextEventIndex) === state.selectedChordEventIndex) {
+    // Bass source-cell timing remains independent of manual chord boundaries.
+    if (nextIndex >= 0 && typeof renderDetailBass === "function") {
+      renderDetailBass(state.chart.bars[nextIndex], barEndTime(nextIndex), originalTime);
+    }
+    if (nextIndex >= 0 && typeof renderDetailGuitar === "function") {
+      renderDetailGuitar(state.chart.bars[nextIndex], barEndTime(nextIndex), originalTime);
+    }
     return;
   }
 
   state.activeIndex = nextIndex;
   state.activeChordEventIndex = nextEventIndex;
+  state.activeBeatNumber = nextBeatNumber;
+  state.activeDetailSpectrumStart = nextSpectrumStart;
+  if (nextIndex >= 0) {
+    state.selectedIndex = nextIndex;
+    state.selectedChordEventIndex = Math.max(0, nextEventIndex);
+  }
   updateRowState({ scroll: true });
 }
 
@@ -119,10 +228,14 @@ function renderBars() {
         syncBarChordSummary(bar);
       } else bar.chord = value;
       renderTimeline();
-    });
+    }, "table-chord-input");
+    chordInput.value = displayChordSymbol(bar.chord, false);
+    chordInput.addEventListener('focus', () => { chordInput.value = bar.chord || ''; });
+    chordInput.addEventListener('blur', () => { chordInput.value = displayChordSymbol(bar.chord, false); });
     if (Array.isArray(bar.alternatives) && bar.alternatives.length) {
       chordInput.title = `Alternatives: ${bar.alternatives.map((item) => `${item.chord} ${Math.round(item.score * 100)}%`).join(", ")}`;
     }
+    chordInput.title = `Edit using letter-name chords. ${chordInput.title || ''}`.trim();
     chordCell.appendChild(chordInput);
     const events = chordEventsForBar(index);
     if (events.length > 1) {
@@ -218,16 +331,49 @@ function chartRows(measuresPerRow = 4) {
   return rows;
 }
 
-function displayChordSymbol(symbol, simplify = elements.simplifyChordsInput?.checked ?? state.chart?.analysis_engine?.options?.simplify_chords ?? true) {
-  const canonical = String(symbol || "N.C.").replace(/^([A-G][#b]?)M(7|9|13)(?=\/|$)/, "$1maj$2");
-  if (!simplify) return canonical;
-  return canonical.replace(/^([A-G][#b]?)9sus4(?=\/|$)/, (_, root) => `${root}7sus4`).replace(/^([A-G][#b]?)(maj(?:9|13)|m(?:9|11)|9|11|13|m?add9)(?=\/|$)/, (_, root, quality) => {
+function displayChordSymbol(symbol, simplify = elements.simplifyChordsInput?.checked ?? state.chart?.analysis_engine?.options?.simplify_chords ?? true, key) {
+  const canonical = String(symbol || "N.C.").replace(/^([A-G][#b]?)M(7|9|13)(?=[#b/]|$)/, "$1maj$2");
+  const visible = !simplify ? canonical : canonical.replace(/^([A-G][#b]?)9sus4(?=\/|$)/, (_, root) => `${root}7sus4`).replace(/^([A-G][#b]?)(maj(?:9|13)|m(?:9|11)|9|11|13|m?add9)(?=\/|$)/, (_, root, quality) => {
     const simple = quality.startsWith("maj") ? "maj7" : quality.startsWith("madd") ? "m" : quality === "add9" ? "" : quality.startsWith("m") ? "m7" : "7";
     return root + simple;
   });
+  return typeof formatChordDisplay === 'function' ? formatChordDisplay(visible, key) : visible;
+}
+
+function chordSymbolParts(symbol) {
+  const text = String(symbol || "N.C.").trim();
+  const match = /^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/.exec(text);
+  if (!match) return { root: text, quality: "", bass: "" };
+  const accidental = (note) => note.replace("#", "♯").replace("b", "♭");
+  return {
+    root: accidental(match[1]),
+    quality: match[2].replace(/#(?=\d)/g, "♯").replace(/b(?=\d)/g, "♭"),
+    bass: match[3] ? accidental(match[3]) : ""
+  };
+}
+
+function renderDetailChordSymbol(symbol, confidence) {
+  const parts = typeof formatChordDisplayParts === 'function' ? formatChordDisplayParts(symbol) : chordSymbolParts(symbol);
+  const root = document.createElement("span");
+  root.textContent = parts.root.replace('#', '♯').replace('b', '♭');
+  const quality = document.createElement("span");
+  quality.className = "detail-chord-quality";
+  quality.textContent = parts.quality.replace(/#(?=\d)/g, '♯').replace(/b(?=\d)/g, '♭');
+  const bass = document.createElement("span");
+  bass.className = "detail-chord-bass";
+  bass.textContent = parts.bass ? `/${parts.bass.replace('#', '♯').replace('b', '♭')}` : "";
+  elements.detailChordDisplay.replaceChildren(root, quality, bass);
+  const badge = elements.detailChordConfidence;
+  if (badge) {
+    badge.className = `${confidenceClass(confidence)} detail-chord-confidence`;
+    badge.textContent = formatConfidence(confidence);
+    badge.title = "Heuristic chord ranking score, not a calibrated probability. Check notes and alternatives.";
+    badge.hidden = false;
+  }
 }
 
 function barChordText(bar) {
+  if (bar?.debug?.stability && bar.chord) return displayChordSymbol(bar.chord);
   const choice = highestConfidenceChordChoice(bar);
   const chord = String(choice?.chord || bar?.chord || "").trim();
   return displayChordSymbol(chord);
@@ -407,32 +553,29 @@ function irealChordParts(symbol) {
     return { root: "N.C.", quality: "", extension: "", bass: "" };
   }
 
-  const slashIndex = clean.indexOf("/");
+  const slashIndex = /\/(?:[A-G][#b]?|[♭♯]?[1-7])$/.exec(clean)?.index ?? -1;
   const main = slashIndex >= 0 ? clean.slice(0, slashIndex) : clean;
   const bass = slashIndex >= 0 ? clean.slice(slashIndex + 1) : "";
-  const rootMatch = main.match(/^([A-G](?:#|b)?)(.*)$/);
+  const rootMatch = main.match(/^([A-G][#b]?|[♭♯]?[1-7])(.*)$/);
   if (!rootMatch) {
     return { root: clean, quality: "", extension: "", bass: "" };
   }
 
   const root = rootMatch[1];
-  let rest = rootMatch[2] || "";
+  let rest = (rootMatch[2] || "").trim();
   let quality = "";
 
   if (/^(maj|M)/.test(rest)) {
     rest = rest.replace(/^(maj|M)/, "^");
-  } else if (/^min/i.test(rest)) {
+  } else if (/^(?:min|m(?!aj)|[-−])/i.test(rest)) {
     quality = "-";
-    rest = rest.replace(/^min/i, "");
-  } else if (/^m(?!aj)/.test(rest)) {
-    quality = "-";
-    rest = rest.slice(1);
-  } else if (/^dim/i.test(rest)) {
+    rest = rest.replace(/^(?:min|m(?!aj)|[-−])/i, "");
+  } else if (/^(?:dim|°)/i.test(rest)) {
     quality = "o";
-    rest = rest.replace(/^dim/i, "");
-  } else if (/^aug/i.test(rest)) {
+    rest = rest.replace(/^(?:dim|°)/i, "");
+  } else if (/^(?:aug|\+)/i.test(rest)) {
     quality = "+";
-    rest = rest.replace(/^aug/i, "");
+    rest = rest.replace(/^(?:aug|\+)/i, "");
   }
 
   rest = rest.replace(/Δ/g, "^").replace(/ø/g, "h");
@@ -443,26 +586,26 @@ function appendIrealChord(parent, symbol) {
   const parts = irealChordParts(symbol);
   const root = document.createElement("span");
   root.className = "ireal-root";
-  root.textContent = parts.root;
+  root.textContent = parts.root.replace("#", "♯").replace("b", "♭");
   parent.appendChild(root);
 
   if (parts.quality) {
     const quality = document.createElement("span");
     quality.className = "ireal-quality";
-    quality.textContent = parts.quality;
+    quality.textContent = parts.quality === "o" ? "°" : parts.quality;
     parent.appendChild(quality);
   }
 
   if (parts.extension) {
     const extension = document.createElement("sup");
-    extension.textContent = parts.extension;
+    extension.textContent = parts.extension.replace(/\^/g, "Δ").replace(/h/g, "ø").replace(/#(?=\d)/g, "♯").replace(/b(?=\d)/g, "♭");
     parent.appendChild(extension);
   }
 
   if (parts.bass) {
     const bass = document.createElement("span");
     bass.className = "ireal-bass";
-    bass.textContent = `/${parts.bass}`;
+    bass.textContent = `/${parts.bass.replace("#", "♯").replace("b", "♭")}`;
     parent.appendChild(bass);
   }
 }
@@ -505,7 +648,11 @@ function renderIrealPreview(container) {
   chart.className = "ireal-chart";
   const header = document.createElement("div");
   header.className = "ireal-header";
-  header.textContent = `${state.chart?.title || "Untitled"} - ${chartKeyText(state.chart) || "?"} - ${state.chart?.tempo || "?"} BPM`;
+  const title = document.createElement("strong");
+  title.textContent = state.chart?.title || "Untitled";
+  const metadata = document.createElement("span");
+  metadata.textContent = `${chartKeyText(state.chart) || "?"} · ${state.chart?.tempo || "?"} BPM`;
+  header.append(title, metadata);
   chart.appendChild(header);
 
   chartRows(4).forEach((row) => {
@@ -526,9 +673,11 @@ function renderIrealPreview(container) {
       leftBar.textContent = bar.repeat_start ? "|:" : "|";
       const chord = document.createElement("strong");
       const chordEvents = chordEventsForBar(index);
-      chordEvents.forEach((item, eventIndex) => {
-        if (eventIndex) chord.appendChild(document.createTextNode(" / "));
-        appendIrealChord(chord, displayChordSymbol(item.chord));
+      chordEvents.forEach((item) => {
+        const symbol = document.createElement("span");
+        symbol.className = "ireal-chord";
+        appendIrealChord(symbol, displayChordSymbol(item.chord));
+        chord.appendChild(symbol);
       });
       const rightBar = document.createElement("span");
       rightBar.className = "ireal-barline right";
@@ -580,10 +729,14 @@ function renderChartPreview() {
   }
   renderLyricsReferencePanel();
 
-  const renderer = state.chartRenderer || "table";
+  const renderer = state.chartRenderer || "ireal";
   const showTable = renderer === "table";
   elements.barsTable.classList.toggle("hidden", !showTable);
   elements.chartPreview.classList.toggle("hidden", showTable);
+  if (renderer === "bass" && hasChart()) {
+    renderBassChartPreview(elements.chartPreview);
+    return;
+  }
   elements.chartPreview.innerHTML = "";
 
   if (showTable) {
@@ -606,8 +759,24 @@ function renderChartPreview() {
   }
 }
 
+function setDetailChordEditing(editing) {
+  const input = elements.detailChordInput;
+  editing = Boolean(editing && !input.disabled);
+  input.hidden = !editing;
+  elements.detailChordDisplay.hidden = editing;
+  elements.detailChordEditBtn?.setAttribute("aria-expanded", String(editing));
+  input._editTarget = editing ? `${state.selectedIndex}:${state.selectedChordEventIndex}` : null;
+  if (editing) { input.focus(); input.select(); }
+}
+
 function updateDetailPane() {
   const bar = getSelectedBar();
+  if (elements.detailChordEditBtn) {
+    elements.detailChordEditBtn.disabled = !bar;
+    if (!bar || elements.detailChordInput._editTarget !== `${state.selectedIndex}:${state.selectedChordEventIndex}`) {
+      setDetailChordEditing(false);
+    }
+  }
   const fields = [
     elements.detailSectionInput,
     elements.detailChordInput,
@@ -622,7 +791,16 @@ function updateDetailPane() {
   });
 
   if (!bar) {
-    elements.detailBarLabel.textContent = "No bar";
+    if (typeof renderDetailBass === "function") renderDetailBass(null, 0, 0);
+    if (typeof renderDetailGuitar === "function") renderDetailGuitar(null, 0, 0);
+    if (typeof renderDetailSpectrum === "function") renderDetailSpectrum(null);
+    if (elements.detailChordConfidence) elements.detailChordConfidence.hidden = true;
+    elements.detailKeyboard?.replaceChildren();
+    elements.detailBarLabel.textContent = "No beat";
+    elements.detailChordDisplay.replaceChildren();
+    if (typeof renderChordVoicing === 'function') renderChordVoicing(elements.detailChordVoicing, null, 'N.C.');
+    if (typeof renderDetailChordNotation === "function") renderDetailChordNotation(null, "N.C.");
+    elements.detailChordAlternatives?.replaceChildren();
     elements.detailSectionInput.value = "";
     elements.detailChordInput.value = "";
     elements.detailStartInput.value = "";
@@ -638,7 +816,32 @@ function updateDetailPane() {
 
   const event = validStoredChordEvents(bar, state.selectedIndex) ? getSelectedChordEvent() : null;
   const display = event || bar;
-  elements.detailBarLabel.textContent = `Bar ${bar.number || state.selectedIndex + 1}${event ? ` · ${event.chord}` : ""}`;
+  renderDetailChordSymbol(display.chord, display.chord_confidence ?? display.confidence);
+  if (typeof renderChordVoicing === 'function') renderChordVoicing(elements.detailChordVoicing, display, display.chord, Number(state.chart.key_offset) || 0);
+  const followsPlayback = state.selectedIndex === state.activeIndex
+    && state.selectedChordEventIndex === state.activeChordEventIndex;
+  const detailTime = followsPlayback
+    ? Number(elements.audioPlayer.currentTime || 0) * (Number(state.audioPreview?.tempoRate) || 1)
+    : Number(event?.start ?? bar.start);
+  const spectrumFrame = detailSpectrumFrame(display, detailTime);
+  if (typeof renderDetailBass === "function") renderDetailBass(bar, barEndTime(state.selectedIndex), detailTime);
+  if (typeof renderDetailGuitar === "function") renderDetailGuitar(bar, barEndTime(state.selectedIndex), detailTime);
+  const stabilizedFrame = stabilizedChordFrame(display);
+  if (typeof renderDetailChordNotation === "function") renderDetailChordNotation(stabilizedFrame || display, display.chord);
+  if (typeof renderDetailSpectrum === "function") renderDetailSpectrum(spectrumFrame, stabilizedFrame);
+  const keyboardScroll = elements.detailKeyboard?.querySelector(".piano-viewport")?.scrollLeft || 0;
+  const keyboardEvidence = stabilizedFrame?.evidence || display.evidence;
+  elements.detailKeyboard?.replaceChildren(createPianoEvidence({ ...display, evidence: keyboardEvidence }, display.chord, {
+    stabilized: true, exactPitches: Array.isArray(keyboardEvidence?.detected_pitches),
+    pitchClassesOnly: !Array.isArray(keyboardEvidence?.detected_pitches), octaves: [1, 2, 3, 4],
+    bassMidi: stabilizedFrame?.bassMidi, bassOctaveMissing: stabilizedFrame?.bassOctaveMissing, bassNote: display.bass_reference?.note
+  }));
+  const keyboardViewport = elements.detailKeyboard?.querySelector(".piano-viewport");
+  if (keyboardViewport) keyboardViewport.scrollLeft = keyboardScroll;
+  const beatNumber = followsPlayback
+    ? state.activeBeatNumber
+    : beatNumberAtTime(state.selectedIndex, Number(event?.start ?? bar.start));
+  elements.detailBarLabel.textContent = `Bar ${bar.number || state.selectedIndex + 1} · Beat ${beatNumber || 1}`;
   if (document.activeElement !== elements.detailSectionInput) {
     elements.detailSectionInput.value = bar.section || "";
   }
@@ -664,10 +867,6 @@ function updateDetailPane() {
   renderDetailLyricsReference(state.selectedIndex);
 
   elements.detailAlternatives.innerHTML = "";
-  const confidence = document.createElement("span");
-  confidence.className = confidenceClass(display.confidence);
-  confidence.textContent = `Chord ${formatConfidence(display.chord_confidence ?? display.confidence)} / pitch ${formatConfidence(display.pitch_confidence ?? display.evidence?.pitch_confidence)}`;
-  elements.detailAlternatives.appendChild(confidence);
   if (display.evidence_stale) {
     const stale = document.createElement("em");
     stale.className = "evidence-stale";
@@ -682,42 +881,22 @@ function updateDetailPane() {
     elements.detailAlternatives.appendChild(studyButton);
   }
 
-  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.slice(0, 4) : [];
+  const alternativeContainer = elements.detailChordAlternatives || elements.detailAlternatives;
+  if (elements.detailChordAlternatives) elements.detailChordAlternatives.replaceChildren();
+  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.filter(item => item.chord !== display.chord).slice(0, 3) : [];
   alternatives.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = `${item.chord} ${formatConfidence(item.score)}`;
+    button.textContent = `${displayChordSymbol(item.chord, false)} · ${formatConfidence(item.score)}`;
+    button.title = `Use ${item.chord}`;
     button.addEventListener("click", () => {
       display.chord = item.chord;
       if (event) syncBarChordSummary(bar);
       renderBars();
     });
-    elements.detailAlternatives.appendChild(button);
+    alternativeContainer.appendChild(button);
   });
 
-  const evidence = document.createElement("div");
-  evidence.className = "detail-evidence";
-
-  const evidenceTitle = document.createElement("strong");
-  evidenceTitle.textContent = "Why";
-  const evidenceRange = document.createElement("span");
-  evidenceRange.textContent = chordEvidenceText(display, state.selectedIndex);
-  evidence.append(evidenceTitle, evidenceRange);
-  evidence.appendChild(createPianoEvidence(display));
-
-  const notes = Array.isArray(display.evidence?.detected_notes) ? display.evidence.detected_notes.slice(0, 6) : [];
-  if (notes.length) {
-    const noteStrip = document.createElement("div");
-    noteStrip.className = "note-strip";
-    notes.forEach((item) => {
-      const note = document.createElement("span");
-      note.textContent = `${item.note} ${formatConfidence(item.strength)}`;
-      noteStrip.appendChild(note);
-    });
-    evidence.appendChild(noteStrip);
-  }
-  evidence.appendChild(createChordDebug(display));
-  elements.detailAlternatives.appendChild(evidence);
   renderChartReasonPane(display);
 }
 
@@ -752,7 +931,10 @@ function renderChartReasonPane(bar = getSelectedBar()) {
     alternatives.forEach((item) => {
       const option = document.createElement("button");
       option.type = "button";
-      option.textContent = `${item.chord} ${formatConfidence(item.score)}`;
+      const symbol = document.createElement("span");
+      symbol.className = "chord-symbol";
+      symbol.textContent = displayChordSymbol(item.chord, false);
+      option.append(symbol, ` ${formatConfidence(item.score)}`);
       option.addEventListener("click", () => {
         display.chord = item.chord;
         if (display !== bar) syncBarChordSummary(bar);
@@ -839,6 +1021,21 @@ function beatTimes() {
   return times;
 }
 
+function beatNumberAtTime(barIndex, time) {
+  if (!hasChart() || barIndex < 0 || barIndex >= state.chart.bars.length) {
+    return 0;
+  }
+  const start = Number(state.chart.bars[barIndex].start) || 0;
+  const end = barEndTime(barIndex);
+  const beats = beatTimes().filter((beat) => beat >= start - 0.04 && beat < end - 0.04);
+  let active = 0;
+  for (let index = 0; index < beats.length; index += 1) {
+    if (time >= beats[index] - 0.04) active = index;
+    else break;
+  }
+  return Math.min(beatsPerBar(), active + 1);
+}
+
 function evidenceRangeText(bar, index) {
   const range = Array.isArray(bar?.evidence?.range) ? bar.evidence.range : [bar?.start || 0, barEndTime(index)];
   return `${formatSeconds(Number(range[0]) || 0)}s to ${formatSeconds(Number(range[1]) || 0)}s`;
@@ -897,7 +1094,9 @@ function pitchIndex(note) {
 }
 
 function chordToneSet(symbol) {
-  const clean = String(symbol || "").trim().split("/")[0];
+  const text = String(symbol || "").trim();
+  const slash = /\/([A-G][#b]?)$/.exec(text);
+  const clean = slash ? text.slice(0, slash.index) : text;
   if (!clean || clean.toUpperCase() === "N.C.") {
     return new Set();
   }
@@ -906,7 +1105,10 @@ function chordToneSet(symbol) {
   if (rootIndex < 0) {
     return new Set();
   }
-  const qualityText = clean.slice(root.length).replace(/^M(7|9|13)$/, "maj$1").replace("♯", "#").replace(/^7\(#9\)$/, "7#9").replace(/^([79])\(sus4\)$/i, "$1sus4").toLowerCase();
+  const qualityText = clean.slice(root.length).replace("♯", "#").replace("♭", "b").replace(/^M(7|9|13)(?=[#b(]|$)/, "maj$1")
+    .replace(/\(([#b+]\d+)\)$/, '$1').replace('+5', '#5').replace(/^([79])\(sus4\)$/i, "$1sus4")
+    .replace(/^m(?:\(maj([79])\)|M([79]))$/, (_match, long, short) => `mmaj${long || short}`)
+    .replace('°', 'dim').replace('Δ', 'maj').replace(/^-/, 'm').toLowerCase();
   let intervals = [0, 4, 7];
   if (qualityText.includes("m7b5")) {
     intervals = [0, 3, 6, 10];
@@ -936,8 +1138,19 @@ function chordToneSet(symbol) {
   }
   if (qualityText.endsWith("add9")) intervals.push(2);
   if (qualityText === "7#9") intervals.push(3);
+  const formulas = {
+    '6/9':[0,4,7,9,2], '69':[0,4,7,9,2], '6add9':[0,4,7,9,2],
+    'm6/9':[0,3,7,9,2], 'm69':[0,3,7,9,2], 'm6add9':[0,3,7,9,2],
+    'dim7':[0,3,6,9], 'o7':[0,3,6,9], 'mmaj7':[0,3,7,11],
+    '7b5':[0,4,6,10], '7#5':[0,4,8,10], '7b9':[0,4,7,10,1],
+    '7#11':[0,4,7,10,6], '7b13':[0,4,7,10,8], 'maj7#11':[0,4,7,11,6],
+    '9#11':[0,4,7,10,2,6], '13#11':[0,4,7,10,6,9],
+    '13b9':[0,4,7,10,1,9], 'mmaj9':[0,3,7,11,2],
+    '7b9#11':[0,4,7,10,1,6], '7#9#11':[0,4,7,10,3,6]
+  };
+  if (formulas[qualityText]) intervals = formulas[qualityText];
   const tones = new Set(intervals.map((interval) => PITCH_NAMES[(rootIndex + interval) % 12]));
-  const bass = String(symbol || "").split("/")[1];
+  const bass = slash?.[1];
   if (bass && pitchIndex(bass) >= 0) tones.add(PITCH_NAMES[pitchIndex(bass)]);
   return tones;
 }
@@ -954,20 +1167,54 @@ function detectedStrengthMap(bar) {
   return strengths;
 }
 
+function pianoLevelMap(evidence, strengths, exactPitches) {
+  const levels = new Map();
+  const maximum = Math.max(0, ...strengths.values());
+  for (const [note, strength] of strengths) {
+    // Exact pitches store power; folded chroma strengths store FFT magnitudes.
+    if (strength > 0 && maximum > 0) levels.set(note, Math.max(-80, (exactPitches ? 10 : 20) * Math.log10(strength / maximum)));
+  }
+  const measured = new Map();
+  // Exact pitches already combine sources; a single-source spectrum would skew their levels.
+  for (const peak of exactPitches ? [] : (evidence?.tail_reduced_spectrum || evidence?.spectrum)?.peaks || []) {
+    if (!Number.isInteger(peak.midi) || !Number.isFinite(peak.level_db)) continue;
+    const note = exactPitches ? peak.midi : PITCH_NAMES[peak.midi % 12];
+    if (strengths.has(note)) measured.set(note, Math.max(measured.get(note) ?? -80, Math.min(0, peak.level_db)));
+  }
+  for (const [note, db] of measured) levels.set(note, db);
+  return levels;
+}
+
 function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
+  const focusEvidence = options.focusEvidence ?? Boolean(options.stabilized);
   const piano = document.createElement("div");
   piano.className = "piano-evidence";
-  piano.title = "Detected notes glow by strength; outlined keys are notes in the selected chord.";
+  if (focusEvidence) piano.classList.toggle("piano-focused", true);
+  if (options.stabilized) piano.classList.toggle("piano-detail", true);
+  piano.title = "Detected notes glow by relative dB; outlined keys are notes in the selected chord.";
 
   const strengths = options.exactPitches
-    ? new Map((bar?.evidence?.detected_pitches || []).map((item) => [item.midi, item.strength]))
+    ? new Map()
     : detectedStrengthMap(bar);
+  if (options.exactPitches) {
+    for (const pitch of bar?.evidence?.detected_pitches || []) {
+      strengths.set(pitch.midi, Math.max(strengths.get(pitch.midi) || 0, Number(pitch.strength) || 0));
+    }
+  }
+  const levels = pianoLevelMap(bar?.evidence, strengths, options.exactPitches);
+  const levelFor = (note, midi) => levels.get(options.exactPitches ? midi : note) ?? 0;
   const chordTones = chordToneSet(chordSymbol);
+  const supported = (note, midi, strength) => strength > 0 && chordTones.has(note) && levelFor(note, midi) >= -24;
+  const intensityFor = (note, midi, strength) => {
+    const intensity = strength > 0 ? Math.max(.1, Math.min(1, 1 + levelFor(note, midi) / 40)) : 0;
+    if (!focusEvidence || supported(note, midi, strength)) return intensity;
+    return intensity * (levelFor(note, midi) < -24 ? .05 : .15);
+  };
   const playableKey = (note, octave, midi) => {
     const key = document.createElement("button");
     key.type = "button";
     key.setAttribute("aria-label", `Play ${note}${octave}`);
-    key.addEventListener("click", () => playPianoNote(midi));
+    key.addEventListener("click", () => playPianoNote(midi, levelFor(note, midi)));
     key.addEventListener("keydown", (event) => {
       if (event.code === "Space" || event.key === "Enter") event.stopPropagation();
     });
@@ -976,7 +1223,7 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   const keys = document.createElement("div");
   keys.className = "piano-keys";
 
-  const octaves = options.exactPitches ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : options.pitchClassesOnly ? [3] : PIANO_OCTAVES;
+  const octaves = options.pitchClassesOnly ? [3] : options.octaves || (options.exactPitches ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : options.stabilized ? [1, 2, 3, 4] : PIANO_OCTAVES);
   const whites = octaves.flatMap((octave) => WHITE_KEYS.map((note) => ({ note, octave, midi: (octave + 1) * 12 + pitchIndex(note) })))
     .filter((item) => !options.exactPitches || item.midi >= 21 && item.midi <= 108);
   whites.forEach(({ note, octave, midi }) => {
@@ -984,11 +1231,12 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
       const strength = strengths.get(options.exactPitches ? midi : note) || 0;
       key.className = "piano-key white-key";
       key.dataset.midi = String(midi); key.style.width = `${100 / whites.length}%`;
-      key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
+      key.style.setProperty("--note-strength", String(intensityFor(note, midi, strength)));
       key.classList.toggle("detected", strength > 0);
       key.classList.toggle("chord-tone", chordTones.has(note) && (!options.exactPitches || strength > 0));
+      key.classList.toggle("support-highlight", supported(note, midi, strength));
       key.classList.toggle("bass-tone", options.exactPitches ? options.bassMidi === midi : normalizePitchName(options.bassNote) === note);
-      key.title = `${note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(note) ? ", chord tone" : ""}`;
+      key.title = `${note}${options.pitchClassesOnly ? "" : octave}: ${strength > 0 ? `${levelFor(note, midi).toFixed(1)} dB relative (estimated)` : "not detected"}${chordTones.has(note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
       label.textContent = options.pitchClassesOnly ? note : `${note}${octave}`;
       key.appendChild(label);
@@ -1005,11 +1253,12 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
       key.className = "piano-key black-key";
       key.dataset.midi = String(midi); key.style.width = `${65 / whites.length}%`;
       key.style.left = `${(whiteIndex / whites.length) * 100}%`;
-      key.style.setProperty("--note-strength", String(Math.max(0, Math.min(1, strength * 3))));
+      key.style.setProperty("--note-strength", String(intensityFor(item.note, midi, strength)));
       key.classList.toggle("detected", strength > 0);
       key.classList.toggle("chord-tone", chordTones.has(item.note) && (!options.exactPitches || strength > 0));
+      key.classList.toggle("support-highlight", supported(item.note, midi, strength));
       key.classList.toggle("bass-tone", options.exactPitches ? options.bassMidi === midi : normalizePitchName(options.bassNote) === item.note);
-      key.title = `${item.note}${options.pitchClassesOnly ? "" : octave}: detected ${formatConfidence(strength)}${chordTones.has(item.note) ? ", chord tone" : ""}`;
+      key.title = `${item.note}${options.pitchClassesOnly ? "" : octave}: ${strength > 0 ? `${levelFor(item.note, midi).toFixed(1)} dB relative (estimated)` : "not detected"}${chordTones.has(item.note) ? ", chord tone" : ""}`;
       const label = document.createElement("span");
       label.textContent = options.exactPitches ? `${item.note}${octave}` : item.note;
       key.appendChild(label);
@@ -1018,25 +1267,37 @@ function createPianoEvidence(bar, chordSymbol = bar?.chord, options = {}) {
   });
 
   const legend = document.createElement("div");
+  const playbackOctave = octaves.includes(3) ? 3 : octaves[0];
   const detectedMidis = options.exactPitches
     ? [...strengths].filter(([midi, strength]) => Number.isInteger(midi) && midi >= 21 && midi <= 108 && strength > 0).map(([midi]) => midi)
-    : [...strengths].filter(([note, strength]) => pitchIndex(note) >= 0 && strength > 0).map(([note]) => (octaves[0] + 1) * 12 + pitchIndex(note));
+    : [...strengths].filter(([note, strength]) => pitchIndex(note) >= 0 && strength > 0).map(([note]) => (playbackOctave + 1) * 12 + pitchIndex(note));
   const playDetected = document.createElement("button");
   playDetected.type = "button";
   playDetected.className = "piano-play-detected";
   playDetected.textContent = options.exactPitches ? "Play detected notes" : "Play pitch classes";
   playDetected.title = options.exactPitches ? "Hear all highlighted detected pitches together" : "Hear detected pitch classes together in the displayed octave";
   playDetected.disabled = !detectedMidis.length;
-  playDetected.addEventListener("click", () => playPianoNotes(detectedMidis.sort((a, b) => a - b)));
+  playDetected.addEventListener("click", () => playPianoNotes(detectedMidis.sort((a, b) => a - b),
+    Object.fromEntries(detectedMidis.map((midi) => [midi, levelFor(PITCH_NAMES[midi % 12], midi)]))));
   playDetected.addEventListener("keydown", (event) => {
     if (event.code === "Space" || event.key === "Enter") event.stopPropagation();
   });
   piano.appendChild(playDetected);
   legend.className = "piano-legend";
-  legend.textContent = options.exactPitches ? "Glow = detected pitch estimate, outline = detected chord tones, dot = detected bass pitch · scroll for all 88 keys" : `Glow = detected strength, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
+  legend.textContent = options.exactPitches ? "Glow and playback = relative dB, outline = detected chord tones, dot = detected bass pitch · scroll for all 88 keys" : `Glow and playback = relative dB, outline = chord tones${options.pitchClassesOnly ? ", dot = bass reference · pitch classes, not octaves" : ""}`;
   legend.textContent += " · click a key to hear its note";
-  if (options.exactPitches) {
-    piano.classList.toggle("piano-exact", true);
+  if (options.stabilized) {
+    legend.textContent = options.exactPitches ? "Estimated pitches · chord average · scroll C1–B4"
+      : "Pitch classes · chord average · reanalyze for measured octaves";
+    if (options.exactPitches && options.bassOctaveMissing) legend.textContent += ` · bass ${options.bassNote || "reference"}: reanalyze for octave`;
+  }
+  if (focusEvidence) {
+    if (!options.stabilized) legend.textContent = "Estimated pitches · bright = detected chord support · other evidence muted";
+    piano.title = "Shared keyboard highlighting: detected chord tones at or above -24 dB are emphasized; other evidence is muted visually. Hover and playback preserve estimated dB values. Exact-pitch views highlight measured octaves only.";
+  }
+  if (bar?.evidence?.overtone_weighted) legend.textContent += " · overtone weighted";
+  if (options.exactPitches || options.stabilized) {
+    if (options.exactPitches) piano.classList.toggle("piano-exact", true);
     const viewport = document.createElement("div"); viewport.className = "piano-viewport";
     viewport.append(keys); piano.append(viewport, legend);
   } else piano.append(keys, legend);
@@ -1087,7 +1348,7 @@ function showChordSuggestion(index, anchor) {
     button.className = item.chord === target.chord ? "suggestion-option current" : "suggestion-option";
     const score = Number.isFinite(item.score) ? formatConfidence(item.score) : "-";
     const chord = document.createElement("span");
-    chord.textContent = item.chord;
+    chord.textContent = displayChordSymbol(item.chord, false);
     const confidence = document.createElement("em");
     confidence.textContent = score;
     button.append(chord, confidence);
@@ -1124,7 +1385,7 @@ function selectBar(index, seek, eventIndex = 0) {
   const event = events[state.selectedChordEventIndex];
   if (seek && Number.isFinite(event?.start ?? state.chart.bars[index].start)) {
     elements.audioPlayer.currentTime = Math.max(0, Number(event?.start ?? state.chart.bars[index].start) / (Number(state.audioPreview?.tempoRate) || 1));
-    syncStemTimes();
+    syncStemTimes({ isSeek: true });
   }
   updateRowState({ scroll: true });
 }

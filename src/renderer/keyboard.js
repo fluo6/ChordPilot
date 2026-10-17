@@ -33,7 +33,7 @@ function seekRelative(seconds) {
   const duration = Number(elements.audioPlayer.duration);
   const max = Number.isFinite(duration) ? duration : getChartDuration();
   elements.audioPlayer.currentTime = Math.max(0, Math.min(max, (elements.audioPlayer.currentTime || 0) + seconds));
-  syncStemTimes();
+  syncStemTimes({ isSeek: true });
   updateActiveBarFromPlayback();
   updatePlayhead();
 }

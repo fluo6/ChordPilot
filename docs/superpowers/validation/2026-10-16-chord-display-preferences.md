@@ -1,0 +1,17 @@
+# Chord display preferences
+
+> Historical UI milestone. The later [vocabulary implementation](2026-10-16-chord-vocabulary-implementation.md) added 6/9 detection. Its support is no longer only display-side as described below.
+
+The project header now has a Notation menu, available in Song, Analysis, Table and Local Study. Two independent controls select Text/Jazz qualities and Letter names/Numbers (song tonic)/Numbers (relative major). Examples: Dm11, D−11, 2m11, 2−11. Minor keys support both Am → 1m and Am → 6m relative to C, as requested. Major keys use the same reference in either number mode.
+
+Jazz spellings use a minus for minor, triangle for major sevenths/extensions, ø7 for half-diminished, ° for diminished and + for augmented, following the compact-symbol conventions described in [iReal Pro's notation guide](https://www.irealpro.com/learn/chord-symbols/). This is a display preference, not iReal chart import/export compatibility.
+
+Numbers are chromatic degrees relative to the selected reference: 1,♭2,2,♭3,3,4,♯4,5,♭6,6,♭7,7. This is scale-degree display, not full harmonic-function analysis or automatic modulation detection. Slash bass notes are converted too. A numeric degree and numeric quality are separated in plain text (for example `5 13`) to avoid reading them as one number. No valid key means letter-name fallback. Local Study uses each saved run's analysis key, independently of the chart's transpose target.
+
+The shared formatter feeds timeline, main chord card, alternatives, table labels, visual chart previews and Local Study labels/history. Table inputs show the preference when idle and canonical letter names when focused, so numeric display cannot silently overwrite stored symbols. Raw diagnostic fields and interchange/export formats retain canonical names. ChordPro syntax remains canonical. Detected notes, keyboard tones, staff pitches, analysis, audio and saved chord identities are unchanged. Simplify Chords remains a separate existing display control.
+
+Preference is remembered in this device's local storage, separate from song-specific analysis and session data. Invalid or unavailable storage falls back safely. A small live example appears in the menu, and Help documents the controls and key behavior. The display splitter handles numeric 6/9 separately from an actual final bass name; adding 6/9 to detection remains part of the vocabulary proposal, not this UI change.
+
+Verification: 300 JS checks pass using the established suite command excluding the two unrelated Windows/environment cases (`environment defaults parse without starting the HTTP server` and `smoke CLI preserves its primary error and attempts directory cleanup when WAV removal fails`). Six new meaningful checks cover Text/Jazz spelling, bass inversions/6/9, chromatic numbers, both minor-key references, missing keys, persistence/corrupt storage and canonical-symbol immutability. Focused formatting/bars/notation checks also pass after preserving Unicode accidentals on the main card; syntax/whitespace checks pass.
+
+Browser QA used an isolated generated fixture (not a recognition claim): Dm11 in C shows 2−11; in the minor fixture Am11 shows 1−11 or 6−11 according to the number mode. Table focus restores Dm11 for editing, and a saved Local Study displays 2−11 using its own C key. Reload preserves Jazz/relative-major choices. Screenshot: `.chordpilot-data/benchmarks/chord-display-qa/notation-preferences.png`. No application console errors were seen; a browser-extension disconnection warning was unrelated to the app.

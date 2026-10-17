@@ -11,6 +11,109 @@ from chordpilot_timing import group_chord_cells
 
 
 class ExtendedChordTests(unittest.TestCase):
+    def test_diffuse_extensions_do_not_replace_a_supported_minor_root(self):
+        # Recorded Virtual Insanity accompaniment, with false G1 guidance removed.
+        chroma=np.array([.0439584104,.1833492827,.0459430298,.0870873105,.0593760098,.0649388660,
+                         .1170740182,.0454245124,.0466486563,.0298014329,.2432817128,.0331167581])
+        for shift in range(12):
+            ranked,_=chords.rank_chord_candidates(np.roll(chroma,shift),
+                chords.PITCH_NAMES[(3+shift)%12]+'m',None,None,None,np,{})
+            detected=chords.parse_candidate_symbol(ranked[0]['chord'])
+            with self.subTest(shift=shift):
+                self.assertEqual(detected['root'],(3+shift)%12)
+                self.assertIn(detected['quality'],('m','m7','m9'))
+
+    def test_a_weak_eleventh_does_not_extend_a_clear_minor_ninth(self):
+        chroma=np.full(12,.001)
+        for pc,strength in ((0,.2),(3,.18),(7,.2),(10,.2),(2,.15),(5,.05)):
+            chroma[pc]=strength
+        ranked,_=chords.rank_chord_candidates(chroma,'Cm',None,None,None,np,{})
+        self.assertEqual(ranked[0]['chord'],'Cm9')
+
+    def test_diffuse_relative_minor_root_does_not_replace_a_supported_major_root(self):
+        # Later Virtual Insanity Gb-major passage: Eb is below active-note support.
+        chroma = np.array([.053484,.124710,.072541,.050791,.056908,.097361,
+                           .139855,.089780,.105188,.068270,.079284,.061828])
+        for shift in range(12):
+            with self.subTest(shift=shift):
+                ranked, _ = chords.rank_chord_candidates(np.roll(chroma, shift),
+                    chords.PITCH_NAMES[(3 + shift) % 12] + 'm', None, None, None, np, {})
+                candidate = chords.parse_candidate_symbol(ranked[0]['chord'])
+                self.assertEqual(candidate['root'], (6 + shift) % 12)
+                self.assertIn(candidate['quality'], ('maj7', 'maj9'))
+
+    def test_confirmed_bass_does_not_dilute_measured_extensions(self):
+        for root in range(12):
+            chroma=np.full(12,.001)
+            for interval,strength in ((0,.24),(4,.24),(7,.24),(10,.18),(2,.065)):
+                chroma[(root+interval)%12]=strength
+            ranked,_=chords.rank_chord_candidates(chroma,chords.PITCH_NAMES[root],None,None,
+                {'pitch_class':root,'confidence':.98},np,{})
+            self.assertEqual(ranked[0]['chord'],chords.PITCH_NAMES[root]+'9')
+
+    def test_independently_confirmed_bass_can_supply_the_ninth(self):
+        for root in range(12):
+            chroma = np.full(12, .001)
+            chroma[[(root + interval) % 12 for interval in (0, 4, 7, 10)]] = 1
+            for confidence in (.95, .4):
+                with self.subTest(root=root, confidence=confidence):
+                    bass = {'pitch_class': (root + 2) % 12, 'confidence': confidence}
+                    ranked, _ = chords.rank_chord_candidates(chroma,
+                        chords.PITCH_NAMES[root], None, None, bass, np, {})
+                    expected = chords.chord_symbol_for(root, '9', bass['pitch_class']) if confidence >= .62 else chords.chord_symbol_for(root, '7')
+                    self.assertEqual(ranked[0]['chord'], expected)
+
+    def test_measured_guide_tones_support_a_weak_perfect_fifth_in_every_key(self):
+        cases = [
+            (np.array([.064219,.056447,.082685,.166914,.063657,.060879,.043568,.043849,.032364,.067054,.186411,.131954]),
+                11,'Bmaj7','Abmadd9/B'),
+            (np.array([.124142,.020026,.067099,.018527,.199535,.112392,.035982,.034110,.045316,.037462,.212863,.092547]),
+                0,'C9','C9sus4'),
+        ]
+        for chroma,bass,expected,wrong in cases:
+            for transpose in range(12):
+                with self.subTest(chord=expected,transpose=transpose):
+                    evidence = np.roll(chroma,transpose)
+                    key = chords.PITCH_NAMES[(3+transpose)%12]
+                    reference = {'pitch_class':(bass+transpose)%12,'confidence':.98}
+                    candidates = []
+                    for symbol in (expected,wrong):
+                        candidate = chords.parse_candidate_symbol(symbol)
+                        candidate['root'] = (candidate['root']+transpose)%12
+                        if candidate['bass'] is not None: candidate['bass'] = (candidate['bass']+transpose)%12
+                        candidate['symbol'] = chords.chord_symbol_for(candidate['root'],candidate['quality'],candidate['bass'])
+                        candidates.append(chords.score_chord_candidate(candidate,evidence,key,None,None,reference,np,{}))
+                    self.assertGreater(candidates[0]['raw_score'],candidates[1]['raw_score'])
+
+    def test_a_recovering_perfect_fifth_does_not_reject_supported_guide_tones(self):
+        chroma = np.array([.064219,.056447,.082685,.166914,.063657,.060879,.043568,.043849,.032364,.067054,.186411,.131954])
+        for extra in (.002,.008,.016,.032):
+            with self.subTest(extra=extra):
+                evidence = chroma.copy(); evidence[6] += extra
+                bass = {'pitch_class':11,'confidence':.98}
+                ranked,_ = chords.rank_chord_candidates(evidence,'Eb',None,None,bass,np,{})
+                self.assertEqual(ranked[0]['chord'],'Bmaj7')
+
+
+    def test_dominant_thirteenth_voicing_can_omit_the_ninth(self):
+        # The measured major third, minor seventh and thirteenth define this
+        # voicing; an absent ninth must not downgrade it to a sixth chord.
+        for root in range(12):
+            for fifth,seventh,thirteenth,quality in [(.23,.07,.14,'13'),(.001,.07,.14,'13'),(.23,.001,.14,'6'),(.23,.07,.001,'7')]:
+                with self.subTest(root=root,fifth=fifth,seventh=seventh,thirteenth=thirteenth):
+                    chroma = np.full(12,.001)
+                    for interval,strength in [(0,.22),(4,.25),(7,fifth),(10,seventh),(9,thirteenth)]:
+                        chroma[(root+interval)%12] = strength
+                    ranked,_ = chords.rank_chord_candidates(chroma,chords.PITCH_NAMES[(root+5)%12],None,None,
+                        {'pitch_class':root,'confidence':.9},np,{})
+                    self.assertEqual(ranked[0]['chord'],chords.PITCH_NAMES[root]+quality)
+
+    def test_clear_minor_third_beats_an_unsupported_suspension_in_a_guitar_voicing(self):
+        chroma = np.array([.022,.016,.028,.017,.041,.244,.093,.249,.037,.135,.1,.019])
+        bass = {'pitch_class':7,'confidence':.85}
+        minor = chords.score_chord_candidate(chords.parse_candidate_symbol('Gm9'),chroma,'F',None,None,bass,np,{})
+        suspended = chords.score_chord_candidate(chords.parse_candidate_symbol('G9sus4'),chroma,'F',None,None,bass,np,{})
+        self.assertGreater(minor['raw_score'],suspended['raw_score'])
     def test_suspended_sevenths_and_ninths_keep_their_function(self):
         for name, tones in [('B7sus4', {11, 4, 6, 9}), ('B9sus4', {11, 4, 6, 9, 1})]:
             candidate = chords.parse_candidate_symbol(name)
@@ -38,7 +141,7 @@ class ExtendedChordTests(unittest.TestCase):
         candidates, _ = chords.generate_chord_candidates(chroma, bass, np, {})
         self.assertIn('C#/Eb', {candidate['symbol'] for candidate in candidates})
         ranked, _ = chords.rank_chord_candidates(chroma, 'Ab', None, None, bass, np, {})
-        self.assertEqual(ranked[0]['chord'], 'C#/Eb')
+        self.assertEqual(ranked[0]['chord'], 'Eb9sus4')
         weak, _ = chords.generate_chord_candidates(chroma, {'pitch_class': 3, 'confidence': .2}, np, {})
         self.assertNotIn('C#/Eb', {candidate['symbol'] for candidate in weak})
         harmony = chord_to_harmony('Db/Eb')
@@ -49,6 +152,28 @@ class ExtendedChordTests(unittest.TestCase):
         plain = chords.score_chord_candidate(chords.parse_candidate_symbol('A7'), chroma, 'D', None, None, bass, np, {})
         wrong = chords.score_chord_candidate(chords.parse_candidate_symbol('A7/E'), chroma, 'D', None, None, bass, np, {})
         self.assertGreater(plain['raw_score'], wrong['raw_score'] + .5)
+
+    def test_suspended_ninth_function_wins_over_upper_triad_slash_in_every_key(self):
+        for root in range(12):
+            chroma = np.full(12, .001)
+            chroma[[(root + interval) % 12 for interval in [2, 5, 10]]] = 1
+            bass = {'pitch_class': root, 'confidence': .95}
+            ranked, _ = chords.rank_chord_candidates(chroma, chords.PITCH_NAMES[(root + 5) % 12], None, None, bass, np, {})
+            self.assertEqual(ranked[0]['chord'], chords.PITCH_NAMES[root] + '9sus4')
+            upper = chords.PITCH_NAMES[(root + 10) % 12] + '/' + chords.PITCH_NAMES[root]
+            self.assertIn(upper, {item['chord'] for item in ranked})
+
+    def test_suspended_names_require_their_defining_notes(self):
+        for tones, bass, key, expected in [
+            ([0, 5, 7], 0, 'C', 'Csus4'),
+            ([0, 4, 7], 4, 'C', 'C/E'),
+            ([8, 0, 3], 3, 'Ab', 'Ab/Eb'),
+            ([1, 5, 8], None, 'Ab', 'C#'),
+        ]:
+            chroma = np.zeros(12); chroma[tones] = 1
+            reference = {'pitch_class': bass, 'confidence': .95} if bass is not None else None
+            ranked, _ = chords.rank_chord_candidates(chroma, key, None, None, reference, np, {})
+            self.assertEqual(ranked[0]['chord'], expected)
 
     def test_bass_supports_root_omitted_major_voicings_without_forcing_inversions(self):
         for root in range(12):

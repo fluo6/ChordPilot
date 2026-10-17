@@ -26,10 +26,11 @@ test("smoke CLI preserves its primary error and attempts directory cleanup when 
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(preloadPath, [
     'import fs from "node:fs/promises";',
+    'import path from "node:path";',
     "const remove = fs.rm.bind(fs);",
     "const writeFile = fs.writeFile.bind(fs);",
     "fs.rm = async (target, options) => {",
-    '  if (String(target).endsWith("/smoke.wav")) throw new Error("injected WAV cleanup failure");',
+    '  if (path.basename(String(target)) === "smoke.wav") throw new Error("injected WAV cleanup failure");',
     "  await writeFile(process.env.CHORDPILOT_CLEANUP_MARKER, String(target));",
     "  return remove(target, options);",
     "};"

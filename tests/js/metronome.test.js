@@ -65,6 +65,9 @@ test("sampled piano uses nearby recordings at the correct pitch, respects mute, 
   const context = {
     currentTime: 3, state: "suspended", destination: {},
     resume() { resumes += 1; this.state = "running"; return Promise.resolve(); },
+    createDynamicsCompressor() {
+      return { threshold: {}, knee: {}, ratio: {}, attack: {}, release: {}, connect() {} };
+    },
     createMediaElementSource(audio) {
       const source = { connect() {}, disconnect() { this.disconnected = true; } };
       audio.sourceNode = source; return source;
@@ -125,7 +128,20 @@ test("sampled piano uses nearby recordings at the correct pitch, respects mute, 
   await playingGroup;
   assert.ok(group.every((voice) => voice.played));
   assert.ok(Math.abs(group[1].playbackRate - 2 ** (1 / 12)) < 1e-8, "loading retains the target pitch");
-  assert.ok(group.reduce((sum, voice) => sum + voice.gainNode.peak, 0) <= .5, "chord gain is balanced");
+  assert.ok(group.reduce((sum, voice) => sum + voice.gainNode.peak ** 2, 0) >= voices[0].gainNode.peak ** 2 * .8, "adding voices retains audible group energy");
+  state.waitForLoad = false;
+  const weightedStart = voices.length;
+  await m.playPianoNotes([60, 64], { 60: 0, 64: -20 });
+  const compensate = (voice, midi) => voice.gainNode.peak / (1 + Math.max(0, Math.min(1, (65 - midi) / 24)) * .5);
+  assert.ok(Math.abs(compensate(voices[weightedStart + 1], 64) / compensate(voices[weightedStart], 60) - .1) < 1e-8,
+    '-20 dB uses one tenth of the gain, after the existing bass compensation');
+  await m.playPianoNote(60, -20);
+  assert.ok(Math.abs(voices.at(-1).gainNode.peak / voices[1].gainNode.peak - .1) < 1e-8,
+    'individual quiet notes retain their attenuation');
+  const largeGroupStart = voices.length;
+  await m.playPianoNotes(Array.from({ length: 12 }, (_, index) => 60 + index));
+  assert.ok(voices.slice(largeGroupStart).reduce((sum, voice) => sum + voice.gainNode.peak ** 2, 0) >= voices[0].gainNode.peak ** 2 * .8, "larger detected-note groups remain audible");
+  state.waitForLoad = true;
   const failedGroupStart = voices.length;
   const failedGroup = m.playPianoNotes([60, 64]);
   voices[failedGroupStart].onerror();

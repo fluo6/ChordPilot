@@ -100,7 +100,7 @@ class ExportTests(unittest.TestCase):
         cases = {
             "C": ("C", "major"), "Db": ("Db", "major"), "Am": ("A", "minor"),
             "C7": ("C", "dominant"), "Cmaj7": ("C", "major-seventh"),
-            "Am7": ("A", "minor-seventh"), "Fdim7": ("F", "diminished"),
+            "Am7": ("A", "minor-seventh"), "Fdim7": ("F", "diminished-seventh"),
             "Caug": ("C", "augmented"), "Dsus4": ("D", "suspended-fourth"),
             "G/B": ("G", "major"), "": ("C", "major"),
         }

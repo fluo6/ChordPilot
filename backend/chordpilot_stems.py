@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 from chordpilot_audio import audio_duration, load_audio, pcm_to_float, resolve_ffmpeg, waveform_peaks
 from chordpilot_cache import cache_key, cache_root, stems_cache_dir
@@ -41,6 +43,18 @@ def resolve_demucs_command() -> list[str] | None:
         return [sys.executable, "-m", "demucs"]
 
     return None
+
+def resolve_demucs_device() -> str:
+    configured = os.environ.get("CHORDPILOT_TORCH_DEVICE", "").strip().lower()
+    if configured in {"cuda", "cpu"}:
+        return configured
+    try:
+        torch = __import__("torch")
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
 
 def path_exists_or_denied(path: Path) -> bool:
     try:
@@ -98,7 +112,8 @@ def run_demucs(path: Path, options: dict[str, Any] | None = None) -> dict[str, A
         log("stems: decoding source for Demucs")
         decode_to_wav(path, source, 44100, 2)
 
-    log("stems: running Demucs separation")
+    device = resolve_demucs_device()
+    log(f"stems: running Demucs separation on {device.upper()}")
     command = [
         *demucs_command,
         "--name",
@@ -106,7 +121,7 @@ def run_demucs(path: Path, options: dict[str, Any] | None = None) -> dict[str, A
         "--out",
         str(stems_dir),
         "--device",
-        "cpu",
+        device,
         "--jobs",
         "1",
         str(source),
@@ -192,9 +207,13 @@ def run_demucs_internal(path: Path, stems_dir: Path, model_name: str = "htdemucs
     apply_module = __import__("demucs.apply", fromlist=["apply_model"])
     pretrained = __import__("demucs.pretrained", fromlist=["get_model"])
 
+    device = resolve_demucs_device()
     log(f"demucs: loading {model_name} model")
     model = pretrained.get_model(model_name)
-    model.cpu()
+    if device == "cuda":
+        model.cuda()
+    else:
+        model.cpu()
     model.eval()
     sample_rate = int(getattr(model, "samplerate", 44100))
     sources = list(getattr(model, "sources", STEM_NAMES))
@@ -207,14 +226,14 @@ def run_demucs_internal(path: Path, stems_dir: Path, model_name: str = "htdemucs
         ref_std = torch.tensor(1.0)
     mix = (mix - ref_mean) / ref_std
 
-    log("demucs: separating stems on CPU")
+    log(f"demucs: separating stems on {device.upper()}")
     with torch.no_grad():
         separated = apply_module.apply_model(
             model,
             mix.unsqueeze(0),
             split=True,
             overlap=0.25,
-            device="cpu",
+            device=device,
             num_workers=0,
             progress=False,
         )[0]

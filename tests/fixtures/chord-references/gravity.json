@@ -1,0 +1,426 @@
+{
+  "title": "Gravity \u2014 BasscoverPete bass/TAB reference",
+  "source_url": "https://www.youtube.com/watch?v=JF-79DoNNOU",
+  "reference_kind": "manually checked video TAB; sampled notes, not an authoritative full transcription",
+  "timing_note": "Bass sounds one octave below score. Video highlight transitions can lead audible stable pitches; attack points are reported separately and may be glides/rests. 120ms tracking frames limit short-note timing precision.",
+  "settings": {
+    "known_key": "G",
+    "tail_reduction": 0.2,
+    "overtone_weighting": 0,
+    "chord_stability": "sustained"
+  },
+  "bass_points": [
+    {
+      "time": 13,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 14,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 15,
+      "midi": 38,
+      "kind": "attack"
+    },
+    {
+      "time": 16,
+      "midi": 43,
+      "kind": "interior"
+    },
+    {
+      "time": 17,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 18,
+      "midi": 37,
+      "kind": "attack"
+    },
+    {
+      "time": 19,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 20,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 21,
+      "midi": 36,
+      "kind": "attack"
+    },
+    {
+      "time": 22,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 23,
+      "midi": 48,
+      "kind": "interior"
+    },
+    {
+      "time": 24,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 25,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 26,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 27,
+      "midi": 43,
+      "kind": "interior"
+    },
+    {
+      "time": 28,
+      "midi": 38,
+      "kind": "attack"
+    },
+    {
+      "time": 29,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 30,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 31,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 32,
+      "midi": 33,
+      "kind": "attack"
+    },
+    {
+      "time": 33,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 34,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 36,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 37,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 38,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 39,
+      "midi": 43,
+      "kind": "interior"
+    },
+    {
+      "time": 40,
+      "midi": 43,
+      "kind": "interior"
+    },
+    {
+      "time": 42,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 43,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 44,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 45,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 46,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 47,
+      "midi": 31,
+      "kind": "attack"
+    },
+    {
+      "time": 92,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 93,
+      "midi": 33,
+      "kind": "attack"
+    },
+    {
+      "time": 94,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 95,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 97,
+      "midi": 43,
+      "kind": "interior"
+    },
+    {
+      "time": 98,
+      "midi": 31,
+      "kind": "interior"
+    },
+    {
+      "time": 100,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 101,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 102,
+      "midi": 31,
+      "kind": "attack"
+    },
+    {
+      "time": 103,
+      "midi": 36,
+      "kind": "interior"
+    },
+    {
+      "time": 15.1,
+      "midi": 38,
+      "kind": "passing"
+    },
+    {
+      "time": 16.58,
+      "midi": 38,
+      "kind": "passing"
+    },
+    {
+      "time": 17.86,
+      "midi": 38,
+      "kind": "passing"
+    },
+    {
+      "time": 18.04,
+      "midi": 37,
+      "kind": "passing"
+    },
+    {
+      "time": 20.91,
+      "midi": 33,
+      "kind": "passing"
+    },
+    {
+      "time": 22.42,
+      "midi": 43,
+      "kind": "passing"
+    },
+    {
+      "time": 26.68,
+      "midi": 38,
+      "kind": "passing"
+    },
+    {
+      "time": 28.12,
+      "midi": 38,
+      "kind": "passing"
+    },
+    {
+      "time": 29.58,
+      "midi": 33,
+      "kind": "passing"
+    },
+    {
+      "time": 32.01,
+      "midi": 33,
+      "kind": "passing"
+    },
+    {
+      "time": 32.5,
+      "midi": 33,
+      "kind": "passing"
+    }
+  ],
+  "windows": [
+    {
+      "start": 13,
+      "end": 14.5,
+      "chord": "G"
+    },
+    {
+      "start": 15.5,
+      "end": 17,
+      "chord": "G"
+    },
+    {
+      "start": 19,
+      "end": 20,
+      "chord": "C"
+    },
+    {
+      "start": 21.5,
+      "end": 22.5,
+      "chord": "C"
+    },
+    {
+      "start": 24.5,
+      "end": 26,
+      "chord": "G"
+    },
+    {
+      "start": 27,
+      "end": 28,
+      "chord": "G"
+    },
+    {
+      "start": 30,
+      "end": 31,
+      "chord": "C"
+    },
+    {
+      "start": 33,
+      "end": 34,
+      "chord": "C"
+    },
+    {
+      "start": 36,
+      "end": 37,
+      "chord": "G"
+    },
+    {
+      "start": 39,
+      "end": 40,
+      "chord": "G"
+    },
+    {
+      "start": 42,
+      "end": 43,
+      "chord": "C"
+    },
+    {
+      "start": 45,
+      "end": 46,
+      "chord": "C"
+    },
+    {
+      "start": 94,
+      "end": 95,
+      "chord": "G"
+    },
+    {
+      "start": 97,
+      "end": 98,
+      "chord": "G"
+    },
+    {
+      "start": 100,
+      "end": 101,
+      "chord": "C"
+    },
+    {
+      "start": 103,
+      "end": 104,
+      "chord": "C"
+    }
+  ],
+  "bass_rejections": [
+    {
+      "start": 14.39,
+      "end": 15,
+      "midis": [
+        29,
+        30,
+        31
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    },
+    {
+      "start": 26.14,
+      "end": 26.6,
+      "midis": [
+        29,
+        30,
+        31
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    },
+    {
+      "start": 32.4,
+      "end": 32.45,
+      "midis": [
+        32
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    },
+    {
+      "start": 17.97,
+      "end": 18.02,
+      "midis": [
+        25
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    },
+    {
+      "start": 22.34,
+      "end": 22.39,
+      "midis": [
+        24
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    },
+    {
+      "start": 20.32,
+      "end": 20.43,
+      "midis": [
+        32
+      ],
+      "kind": "no_extra_attack",
+      "note": "Checked release rebound, glide or transient alias; an existing held note may continue through this window."
+    }
+  ]
+}

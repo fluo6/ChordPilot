@@ -1,8 +1,31 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+
+test('overtone settings preserve historical defaults and reject malformed weighted spectra', () => {
+  const m = loadScript('src/renderer/study-model.js', ['studySettings', 'normalizeStudyRun', 'studyDetectionSettings']);
+  assert.equal(m.studySettings({}).overtone_weighting, .5);
+  assert.equal(m.studySettings({ overtone_weighting: 0 }).overtone_weighting, 0);
+  const historical = m.normalizeStudyRun({ id: 'old', ...result(), algorithm_version: 'local-study-v9' });
+  assert.equal(historical.settings.overtone_weighting, 0);
+  assert.equal(m.studyDetectionSettings({}, 'local-study-v9').overtone_weighting, 0);
+  assert.equal(m.studyDetectionSettings({ overtone_weighting: 1 }, 'local-study-v9').overtone_weighting, 1);
+  assert.equal(m.studyDetectionSettings({}, 'local-study-v10').overtone_weighting, .5);
+  assert.equal(m.normalizeStudyRun({ id: 'bad', ...result(), source_evidence: { other: { overtone_weighted_spectrum: {} } } }), null);
+});
 const { loadScript, plain } = require("./helpers/load-script");
 const model = () => loadScript("src/renderer/study-model.js", ["studyRangeError", "advanceStudySelection", "normalizeStudies", "saveStudyRecord", "appendStudyRun", "compareStudyRuns", "createStudyState"]);
 const result = (chord = "C") => ({ chord, chord_confidence: .8, pitch_confidence: .6, range: [1, 2], sources: ["other"], settings: { song_key: "C" }, evidence: { detected_notes: [{ note: "C", strength: .4 }] }, algorithm_version: "v1" });
+
+test('saved study normalization retains simultaneous voicing snapshots without changing historical runs', () => {
+  const { normalizeStudyRun } = loadScript('src/renderer/study-model.js', ['normalizeStudyRun']);
+  const run = {id:'voicing',...result('Dm11'),algorithm_version:'local-study-v19'};
+  run.evidence.voicing_frames = [{start:1,end:1.32,midis:[50,55,60,65,69]}];
+  const loaded = normalizeStudyRun(JSON.parse(JSON.stringify(run)));
+  assert.deepEqual(plain(loaded.evidence.voicing_frames),run.evidence.voicing_frames);
+  loaded.evidence.voicing_frames[0].midis.push(72);
+  assert.equal(run.evidence.voicing_frames[0].midis.length,5);
+  assert.equal(normalizeStudyRun({id:'legacy',...result()}).evidence.voicing_frames,undefined);
+});
 
 test("simplified display does not invalidate new detections but retains legacy settings", () => {
   const m = model();
@@ -12,6 +35,13 @@ test("simplified display does not invalidate new detections but retains legacy s
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v4" }, { ...changed, algorithm_version: "local-study-v4" }).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v5" }, { ...changed, algorithm_version: "local-study-v5" }).sameInputs, true);
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v6" }, { ...changed, algorithm_version: "local-study-v6" }).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v7" }, { ...changed, algorithm_version: "local-study-v7" }).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v8" }, { ...changed, algorithm_version: "local-study-v8" }).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v12" }, { ...changed, algorithm_version: "local-study-v12" }).sameInputs, true);
+  assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v13" }, { ...changed, algorithm_version: "local-study-v13" }).sameInputs, true);
+  for (const version of ["local-study-v14", "local-study-v19", "local-study-v26"]) {
+    assert.equal(m.compareStudyRuns({ ...run, algorithm_version: version }, { ...changed, algorithm_version: version }).sameInputs, true);
+  }
   assert.equal(m.compareStudyRuns({ ...run, algorithm_version: "local-study-v2" }, { ...changed, algorithm_version: "local-study-v2" }).sameInputs, false);
 });
 
@@ -23,6 +53,21 @@ test("range selection orders endpoints and validates exact 50ms minimum", () => 
   assert.ok(m.studyRangeError(1, 1.049, 2));
   assert.ok(m.studyRangeError(NaN, 2, 3));
   assert.ok(m.studyRangeError(0, 4, 3));
+});
+
+test("a study spanning arrangement chord changes shows clipped passages without inventing an onset", () => {
+  const { studyChordOverlaps } = loadScript("src/renderer/study-model.js", ["studyChordOverlaps"]);
+  const bars = [
+    { chord_events: [{ start: 18.702, end: 19.354, chord: "F#maj7" }] },
+    { chord_events: [{ start: 19.354, end: 20.006, chord: "Cm7b5" }, { start: 20.006, end: 20.659, chord: "Cm7b5" }] }
+  ];
+  assert.deepEqual(plain(studyChordOverlaps(bars, 19.1, 19.8)), [
+    { start: 19.1, end: 19.354, chord: "F#maj7" },
+    { start: 19.354, end: 19.8, chord: "Cm7b5" }
+  ]);
+  assert.deepEqual(plain(studyChordOverlaps(bars, 19.4, 19.8)), []);
+  assert.deepEqual(plain(studyChordOverlaps([{ chord: "Cm7b5", start: 19.1 }], 19.1, 19.8)), []);
+  assert.deepEqual(plain(studyChordOverlaps(bars, 20.55, 20.7)), []); // a short edge overlap alone is not a second chord
 });
 
 test("saved runs preserve algorithm evidence independently from corrections and newer inputs", () => {
@@ -47,6 +92,15 @@ test("malformed sessions discard only invalid study records and restore valid hi
   run.chord = "F"; assert.equal(normalized[0].runs[0].chord, "C");
 });
 
+test('six-nine names and inversions survive saved study JSON and normalization', () => {
+  const m = model();
+  const saved = m.saveStudyRecord([], {name:'Six-nine',start:1,end:2,sources:['other','bass'],settings:{},corrected_chord:'Cm6/9/G'},
+    [{id:'r1',...result('C6/9/E')}], null, 'today', () => 's69');
+  const restored = m.normalizeStudies(JSON.parse(JSON.stringify(saved.studies)));
+  assert.equal(restored[0].runs[0].chord,'C6/9/E');
+  assert.equal(restored[0].corrected_chord,'Cm6/9/G');
+});
+
 test("saving edits preserves the selected historical run", () => {
   const m = model();
   const record = { id: "s1", start: 1, end: 2, sources: ["other"], settings: {}, runs: [{ id: "r1", ...result() }, { id: "r2", ...result("C/E") }], selected_run_id: "r1" };
@@ -64,6 +118,16 @@ test("octave evidence survives normalization and serialization independently fro
   assert.equal(restored[0].runs[0].algorithm_version, "local-study-v2");
 });
 
+test("saved spectra round-trip and malformed spectra cannot enter the renderer", () => {
+  const m = model();
+  const spectrum = { frequencies_hz: [20, 100, 440, 4500], magnitudes_db: [-80, -40, 0, -80], peaks: [{ midi: 69, note: "A4", frequency_hz: 440, level_db: 0 }] };
+  const good = { id: "good", ...result(), source_evidence: { other: { spectrum } } };
+  const bad = { id: "bad", ...result(), source_evidence: { other: { spectrum: { ...spectrum, frequencies_hz: [20, 440, 100, 4500] } } } };
+  const restored = m.normalizeStudies(JSON.parse(JSON.stringify([{ id: "s1", start: 1, end: 2, sources: ["other"], runs: [good, bad] }])));
+  assert.equal(restored[0].runs.length, 1);
+  assert.deepEqual(plain(restored[0].runs[0].source_evidence.other.spectrum), spectrum);
+});
+
 test("malformed nested run evidence is skipped without losing valid history", () => {
   const m = model();
   const valid = { id: "good", ...result() };
@@ -75,6 +139,8 @@ test("malformed nested run evidence is skipped without losing valid history", ()
     { id: "fingerprint", ...result(), input_fingerprints: { other: null } },
     { id: "digest", ...result(), input_fingerprints: { other: { sample_sha256: 12 } } },
     { id: "pitches", ...result(), evidence: { detected_pitches: "broken" } },
+    { id: "scoring", ...result(), evidence: { scoring_pitch_classes: [{ note: "C", accompaniment: 2, scored: NaN }] } },
+    { id: "bass-weight", ...result(), evidence: { scoring_bass_weight: 2 } },
     { id: "midi", ...result(), evidence: { detected_pitches: [{ midi: 500, note: "C4", strength: .5, frequency_hz: 261.63 }] } }
   ];
   const record = { id: "s1", start: 1, end: 2, sources: ["other"], runs: [valid, ...invalid], selected_run_id: "digest" };

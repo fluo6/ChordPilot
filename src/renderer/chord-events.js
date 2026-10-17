@@ -72,6 +72,16 @@ function mergeChordEvents(events, index) {
   const left = copy[index]; const right = copy[index + 1];
   if (!left || !right || Math.abs(left.end - right.start) > 1e-6) return copy;
   const leftEnd = left.end;
+  // Keep source cells from both sides for beat spectra and bass-note previews.
+  if (left.debug?.cells?.length || right.debug?.cells?.length) {
+    const cells = event => event.debug?.cells?.length ? event.debug.cells : [{
+      start: event.start, end: event.end, chord: event.chord,
+      evidence: event.evidence, bass_reference: event.bass_reference
+    }];
+    const combined = [...cells(left), ...cells(right)];
+    left.debug = {...left.debug, cells: [...new Map(combined.map(cell => [JSON.stringify(cell), cell])).values()]
+      .sort((a, b) => a.start - b.start)};
+  }
   left.end = right.end;
   left.evidence_history = [...(left.evidence_history || []), { start: left.start, end: leftEnd, evidence: left.evidence, alternatives: left.alternatives }, { start: right.start, end: right.end, evidence: right.evidence, alternatives: right.alternatives }].filter((item) => item.evidence || item.alternatives);
   const alternatives = [...(left.alternatives || []), ...(right.alternatives || [])];

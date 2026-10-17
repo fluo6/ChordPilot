@@ -67,8 +67,8 @@ test("timeline labels adapt to width and export source", () => {
     timelineBodyWidth: () => 800,
     barChordText: (bar) => bar.chord || "N.C."
   });
-  assert.equal(timeline.barRegionLabel({ number: 2, chord: "Am" }, 1, 20), "2. Am");
-  assert.equal(timeline.barRegionLabel({ number: 2, chord: "Am" }, 1, 6), "2");
+  assert.equal(timeline.barRegionLabel({ number: 2, chord: "Am" }, 1, 20), "Am");
+  assert.equal(timeline.barRegionLabel({ number: 2, chord: "Am" }, 1, 6), "Am");
   assert.equal(timeline.barRegionLabel({ number: 2, chord: "Am" }, 1, 2), "");
   assert.equal(timeline.barLabelInterval(), 5);
   assert.deepEqual(plain(timeline.audioExportSourceForLane("Full Mix", null)), { path: "source.wav", label: "Song - full mix" });
@@ -299,6 +299,47 @@ test("stem player recovery restores controls when timeline renders after transpo
     stems: [{ name: "drums", path: "drums.wav", url: "file:///drums.wav" }]
   }), false);
   assert.equal(state.stemPlayers[0].stem.name, "bass");
+});
+
+test("syncStemTime uses slewing for small drift and hard seek on seek/catastrophic drift", () => {
+  const audioPlayer = { currentTime: 10.0, playbackRate: 1.0, paused: false };
+  const player = {
+    audio: { currentTime: 9.90, playbackRate: 1.0, seeking: false },
+    stem: { name: "vocals" }
+  };
+  const state = { playbackRate: 1.0 };
+  const { syncStemTime } = loadScript("src/renderer/stems.js", ["syncStemTime"], {
+    state,
+    elements: { audioPlayer }
+  });
+
+  // 1. Small drift (-100ms) on continuous playback (isSeek: false)
+  // Should NOT hard-seek currentTime, should slew playbackRate faster (> 1.0)
+  syncStemTime(player, { isSeek: false });
+  assert.equal(player.audio.currentTime, 9.90, "currentTime should not jump for small drift");
+  assert.ok(player.audio.playbackRate > 1.0, "playbackRate should slew faster to catch up");
+
+  // 2. In-sync (< 25ms drift)
+  player.audio.currentTime = 9.99;
+  syncStemTime(player, { isSeek: false });
+  assert.equal(player.audio.playbackRate, 1.0, "playbackRate should return to baseRate when in sync");
+
+  // 3. Leading ahead (+100ms drift)
+  player.audio.currentTime = 10.10;
+  syncStemTime(player, { isSeek: false });
+  assert.equal(player.audio.currentTime, 10.10, "currentTime should not jump for small leading drift");
+  assert.ok(player.audio.playbackRate < 1.0, "playbackRate should slew slower when leading");
+
+  // 4. Catastrophic drift (> 400ms)
+  player.audio.currentTime = 8.0;
+  syncStemTime(player, { isSeek: false });
+  assert.equal(player.audio.currentTime, 10.0, "catastrophic drift should trigger hard seek");
+  assert.equal(player.audio.playbackRate, 1.0, "playbackRate should reset on hard seek");
+
+  // 5. Explicit seek (isSeek: true)
+  audioPlayer.currentTime = 25.0;
+  syncStemTime(player, { isSeek: true });
+  assert.equal(player.audio.currentTime, 25.0, "isSeek: true should instantly hard seek to masterTime");
 });
 
 test("key changes trigger an audio preview and reject overlapping renders", () => {

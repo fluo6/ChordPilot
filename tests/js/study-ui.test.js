@@ -3,11 +3,11 @@ const assert = require("node:assert/strict");
 const { loadScript, plain } = require("./helpers/load-script");
 
 function environment(overrides = {}) {
-  const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies"]);
+  const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies", "studyChordOverlaps"]);
   const state = { audio: { path: "song", url: "original" }, chart: { detected_key: "C", key: "D", stems: { ok: true, stems: [{ name: "bass", url: "bass-original" }, { name: "other", url: "other-original" }] } }, studies: [], study: helpers.createStudyState(), currentView: "song", editorPanel: "study", ...overrides.state };
   const elements = { audioPlayer: { duration: 10 }, studyPanel: null };
   let panel;
-  const loaded = loadScript("src/renderer/study.js", ["studyCurrentMoment", "openChordEventStudy", "handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun"], {
+  const loaded = loadScript("src/renderer/study.js", ["studyCurrentMoment", "openChordEventStudy", "handleStudyWaveScroll", "zoomStudyWaveform", "handleStudyWaveWheel", "handleStudyRangeClick", "startStudyWaveDrag", "moveStudyWaveDrag", "finishStudyWaveDrag", "setStudyRange", "resetStudyState", "studySaveToken", "analyzeStudySelection", "saveCurrentStudy", "openStudy", "newStudy", "selectStudyRun", "studyCurrentRun", "renderStudyChordOverlaps"], {
     ...helpers, state, elements,
     window: { chordPilot: overrides.bridge || {} },
     crypto: { randomUUID: (() => { let id = 0; return () => `id${++id}`; })() },
@@ -16,6 +16,33 @@ function environment(overrides = {}) {
   });
   return { ...loaded, state, elements, panel: () => panel };
 }
+
+test("Local Study labels conflicting arrangement chords and lets the user narrow the selection", () => {
+  function node(tag) {
+    return { tag, children: [], textContent: "", append(...children) { this.children.push(...children); },
+      addEventListener(name, listener) { this[name] = listener; } };
+  }
+  const bars = [{ chord_events: [
+    { start: 18.702, end: 19.354, chord: "F#maj7" },
+    { start: 19.354, end: 20.659, chord: "Cm7b5" }
+  ] }];
+  const env = environment({ state: { chart: { bars } }, globals: {
+    document: { createElement: node }, displayChordSymbol: (chord) => chord
+  } });
+  env.context.renderStudy = () => {};
+  const container = node("div");
+  env.renderStudyChordOverlaps({ range: [19.1, 19.8] }, container);
+  assert.equal(container.children.length, 1);
+  const section = container.children[0];
+  assert.match(section.children[0].textContent, /Arrangement/);
+  assert.match(section.children[1].textContent, /approximate/i);
+  const buttons = section.children[2].children;
+  assert.deepEqual(buttons.map((button) => button.textContent), [
+    "19.100–19.354s · F#maj7", "19.354–19.800s · Cm7b5"
+  ]);
+  buttons[1].click();
+  assert.deepEqual(plain([env.state.study.draft.start, env.state.study.draft.end]), [19.354, 19.8]);
+});
 
 test("modifier selection maps scroll/zoom body coordinates and opens study on completion", () => {
   const env = environment();
@@ -86,12 +113,12 @@ test("saving and reopening restores history and corrections without mutating sug
 test("Save Session flushes pending runs and preserves dirty edits made during the save", async () => {
   const env = environment({ bridge: { async analyzeRange(payload) { return { chord: "C", range: [payload.start, payload.end], sources: payload.sources, settings: payload.options, evidence: { detected_notes: [] } }; } } });
   env.setStudyRange(1, 2); await env.analyzeStudySelection();
-  let resolve; let payload;
+  let resolve; let payload; let saveOptions;
   const { saveSession } = loadScript("src/renderer/actions.js", ["saveSession"], {
     state: env.state, studyCopy: (value) => plain(value), saveCurrentStudy: env.saveCurrentStudy, studySaveToken: env.studySaveToken,
     renderStudy() {}, syncMetaToState() {}, collectAnalysisOptions: () => ({}),
     elements: { audioPlayer: { currentTime: 0 }, analysisModeInput: { value: "draft" } },
-    window: { chordPilot: { saveSession(value) { payload = value; return new Promise((done) => { resolve = done; }); } } },
+    window: { chordPilot: { saveSession(value, options) { payload = value; saveOptions = options; return new Promise((done) => { resolve = done; }); } } },
     beginLoading: () => () => {}, setStatus() {}, rememberSession() {}, addJob() {}, showErrorDialog() {}
   });
   const saving = saveSession();
@@ -99,11 +126,20 @@ test("Save Session flushes pending runs and preserves dirty edits made during th
   assert.equal(env.state.study.pendingRuns.length, 0);
   env.state.study.draft.notes = "edited while saving";
   resolve({ path: "session.json" }); await saving;
+  assert.equal(env.state.sessionPath, "session.json");
   assert.equal(env.state.study.dirty, true);
   assert.equal(payload.studies[0].notes, "");
-  const second = saveSession(); resolve({ path: "session.json" }); await second;
+  const second = saveSession();
+  assert.deepEqual(plain(saveOptions), { path: "session.json", saveAs: false });
+  resolve({ path: "session.json" }); await second;
   assert.equal(payload.studies[0].notes, "edited while saving");
   assert.equal(env.state.study.dirty, false);
+  const copy = saveSession({ saveAs: true });
+  assert.deepEqual(plain(saveOptions), { path: "session.json", saveAs: true });
+  resolve(null); await copy;
+  assert.equal(env.state.sessionPath, "session.json");
+  const copied = saveSession({ saveAs: true }); resolve({ path: "copy.json" }); await copied;
+  assert.equal(env.state.sessionPath, "copy.json");
 });
 
 test("New and opening another study retain successful runs after draft inputs become invalid", async () => {

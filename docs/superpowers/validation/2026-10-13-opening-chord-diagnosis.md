@@ -1,5 +1,7 @@
 # Waste Of Time opening-chord diagnosis
 
+> Historical diagnosis. The later [vocabulary implementation](2026-10-16-chord-vocabulary-implementation.md) supports maj9, and the current [reference baseline](../../../TODO.md#reference-baseline) records Abmaj9 at the opening. The unsupported-quality finding below applied only to the earlier version.
+
 Read-only reproduction on the original cached Other/Bass stems. The referenced saved session still contains Abmaj7 as bar 1's single chord (saved October 12); the newer fine-grid comparison contains Cm7 at its opening cells. No session, stem, or product algorithm was changed during this investigation.
 
 ## Reproduction

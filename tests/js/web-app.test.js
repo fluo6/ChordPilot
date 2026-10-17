@@ -1041,6 +1041,8 @@ test("audio export removes a failed generated part file and redacts its service 
 
 test("environment defaults parse without starting the HTTP server", () => {
   const config = parseWebEnvironment({});
+  let bundledFfmpeg;
+  try { bundledFfmpeg = require("ffmpeg-static"); } catch (_error) {}
 
   assert.deepEqual(config, {
     host: "0.0.0.0",
@@ -1048,8 +1050,8 @@ test("environment defaults parse without starting the HTTP server", () => {
     dataRoot: path.resolve(".chordpilot-data"),
     cacheDir: path.resolve(".chordpilot-data", "cache"),
     uploadLimitBytes: 512 * 1024 * 1024,
-    pythonPath: "python3",
-    ffmpegPath: "ffmpeg",
+    pythonPath: process.platform === "win32" ? "python" : "python3",
+    ffmpegPath: bundledFfmpeg && fs.existsSync(bundledFfmpeg) ? bundledFfmpeg : "ffmpeg",
     ytDlpPath: "yt-dlp"
   });
 });

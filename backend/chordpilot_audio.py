@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 from chordpilot_cache import decoded_wav_cache_path
 
@@ -88,16 +90,20 @@ def resolve_ffmpeg() -> str | None:
             return str(candidate)
     return shutil.which("ffmpeg")
 
-def waveform_peaks(path: Path, bins: int = 320) -> list[float]:
+def waveform_peaks(path: Path, bins: int | None = None) -> list[float]:
     np = __import__("numpy")
     try:
-        audio, _sr = load_audio(path)
+        audio, sr = load_audio(path)
     except Exception as exc:
         log(f"waveform: failed for {path.name}: {exc}")
         return []
 
     if len(audio) == 0:
         return []
+
+    # 10 ms peaks expose attacks at the timeline's maximum zoom; bound session size.
+    if bins is None:
+        bins = min(60000, max(320, math.ceil(len(audio) / sr * 100)))
 
     mono = np.abs(audio)
     chunks = np.array_split(mono, min(bins, len(mono)))

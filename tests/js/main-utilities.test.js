@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { createRequire } = require("node:module");
 const runtimeServices = require("../../src/runtime/chordpilot-services");
 const {
   buildAudioPreviewFilter,
@@ -11,11 +12,16 @@ const {
   shouldShowBackendLog
 } = require("../../src/runtime/chordpilot-services");
 
-function loadElectronExportHandler() {
+function loadElectronExportHandler({ confirmResponse = 0 } = {}) {
   const handlers = new Map();
   const exportCalls = [];
+  const prompts = [];
+  let serviceOptions;
   const services = {
     cleanup() {},
+    async downloadYoutubeAudio() {
+      return serviceOptions.ensureYoutubeTools();
+    },
     async exportAudioTrack(payload) {
       exportCalls.push(payload);
       return payload;
@@ -41,6 +47,10 @@ function loadElectronExportHandler() {
     BrowserWindow: FakeBrowserWindow,
     Menu: { setApplicationMenu() {} },
     dialog: {
+      async showMessageBox(_window, payload) {
+        prompts.push(payload);
+        return { response: confirmResponse };
+      },
       async showSaveDialog() {
         return { canceled: false, filePath: "/tmp/chordpilot-main-test/export.wav" };
       },
@@ -56,9 +66,12 @@ function loadElectronExportHandler() {
   const localRequire = (request) => {
     if (request === "electron") return electron;
     if (request === "../runtime/chordpilot-services") {
-      return { ...runtimeServices, createChordPilotServices: () => services };
+      return { ...runtimeServices, createChordPilotServices: (options) => { serviceOptions = options; return services; } };
     }
-    return require(request);
+    if (request === "./youtube-setup") {
+      return { createYoutubeSetup: () => ({ ensureReady: async (confirm) => await confirm(["YouTube downloader (yt-dlp)"]) ? { ytDlpPath: "ready" } : null }) };
+    }
+    return createRequire(filename)(request);
   };
   vm.runInNewContext(source, {
     require: localRequire,
@@ -71,8 +84,17 @@ function loadElectronExportHandler() {
     setTimeout,
     clearTimeout
   }, { filename });
-  return { handler: handlers.get("audio:exportTrack"), exportCalls };
+  return { handler: handlers.get("audio:exportTrack"), exportCalls, youtubeHandler: handlers.get("audio:downloadYoutube"), prompts };
 }
+
+test("Electron asks for download/install confirmation and forwards cancellation", async () => {
+  const accepted = loadElectronExportHandler();
+  assert.equal((await accepted.youtubeHandler({}, "https://youtu.be/abc")).ytDlpPath, "ready");
+  assert.deepEqual(Array.from(accepted.prompts[0].buttons), ["Download & Install", "Cancel"]);
+  assert.equal(accepted.prompts[0].cancelId, 1);
+  const cancelled = loadElectronExportHandler({ confirmResponse: 1 });
+  assert.equal(await cancelled.youtubeHandler({}, "https://youtu.be/abc"), null);
+});
 
 test("runtime filename and backend-log helpers retain user-facing safeguards", () => {
   assert.equal(safeFileName("  a<>:\"/\\|?*b  "), "a-b");

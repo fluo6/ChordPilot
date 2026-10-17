@@ -1,0 +1,315 @@
+{
+  "source": "Hero: https://www.youtube.com/watch?v=Y02UJ35PvXY; derived cached Other/Bass evidence, 50% overtone weighting, no tail reduction, known key E.",
+  "cases": [
+    {
+      "range": [
+        15.3,
+        16.0
+      ],
+      "expected": "D6/9",
+      "current": {
+        "chroma": [
+          0.03852698779945391,
+          0.025562486694432656,
+          0.09012681983239232,
+          0.02839830365744709,
+          0.15274871258836625,
+          0.027558424379688893,
+          0.19571326510797296,
+          0.026372596011590553,
+          0.029174383354693537,
+          0.02459100718596858,
+          0.033793766926519336,
+          0.327433246461474
+        ],
+        "chord": "Bsus4",
+        "bass_reference": null,
+        "evidence": {
+          "range": [
+            15.3,
+            16.0
+          ],
+          "detected_pitches": [
+            {
+              "midi": 71,
+              "note": "B4",
+              "frequency_hz": 495.04,
+              "strength": 0.58
+            },
+            {
+              "midi": 66,
+              "note": "F#4",
+              "frequency_hz": 370.32,
+              "strength": 0.211
+            },
+            {
+              "midi": 64,
+              "note": "E4",
+              "frequency_hz": 329.96,
+              "strength": 0.155
+            },
+            {
+              "midi": 50,
+              "note": "D3",
+              "frequency_hz": 146.7,
+              "strength": 0.046
+            }
+          ]
+        }
+      },
+      "early": {
+        "chroma": [
+          0.027635599601915237,
+          0.05535144802909695,
+          0.18626759591081266,
+          0.03369180110597553,
+          0.14202578316979442,
+          0.025413710087625354,
+          0.16513031381457619,
+          0.01984723108935868,
+          0.046744487038262075,
+          0.033251558042917594,
+          0.02708062257077128,
+          0.23755984953889392
+        ],
+        "chord": "D6/9",
+        "bass_reference": {
+          "note": "D",
+          "pitch_class": 2,
+          "confidence": 0.647,
+          "origin": "accompaniment",
+          "source": "low accompaniment pitch",
+          "detected_notes": [
+            {
+              "note": "B",
+              "strength": 0.238
+            },
+            {
+              "note": "D",
+              "strength": 0.186
+            },
+            {
+              "note": "F#",
+              "strength": 0.165
+            },
+            {
+              "note": "E",
+              "strength": 0.142
+            },
+            {
+              "note": "C#",
+              "strength": 0.055
+            },
+            {
+              "note": "Ab",
+              "strength": 0.047
+            }
+          ],
+          "detected_pitches": [
+            {
+              "midi": 71,
+              "note": "B4",
+              "frequency_hz": 494.12,
+              "strength": 0.495
+            },
+            {
+              "midi": 66,
+              "note": "F#4",
+              "frequency_hz": 370.28,
+              "strength": 0.164
+            },
+            {
+              "midi": 50,
+              "note": "D3",
+              "frequency_hz": 146.89,
+              "strength": 0.161
+            },
+            {
+              "midi": 64,
+              "note": "E4",
+              "frequency_hz": 330.43,
+              "strength": 0.133
+            },
+            {
+              "midi": 59,
+              "note": "B3",
+              "frequency_hz": 246.1,
+              "strength": 0.038
+            }
+          ]
+        },
+        "evidence": {
+          "range": [
+            15.3,
+            15.55
+          ],
+          "detected_pitches": [
+            {
+              "midi": 71,
+              "note": "B4",
+              "frequency_hz": 494.12,
+              "strength": 0.495
+            },
+            {
+              "midi": 66,
+              "note": "F#4",
+              "frequency_hz": 370.28,
+              "strength": 0.164
+            },
+            {
+              "midi": 50,
+              "note": "D3",
+              "frequency_hz": 146.89,
+              "strength": 0.161
+            },
+            {
+              "midi": 64,
+              "note": "E4",
+              "frequency_hz": 330.43,
+              "strength": 0.133
+            },
+            {
+              "midi": 59,
+              "note": "B3",
+              "frequency_hz": 246.1,
+              "strength": 0.038
+            }
+          ]
+        },
+        "root_decay": {
+          "71": 1.1887651887341049,
+          "66": 1.4403423034761318,
+          "50": 0.6661797444326113,
+          "64": 0.3276409718351877,
+          "59": 0.08668817929705608
+        }
+      }
+    },
+    {
+      "range": [
+        19.911,
+        20.879
+      ],
+      "expected": "C#m7",
+      "current": {
+        "chroma": [
+          0.0528882324633977,
+          0.046508592997738664,
+          0.03808451536912616,
+          0.04050191891221605,
+          0.32402528464992214,
+          0.02833279235397825,
+          0.05866884218155374,
+          0.019386632046030666,
+          0.03325457029017492,
+          0.018734783911014005,
+          0.025692889075147978,
+          0.31392094574969986
+        ],
+        "chord": "Esus2",
+        "bass_reference": null,
+        "evidence": {
+          "range": [
+            19.911,
+            20.879
+          ],
+          "detected_pitches": [
+            {
+              "midi": 71,
+              "note": "B4",
+              "frequency_hz": 495.2,
+              "strength": 0.547
+            },
+            {
+              "midi": 64,
+              "note": "E4",
+              "frequency_hz": 330.06,
+              "strength": 0.291
+            },
+            {
+              "midi": 76,
+              "note": "E5",
+              "frequency_hz": 660.45,
+              "strength": 0.091
+            },
+            {
+              "midi": 49,
+              "note": "C#3",
+              "frequency_hz": 138.69,
+              "strength": 0.027
+            },
+            {
+              "midi": 59,
+              "note": "B3",
+              "frequency_hz": 248.06,
+              "strength": 0.021
+            }
+          ]
+        }
+      },
+      "early": {
+        "chroma": [
+          0.07892406771553245,
+          0.09223461358885715,
+          0.04389285268620619,
+          0.02274553067618643,
+          0.37801785909696034,
+          0.01808818271633116,
+          0.04939504532957212,
+          0.01527989567393782,
+          0.01756025380584672,
+          0.022940074012053537,
+          0.026957147526625157,
+          0.23396447717189095
+        ],
+        "chord": "C#m7",
+        "bass_reference": null,
+        "evidence": {
+          "range": [
+            19.911,
+            20.161
+          ],
+          "detected_pitches": [
+            {
+              "midi": 64,
+              "note": "E4",
+              "frequency_hz": 329.13,
+              "strength": 0.719
+            },
+            {
+              "midi": 49,
+              "note": "C#3",
+              "frequency_hz": 139.16,
+              "strength": 0.14
+            },
+            {
+              "midi": 59,
+              "note": "B3",
+              "frequency_hz": 247.46,
+              "strength": 0.055
+            },
+            {
+              "midi": 71,
+              "note": "B4",
+              "frequency_hz": 493.14,
+              "strength": 0.047
+            },
+            {
+              "midi": 76,
+              "note": "E5",
+              "frequency_hz": 663.24,
+              "strength": 0.027
+            }
+          ]
+        },
+        "root_decay": {
+          "64": 0.329379277281926,
+          "49": 0.07075059630052953,
+          "59": 0.3372582123991418,
+          "71": 3.3892755212282255,
+          "76": 6.668017137554027
+        }
+      }
+    }
+  ]
+}

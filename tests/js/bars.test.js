@@ -38,6 +38,11 @@ const chart = {
   ]
 };
 
+test("stabilized chart labels retain the chosen contextual chord", () => {
+  const b = load({ analysis_engine: { options: { simplify_chords: false } } });
+  assert.equal(b.barChordText({ chord: 'Fmaj9', confidence: .6, alternatives: [{ chord: 'Dm11', score: .95 }], debug: { stability: 'sustained' } }), 'Fmaj9');
+});
+
 test("extended chord labels preserve the stored chord and full keyboard tones", () => {
   const b = load();
   assert.equal(b.displayChordSymbol("Abmaj9/C", true), "Abmaj7/C");
@@ -109,6 +114,7 @@ test("repeat and iReal chord parsing cover common qualities", () => {
   assert.equal(b.barRepeatText({ repeat_start: true, repeat_end: 2 }), "repeat start / 2x");
   assert.equal(b.barRepeatText({}), "");
   assert.deepEqual(plain(b.irealChordParts("Cmaj7/G")), { root: "C", quality: "", extension: "^7", bass: "G" });
+  assert.deepEqual(plain(b.irealChordParts("C6/9/E")), { root: "C", quality: "", extension: "6/9", bass: "E" });
   assert.deepEqual(plain(b.irealChordParts("Fmin9")), { root: "F", quality: "-", extension: "9", bass: "" });
   assert.deepEqual(plain(b.irealChordParts("Bdim7")), { root: "B", quality: "o", extension: "7", bass: "" });
   assert.deepEqual(plain(b.irealChordParts("Caug")), { root: "C", quality: "+", extension: "", bass: "" });

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 
 def cache_root() -> Path:

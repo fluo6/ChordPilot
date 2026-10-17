@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 from chordpilot_analysis import analyze
 from chordpilot_study import analyze_range

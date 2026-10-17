@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 from chordpilot_chords import parse_candidate_symbol
 
@@ -263,11 +265,17 @@ def chord_to_harmony(symbol: str) -> ET.Element:
         ET.SubElement(degree, "degree-value").text = "9"
         ET.SubElement(degree, "degree-alter").text = "0"
         ET.SubElement(degree, "degree-type").text = "add"
-    if candidate and candidate["quality"] == "7#9":
+    alterations = {"6/9": [(9, 0)], "m6/9": [(9, 0)], "7#9": [(9, 1)],
+        "7b5": [(5, -1)], "7#5": [(5, 1)], "7b9": [(9, -1)],
+        "7#11": [(11, 1)], "maj7#11": [(11, 1)], "7b13": [(13, -1)],
+        "9#11": [(11, 1)], "13#11": [(11, 1)], "13b9": [(9, -1)],
+        "mmaj9": [(9, 0)], "7b9#11": [(9, -1), (11, 1)],
+        "7#9#11": [(9, 1), (11, 1)]}
+    for value, alteration in alterations.get(candidate["quality"], []) if candidate else []:
         degree = ET.SubElement(harmony, "degree")
-        ET.SubElement(degree, "degree-value").text = "9"
-        ET.SubElement(degree, "degree-alter").text = "1"
-        ET.SubElement(degree, "degree-type").text = "add"
+        ET.SubElement(degree, "degree-value").text = str(value)
+        ET.SubElement(degree, "degree-alter").text = str(alteration)
+        ET.SubElement(degree, "degree-type").text = "alter" if value == 5 else "add"
     if candidate and candidate["quality"] in {"7sus4", "9sus4"}:
         kind.text = "suspended-fourth"
         for value, alteration in [(7, -1)] + ([(9, 0)] if candidate["quality"] == "9sus4" else []):
@@ -278,6 +286,16 @@ def chord_to_harmony(symbol: str) -> ET.Element:
     return harmony
 
 def parse_chord_symbol(symbol: str) -> tuple[str, str]:
+    candidate = parse_candidate_symbol(symbol)
+    if candidate:
+        kinds = {"6": "major-sixth", "m6": "minor-sixth", "6/9": "major-sixth", "m6/9": "minor-sixth",
+            "dim7": "diminished-seventh", "mmaj7": "major-minor", "m7b5": "half-diminished",
+            "7b5": "dominant", "7#5": "dominant", "7b9": "dominant", "7#11": "dominant",
+            "7b13": "dominant", "maj7#11": "major-seventh",
+            "9#11": "dominant-ninth", "13#11": "dominant-13th", "13b9": "dominant-13th",
+            "mmaj9": "major-minor", "7b9#11": "dominant", "7#9#11": "dominant"}
+        if candidate['quality'] in kinds:
+            return PITCH_NAMES[candidate['root']], kinds[candidate['quality']]
     clean = (symbol or "C").strip().split()[0].split("/")[0]
     if len(clean) >= 2 and clean[1] in {"#", "b"}:
         root = clean[:2]

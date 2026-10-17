@@ -86,6 +86,9 @@ test("tuning helpers clamp and format musically useful values", () => {
 test("chord text transposition handles roots, slash bass, lists, and no-chord", () => {
   const t = load();
   assert.equal(t.transposeChordText("Cmaj7/G", 2), "Dmaj7/A");
+  assert.equal(t.transposeChordText("C6/9/E", 2), "D6/9/F#");
+  assert.equal(t.transposeChordText("Cm6/9/G", -2), "Bbm6/9/F");
+  assert.equal(t.transposeChordText("C°7 Co7 CΔ7 Cø7", 2), "D°7 Do7 DΔ7 Dø7");
   assert.equal(t.transposeChordText("Am D7 | G", -2), "Gm C7 | F");
   assert.equal(t.transposeChordText("(Bb7), Eb/G", 1), "(B7), E/Ab");
   assert.equal(t.transposeChordText("N.C.", 5), "N.C.");

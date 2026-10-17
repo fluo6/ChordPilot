@@ -1,0 +1,349 @@
+{
+  "source": "Virtual Insanity measured Other stem; manual score reference; second case intentionally remains ambiguous",
+  "cases": [
+    {
+      "range": [
+        6.1,
+        6.8
+      ],
+      "expected": "Cm7b5",
+      "chroma": [
+        0.20455012662315597,
+        0.037001387844725134,
+        0.06910380438809487,
+        0.050471292604586486,
+        0.08608438869924147,
+        0.03279377330699753,
+        0.1270017584783131,
+        0.1170314242408574,
+        0.02042730165206272,
+        0.04452224064091381,
+        0.18769161211989063,
+        0.023320889401160873
+      ],
+      "evidence": {
+        "spectrum": {
+          "peaks": [
+            {
+              "frequency_hz": 263.54,
+              "midi": 60,
+              "note": "C4",
+              "level_db": -10.2
+            },
+            {
+              "frequency_hz": 313.55,
+              "midi": 63,
+              "note": "Eb4",
+              "level_db": -17.5
+            },
+            {
+              "frequency_hz": 373.1,
+              "midi": 66,
+              "note": "F#4",
+              "level_db": -17.0
+            },
+            {
+              "frequency_hz": 395.45,
+              "midi": 67,
+              "note": "G4",
+              "level_db": -12.5
+            },
+            {
+              "frequency_hz": 461.54,
+              "midi": 70,
+              "note": "Bb4",
+              "level_db": -10.9
+            },
+            {
+              "frequency_hz": 469.5,
+              "midi": 70,
+              "note": "Bb4",
+              "level_db": -1.0
+            },
+            {
+              "frequency_hz": 527.4,
+              "midi": 72,
+              "note": "C5",
+              "level_db": 0.0
+            },
+            {
+              "frequency_hz": 559.7,
+              "midi": 73,
+              "note": "C#5",
+              "level_db": -14.3
+            },
+            {
+              "frequency_hz": 593.88,
+              "midi": 74,
+              "note": "D5",
+              "level_db": -11.5
+            },
+            {
+              "frequency_hz": 626.94,
+              "midi": 75,
+              "note": "Eb5",
+              "level_db": -21.8
+            },
+            {
+              "frequency_hz": 660.34,
+              "midi": 76,
+              "note": "E5",
+              "level_db": -6.9
+            },
+            {
+              "frequency_hz": 704.76,
+              "midi": 77,
+              "note": "F5",
+              "level_db": -16.7
+            },
+            {
+              "frequency_hz": 726.64,
+              "midi": 78,
+              "note": "F#5",
+              "level_db": -5.1
+            },
+            {
+              "frequency_hz": 746.5,
+              "midi": 78,
+              "note": "F#5",
+              "level_db": -14.8
+            },
+            {
+              "frequency_hz": 791.53,
+              "midi": 79,
+              "note": "G5",
+              "level_db": -5.1
+            },
+            {
+              "frequency_hz": 859.55,
+              "midi": 81,
+              "note": "A5",
+              "level_db": -12.3
+            },
+            {
+              "frequency_hz": 924.73,
+              "midi": 82,
+              "note": "Bb5",
+              "level_db": -17.4
+            },
+            {
+              "frequency_hz": 942.01,
+              "midi": 82,
+              "note": "Bb5",
+              "level_db": -17.4
+            },
+            {
+              "frequency_hz": 993.62,
+              "midi": 83,
+              "note": "B5",
+              "level_db": -20.1
+            },
+            {
+              "frequency_hz": 1056.76,
+              "midi": 84,
+              "note": "C6",
+              "level_db": -17.9
+            },
+            {
+              "frequency_hz": 1060.77,
+              "midi": 84,
+              "note": "C6",
+              "level_db": -20.2
+            },
+            {
+              "frequency_hz": 1176.83,
+              "midi": 86,
+              "note": "D6",
+              "level_db": -20.0
+            },
+            {
+              "frequency_hz": 1257.58,
+              "midi": 87,
+              "note": "Eb6",
+              "level_db": -20.1
+            },
+            {
+              "frequency_hz": 1309.55,
+              "midi": 88,
+              "note": "E6",
+              "level_db": -17.8
+            }
+          ]
+        }
+      },
+      "bass_reference": null
+    },
+    {
+      "range": [
+        19.1,
+        19.8
+      ],
+      "expected": "Cm7b5",
+      "chroma": [
+        0.16426141649783627,
+        0.07488956788706182,
+        0.07515252704790941,
+        0.03400574836176312,
+        0.08017153499707941,
+        0.05948239355039182,
+        0.11200372669610567,
+        0.129119092400597,
+        0.07502415889446157,
+        0.05964926492331506,
+        0.08963886960996674,
+        0.04660169913351207
+      ],
+      "evidence": {
+        "spectrum": {
+          "peaks": [
+            {
+              "frequency_hz": 65.68,
+              "midi": 36,
+              "note": "C2",
+              "level_db": -2.0
+            },
+            {
+              "frequency_hz": 74.71,
+              "midi": 38,
+              "note": "D2",
+              "level_db": -16.3
+            },
+            {
+              "frequency_hz": 80.61,
+              "midi": 40,
+              "note": "E2",
+              "level_db": -15.3
+            },
+            {
+              "frequency_hz": 87.9,
+              "midi": 41,
+              "note": "F2",
+              "level_db": -14.8
+            },
+            {
+              "frequency_hz": 98.44,
+              "midi": 43,
+              "note": "G2",
+              "level_db": 0.0
+            },
+            {
+              "frequency_hz": 105.07,
+              "midi": 44,
+              "note": "Ab2",
+              "level_db": -13.8
+            },
+            {
+              "frequency_hz": 123.88,
+              "midi": 47,
+              "note": "B2",
+              "level_db": -14.5
+            },
+            {
+              "frequency_hz": 132.05,
+              "midi": 48,
+              "note": "C3",
+              "level_db": -1.3
+            },
+            {
+              "frequency_hz": 196.94,
+              "midi": 55,
+              "note": "G3",
+              "level_db": -8.1
+            },
+            {
+              "frequency_hz": 234.46,
+              "midi": 58,
+              "note": "Bb3",
+              "level_db": -7.8
+            },
+            {
+              "frequency_hz": 236.56,
+              "midi": 58,
+              "note": "Bb3",
+              "level_db": -8.5
+            },
+            {
+              "frequency_hz": 247.95,
+              "midi": 59,
+              "note": "B3",
+              "level_db": -15.7
+            },
+            {
+              "frequency_hz": 252.77,
+              "midi": 59,
+              "note": "B3",
+              "level_db": -16.2
+            },
+            {
+              "frequency_hz": 262.8,
+              "midi": 60,
+              "note": "C4",
+              "level_db": -0.7
+            },
+            {
+              "frequency_hz": 295.1,
+              "midi": 62,
+              "note": "D4",
+              "level_db": -12.2
+            },
+            {
+              "frequency_hz": 330.2,
+              "midi": 64,
+              "note": "E4",
+              "level_db": -9.8
+            },
+            {
+              "frequency_hz": 373.66,
+              "midi": 66,
+              "note": "F#4",
+              "level_db": -15.6
+            },
+            {
+              "frequency_hz": 396.26,
+              "midi": 67,
+              "note": "G4",
+              "level_db": -12.9
+            },
+            {
+              "frequency_hz": 462.11,
+              "midi": 70,
+              "note": "Bb4",
+              "level_db": -16.6
+            },
+            {
+              "frequency_hz": 469.71,
+              "midi": 70,
+              "note": "Bb4",
+              "level_db": -10.8
+            },
+            {
+              "frequency_hz": 527.12,
+              "midi": 72,
+              "note": "C5",
+              "level_db": -7.3
+            },
+            {
+              "frequency_hz": 726.84,
+              "midi": 78,
+              "note": "F#5",
+              "level_db": -9.2
+            },
+            {
+              "frequency_hz": 791.54,
+              "midi": 79,
+              "note": "G5",
+              "level_db": -16.5
+            },
+            {
+              "frequency_hz": 1324.92,
+              "midi": 88,
+              "note": "E6",
+              "level_db": -10.5
+            }
+          ]
+        }
+      },
+      "bass_reference": null
+    }
+  ]
+}

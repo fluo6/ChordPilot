@@ -1,3 +1,4 @@
+initializeChordDisplay();
 initializeStudy();
 elements.chooseBtn.addEventListener("click", chooseAudio);
 elements.simplifyChordsInput.addEventListener("change", () => {
@@ -7,6 +8,7 @@ elements.simplifyChordsInput.addEventListener("change", () => {
 elements.analyzeBtn.addEventListener("click", analyzeAudio);
 elements.openSessionBtn.addEventListener("click", openSession);
 elements.saveSessionBtn.addEventListener("click", saveSession);
+elements.saveSessionAsBtn.addEventListener("click", () => saveSession({ saveAs: true }));
 elements.homeNewProjectBtn.addEventListener("click", chooseAudio);
 elements.youtubeStartForm.addEventListener("submit", startFromYoutubeLink);
 elements.homeOpenSessionBtn.addEventListener("click", openSession);
@@ -51,12 +53,12 @@ elements.metronomeEnabledInput.addEventListener("change", () => setMetronomeEnab
 elements.metronomeVolumeInput.addEventListener("input", () => setMetronomeVolume(elements.metronomeVolumeInput.value));
 elements.audioPlayer.addEventListener("timeupdate", () => {
   updateActiveBarFromPlayback();
-  syncStemTimes();
+  syncStemTimes({ isSeek: false });
   updatePlayhead();
 });
 elements.audioPlayer.addEventListener("seeked", () => {
   updateActiveBarFromPlayback();
-  syncStemTimes();
+  syncStemTimes({ isSeek: true });
   updatePlayhead();
   resetMetronomeSchedule();
 });
@@ -128,20 +130,41 @@ elements.arrangementKeyInput.addEventListener("change", () => {
 });
 elements.tuningReferenceInput.addEventListener("input", () => setTuningReferenceHz(elements.tuningReferenceInput.value));
 elements.tuningResetBtn.addEventListener("click", () => setTuningReferenceHz(440));
-elements.chordTimingInput.addEventListener("change", updateChordTimingControlState);
+elements.analysisPresetInput.addEventListener("change", () => applyAnalysisPreset(elements.analysisPresetInput.value));
+elements.chordTimingInput.addEventListener("change", () => {
+  updateChordTimingControlState();
+  updateAnalysisPresetState();
+});
+[elements.chordGridInput, elements.chordStabilityInput, elements.tailReductionInput,
+  elements.tailHalfLifeInput, elements.overtoneWeightingInput].forEach((input) => {
+  input.addEventListener("input", updateAnalysisPresetState);
+});
+updateAnalysisPresetState();
 elements.chartRendererInput.addEventListener("change", () => {
-  state.chartRenderer = elements.chartRendererInput.value || "table";
+  state.chartRenderer = elements.chartRendererInput.value || "ireal";
   renderChartPreview();
 });
 
 elements.detailSectionInput.addEventListener("input", () => updateSelectedBarFromDetail("section", elements.detailSectionInput.value));
 elements.detailChordInput.addEventListener("input", () => updateSelectedBarFromDetail("chord", elements.detailChordInput.value));
+elements.detailChordEditBtn.addEventListener("click", () => setDetailChordEditing(true));
+elements.detailKeySignatureInput.addEventListener("change", () => {
+  state.notationUseKeySignature = elements.detailKeySignatureInput.checked;
+  updateDetailPane();
+  if (state.chartRenderer === "bass") renderChartPreview();
+});
+elements.detailChordInput.addEventListener("blur", () => setDetailChordEditing(false));
+elements.detailChordInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); elements.detailChordInput.blur(); }
+});
 elements.detailStartInput.addEventListener("input", () => updateSelectedBarFromDetail("start", elements.detailStartInput.value));
 elements.detailRepeatStartInput.addEventListener("change", () => updateSelectedBarFromDetail("repeat_start", elements.detailRepeatStartInput.checked));
 elements.detailRepeatEndInput.addEventListener("input", () => updateSelectedBarFromDetail("repeat_end", elements.detailRepeatEndInput.value));
 elements.detailLyricsInput.addEventListener("input", () => updateSelectedBarFromDetail("lyrics", elements.detailLyricsInput.value));
 elements.detailNotesInput.addEventListener("input", () => updateSelectedBarFromDetail("notes", elements.detailNotesInput.value));
 elements.timelineZoomInput.addEventListener("input", () => setTimelineZoom(elements.timelineZoomInput.value));
+elements.waveformGainInput.addEventListener('change', () => setWaveformView('gain', elements.waveformGainInput.value));
+elements.trackHeightZoomInput.addEventListener('change', () => setWaveformView('heightZoom', elements.trackHeightZoomInput.value));
 elements.timelineFollowInput.addEventListener("change", () => setTimelineFollow(elements.timelineFollowInput.checked));
 elements.zoomOutBtn.addEventListener("click", () => setTimelineZoom(state.timelineZoom - 0.5));
 elements.zoomInBtn.addEventListener("click", () => setTimelineZoom(state.timelineZoom + 0.5));
@@ -150,6 +173,7 @@ elements.collapseToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSection(button));
 });
 
+setupDetailSections();
 loadRecentSessions();
 setupTooltips();
 applyMasterVolume();

@@ -1,0 +1,274 @@
+{
+  "title": "Overjoyed — opening transcription reference",
+  "source_url": "https://www.youtube.com/watch?v=SiC6zQBONUM",
+  "reference_kind": "manually checked video chart; not an authoritative transcription",
+  "highlight_resolution_seconds": 0.1,
+  "timing_note": "First highlight is late: first audio bar estimated at 0.75s; other boundaries use manual highlight clicks. Two-chord bars assume half-bar placement; evaluate interior windows and treat edge times as approximate.",
+  "settings": {
+    "known_key": "Eb",
+    "tail_reduction": 0.2,
+    "tail_half_life": 0.5,
+    "overtone_weighting": 0,
+    "chord_timing": "auto",
+    "chord_grid": "half_beat",
+    "chord_stability": "sustained"
+  },
+  "bars": [
+    {
+      "number": 1,
+      "start": 0.75,
+      "end": 3.7,
+      "highlight_start": 1.5,
+      "chords": [
+        "Db6",
+        "C7"
+      ]
+    },
+    {
+      "number": 2,
+      "start": 3.7,
+      "end": 6.5,
+      "highlight_start": 3.7,
+      "chords": [
+        "Bmaj7",
+        "C7"
+      ]
+    },
+    {
+      "number": 3,
+      "start": 6.5,
+      "end": 9.4,
+      "highlight_start": 6.5,
+      "chords": [
+        "Db6",
+        "C7"
+      ]
+    },
+    {
+      "number": 4,
+      "start": 9.4,
+      "end": 12.3,
+      "highlight_start": 9.4,
+      "chords": [
+        "Bmaj7",
+        "Bb7"
+      ]
+    },
+    {
+      "number": 5,
+      "start": 12.3,
+      "end": 15.3,
+      "highlight_start": 12.3,
+      "chords": [
+        "Ebmaj7"
+      ]
+    },
+    {
+      "number": 6,
+      "start": 15.3,
+      "end": 18.2,
+      "highlight_start": 15.3,
+      "chords": [
+        "Cm7"
+      ]
+    },
+    {
+      "number": 7,
+      "start": 18.2,
+      "end": 21.1,
+      "highlight_start": 18.2,
+      "chords": [
+        "Fm7"
+      ]
+    },
+    {
+      "number": 8,
+      "start": 21.1,
+      "end": 24.1,
+      "highlight_start": 21.1,
+      "chords": [
+        "Bb7"
+      ]
+    },
+    {
+      "number": 9,
+      "start": 24.1,
+      "end": 26.8,
+      "highlight_start": 24.1,
+      "chords": [
+        "Ebmaj7"
+      ]
+    },
+    {
+      "number": 10,
+      "start": 26.8,
+      "end": 29.7,
+      "highlight_start": 26.8,
+      "chords": [
+        "Cm7"
+      ]
+    },
+    {
+      "number": 11,
+      "start": 29.7,
+      "end": 32.8,
+      "highlight_start": 29.7,
+      "chords": [
+        "F/A"
+      ]
+    },
+    {
+      "number": 12,
+      "start": 32.8,
+      "end": 35.6,
+      "highlight_start": 32.8,
+      "chords": [
+        "G/B"
+      ]
+    },
+    {
+      "number": 13,
+      "start": 35.6,
+      "end": 38.5,
+      "highlight_start": 35.6,
+      "chords": [
+        "Cmaj7"
+      ]
+    },
+    {
+      "number": 14,
+      "start": 38.5,
+      "end": 41.4,
+      "highlight_start": 38.5,
+      "chords": [
+        "G/B"
+      ]
+    },
+    {
+      "number": 15,
+      "start": 41.4,
+      "end": 44.3,
+      "highlight_start": 41.4,
+      "chords": [
+        "Cm7",
+        "F7"
+      ]
+    },
+    {
+      "number": 16,
+      "start": 44.3,
+      "end": 47.1,
+      "highlight_start": 44.3,
+      "chords": [
+        "Bb7"
+      ]
+    }
+  ],
+  "windows": [
+    {
+      "start": 1.0,
+      "end": 1.975,
+      "chord": "Db6"
+    },
+    {
+      "start": 2.475,
+      "end": 3.45,
+      "chord": "C7"
+    },
+    {
+      "start": 3.95,
+      "end": 4.85,
+      "chord": "Bmaj7"
+    },
+    {
+      "start": 5.35,
+      "end": 6.25,
+      "chord": "C7"
+    },
+    {
+      "start": 6.75,
+      "end": 7.7,
+      "chord": "Db6"
+    },
+    {
+      "start": 8.2,
+      "end": 9.15,
+      "chord": "C7"
+    },
+    {
+      "start": 9.65,
+      "end": 10.600000000000001,
+      "chord": "Bmaj7"
+    },
+    {
+      "start": 11.100000000000001,
+      "end": 12.05,
+      "chord": "Bb7"
+    },
+    {
+      "start": 12.55,
+      "end": 15.05,
+      "chord": "Ebmaj7"
+    },
+    {
+      "start": 15.55,
+      "end": 17.95,
+      "chord": "Cm7"
+    },
+    {
+      "start": 18.45,
+      "end": 20.85,
+      "chord": "Fm7"
+    },
+    {
+      "start": 21.35,
+      "end": 23.85,
+      "chord": "Bb7"
+    },
+    {
+      "start": 24.35,
+      "end": 26.55,
+      "chord": "Ebmaj7"
+    },
+    {
+      "start": 27.05,
+      "end": 29.45,
+      "chord": "Cm7"
+    },
+    {
+      "start": 29.95,
+      "end": 32.55,
+      "chord": "F/A"
+    },
+    {
+      "start": 33.05,
+      "end": 35.35,
+      "chord": "G/B"
+    },
+    {
+      "start": 35.85,
+      "end": 38.25,
+      "chord": "Cmaj7"
+    },
+    {
+      "start": 38.75,
+      "end": 41.15,
+      "chord": "G/B"
+    },
+    {
+      "start": 41.65,
+      "end": 42.599999999999994,
+      "chord": "Cm7"
+    },
+    {
+      "start": 43.099999999999994,
+      "end": 44.05,
+      "chord": "F7"
+    },
+    {
+      "start": 44.55,
+      "end": 46.85,
+      "chord": "Bb7"
+    }
+  ]
+}

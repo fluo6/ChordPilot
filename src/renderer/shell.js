@@ -201,6 +201,14 @@ function appendLog(message) {
     return;
   }
   updateAnalysisProgressMessage(message);
+  if (state.loadingCount > 0 && String(message).startsWith("youtube")) {
+    const label = String(message).replace(/^youtube(?: setup)?:\s*/, "");
+    elements.loadingText.textContent = label;
+    if (elements.youtubeSourceHint) elements.youtubeSourceHint.textContent = label;
+  }
+  if (String(message).trim().startsWith("analysis: still running")) {
+    return;
+  }
   const row = document.createElement("div");
   row.className = "log-line";
   const time = new Date().toLocaleTimeString([], {
@@ -657,10 +665,52 @@ function syncMetaToState() {
   updateAudioPreviewState();
 }
 
+const ANALYSIS_PRESETS = {
+  general: {
+    description: "General starting point. Keeps brief changes; no sustain-tail subtraction.",
+    options: { chord_timing: "auto", chord_grid: "beat", chord_stability: "detailed", tail_reduction: 0, tail_half_life: .5, overtone_weighting: .5 }
+  },
+  clean_guitar: {
+    description: "Clean guitar and arpeggios: consolidates plucked voicings with gentle tail reduction. Best with the Other stem.",
+    options: { chord_timing: "auto", chord_grid: "beat", chord_stability: "sustained", tail_reduction: .2, tail_half_life: .5, overtone_weighting: 0 }
+  },
+  piano: {
+    description: "Sustained piano and keys: a finer grid with gentle tail reduction. Adjust if pedal notes are part of the harmony.",
+    options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "sustained", tail_reduction: .2, tail_half_life: .5, overtone_weighting: 0 }
+  },
+  reverb_fx: {
+    description: "Reverb and FX: longer estimated tails, moderate consolidation and overtone weighting. An experimental starting point.",
+    options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "balanced", tail_reduction: .2, tail_half_life: .8, overtone_weighting: .5 }
+  },
+  fast_changes: {
+    description: "Fast chord changes: a finer grid without consolidation or sustain-tail subtraction.",
+    options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "detailed", tail_reduction: 0, tail_half_life: .5, overtone_weighting: .5 }
+  }
+};
+
+function applyAnalysisPreset(name) {
+  const preset = ANALYSIS_PRESETS[name];
+  if (preset) applyAnalysisOptions({ ...collectAnalysisOptions(), ...preset.options });
+}
+
+function updateAnalysisPresetState() {
+  if (!elements.analysisPresetInput) return;
+  const options = collectAnalysisOptions();
+  const match = Object.entries(ANALYSIS_PRESETS).find(([, preset]) =>
+    Object.entries(preset.options).every(([key, value]) => options[key] === value));
+  elements.analysisPresetInput.value = match?.[0] || "custom";
+  if (elements.analysisPresetHint) elements.analysisPresetHint.textContent = match?.[1].description ||
+    "Custom settings. Choose a preset to fill the timing, sustain and overtone controls.";
+}
+
 function collectAnalysisOptions() {
   return {
     chord_timing: elements.chordTimingInput.value || "auto",
     chord_grid: elements.chordGridInput.value || "beat",
+    chord_stability: elements.chordStabilityInput?.value || "detailed",
+    tail_reduction: Math.max(0, Math.min(100, Number(elements.tailReductionInput?.value) || 0)) / 100,
+    tail_half_life: Number(elements.tailHalfLifeInput?.value) || .5,
+    overtone_weighting: Math.max(0, Math.min(100, Number(elements.overtoneWeightingInput?.value ?? 50) || 0)) / 100,
     known_key: elements.analysisKeyInput.value || "",
     min_bpm: Number(elements.minBpmInput.value) || 60,
     max_bpm: Number(elements.maxBpmInput.value) || 190,
@@ -684,6 +734,10 @@ function collectAnalysisOptions() {
 function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
   elements.chordTimingInput.value = options.chord_timing || (legacyDefaults ? "legacy" : "auto");
   elements.chordGridInput.value = options.chord_grid || "beat";
+  if (elements.chordStabilityInput) elements.chordStabilityInput.value = options.chord_stability || "detailed";
+  if (elements.tailReductionInput) elements.tailReductionInput.value = (options.tail_reduction ?? 0) * 100;
+  if (elements.tailHalfLifeInput) elements.tailHalfLifeInput.value = options.tail_half_life ?? .5;
+  if (elements.overtoneWeightingInput) elements.overtoneWeightingInput.value = (options.overtone_weighting ?? (legacyDefaults ? 0 : .5)) * 100;
   updateChordTimingControlState();
   elements.analysisKeyInput.value = options.known_key || "";
   elements.minBpmInput.value = options.min_bpm ?? 60;
@@ -702,10 +756,15 @@ function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
   elements.lyricsSourceInput.value = options.lyrics_source || "auto";
   elements.lyricsModelInput.value = options.lyrics_model || "tiny";
   elements.lyricsLanguageInput.value = options.lyrics_language || "";
+  updateAnalysisPresetState();
 }
 
 function updateChordTimingControlState() {
   if (elements.chordGridInput) elements.chordGridInput.disabled = elements.chordTimingInput?.value === "legacy";
+  if (elements.chordStabilityInput) elements.chordStabilityInput.disabled = elements.chordTimingInput?.value !== "auto";
+  if (elements.tailReductionInput) elements.tailReductionInput.disabled = elements.chordTimingInput?.value === "legacy";
+  if (elements.tailHalfLifeInput) elements.tailHalfLifeInput.disabled = elements.chordTimingInput?.value === "legacy";
+  if (elements.overtoneWeightingInput) elements.overtoneWeightingInput.disabled = elements.chordTimingInput?.value === "legacy";
 }
 
 function applyMasterVolume() {
@@ -777,6 +836,7 @@ function updateButtons() {
     button.disabled = !chartReady;
   });
   elements.saveSessionBtn.disabled = !state.audio && !chartReady;
+  elements.saveSessionAsBtn.disabled = !state.audio && !chartReady;
 }
 
 function renumberBars() {

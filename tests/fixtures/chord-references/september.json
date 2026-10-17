@@ -1,0 +1,334 @@
+{
+  "title": "September \u2014 Vincent Lafontaine bass and chord transcription reference",
+  "source_url": "https://www.youtube.com/watch?v=HOGev7Ld6qA",
+  "reference_kind": "Manual readings of a 480p static-page transcription; selected sustained bass interiors and chord windows, not a complete verified performance transcription.",
+  "timing_note": "Concert key A, score quarter note=125, 4/4. Audio analysis estimates126BPM. Page turns do not provide individual note onsets. Bass sounds one octave below written pitch. Narrow chord windows test local evidence, not full-phrase harmonic function.",
+  "settings": {
+    "known_key": "A",
+    "tail_reduction": 0,
+    "overtone_weighting": 0,
+    "chord_stability": "balanced"
+  },
+  "bass_points": [
+    {
+      "time": 13.5,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 14.4,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 15.35,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 16.6,
+      "midi": 55,
+      "kind": "interior"
+    },
+    {
+      "time": 16.8,
+      "midi": 57,
+      "kind": "interior"
+    },
+    {
+      "time": 17.4,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 18.4,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 19.9,
+      "midi": 38,
+      "kind": "interior"
+    },
+    {
+      "time": 20.2,
+      "midi": 38,
+      "kind": "interior"
+    },
+    {
+      "time": 20.66,
+      "midi": 37,
+      "kind": "interior"
+    },
+    {
+      "time": 21.1,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 21.6,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 22.1,
+      "midi": 32,
+      "kind": "interior"
+    },
+    {
+      "time": 22.35,
+      "midi": 28,
+      "kind": "interior"
+    },
+    {
+      "time": 22.85,
+      "midi": 30,
+      "kind": "interior"
+    },
+    {
+      "time": 23.75,
+      "midi": 38,
+      "kind": "interior"
+    },
+    {
+      "time": 24.52,
+      "midi": 37,
+      "kind": "interior"
+    },
+    {
+      "time": 24.98,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 25.5,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 25.67,
+      "midi": 37,
+      "kind": "interior"
+    },
+    {
+      "time": 25.95,
+      "midi": 32,
+      "kind": "interior"
+    },
+    {
+      "time": 26.22,
+      "midi": 28,
+      "kind": "interior"
+    },
+    {
+      "time": 26.7,
+      "midi": 30,
+      "kind": "interior"
+    },
+    {
+      "time": 27.15,
+      "midi": 33,
+      "kind": "interior"
+    },
+    {
+      "time": 27.4,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 50.75,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 51.2,
+      "midi": 42,
+      "kind": "interior"
+    },
+    {
+      "time": 51.45,
+      "midi": 40,
+      "kind": "interior"
+    },
+    {
+      "time": 52.2,
+      "midi": 35,
+      "kind": "interior"
+    },
+    {
+      "time": 52.62,
+      "midi": 37,
+      "kind": "interior"
+    },
+    {
+      "time": 52.92,
+      "midi": 32,
+      "kind": "interior"
+    },
+    {
+      "time": 53.2,
+      "midi": 28,
+      "kind": "interior"
+    },
+    {
+      "time": 53.65,
+      "midi": 30,
+      "kind": "interior"
+    },
+    {
+      "time": 21.82,
+      "midi": 37,
+      "kind": "score_guide",
+      "note": "Written C#2; audio has an ambiguous flat/bending attack near C2. Report separately; do not force a sharp pitch."
+    }
+  ],
+  "bass_rejections": [
+    {
+      "start": 0,
+      "end": 6.5,
+      "midis": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67
+      ],
+      "kind": "bass_rest",
+      "note": "Written intro bass rests; quiet keyboard leakage must not become bass attacks."
+    },
+    {
+      "start": 21.9,
+      "end": 22.0,
+      "midis": [
+        34
+      ],
+      "kind": "slide_fragment",
+      "note": "Intermediate Bb1 during the C#/C to G# motion, not a separately notated bass attack."
+    },
+    {
+      "start": 113.55,
+      "end": 113.62,
+      "midis": [
+        34
+      ],
+      "kind": "slide_fragment",
+      "note": "Short intermediate Bb1 between neighbouring moving pitches; evaluate as a slide fragment."
+    }
+  ],
+  "unscored_sections": [
+    {
+      "start": 6.8,
+      "end": 8.1,
+      "note": "Written high-register bass pickup is not recovered confidently from the htdemucs Bass stem. Timing/attribution is uncertain in the static-page video; it is excluded from sampled-interior accuracy, not credited as correct."
+    }
+  ],
+  "windows": [
+    {
+      "start": 0.15,
+      "end": 0.45,
+      "chord": "Dmaj7"
+    },
+    {
+      "start": 0.95,
+      "end": 1.12,
+      "chord": "C#m7"
+    },
+    {
+      "start": 1.18,
+      "end": 1.4,
+      "chord": "Bm7"
+    },
+    {
+      "start": 1.49,
+      "end": 1.67,
+      "chord": "C#m7"
+    },
+    {
+      "start": 2.65,
+      "end": 3.25,
+      "chord": "F#m7"
+    },
+    {
+      "start": 19.85,
+      "end": 20.25,
+      "chord": "Dmaj7"
+    },
+    {
+      "start": 20.61,
+      "end": 20.71,
+      "chord": "C#m7"
+    },
+    {
+      "start": 21.06,
+      "end": 21.19,
+      "chord": "Bm7"
+    },
+    {
+      "start": 22.8,
+      "end": 23.0,
+      "chord": "F#m7"
+    },
+    {
+      "start": 23.7,
+      "end": 24.06,
+      "chord": "Dmaj7"
+    },
+    {
+      "start": 24.46,
+      "end": 24.58,
+      "chord": "C#m7"
+    },
+    {
+      "start": 24.91,
+      "end": 25.05,
+      "chord": "Bm7"
+    },
+    {
+      "start": 26.65,
+      "end": 26.8,
+      "chord": "F#m7"
+    }
+  ]
+}

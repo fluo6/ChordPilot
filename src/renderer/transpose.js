@@ -246,7 +246,7 @@ function transposeChordText(symbol, semitones) {
   if (!text || semitones === 0 || /^\s*(N\.?C\.?|\/)\s*$/i.test(text)) {
     return text;
   }
-  return text.replace(/(^|[\s(\[{/|,;])([A-Ga-g])([#b]?)(?=$|[\s)\]}|,;/:+0-9#b]|m|M|a|d|s)/g, (_match, prefix, root, accidental) => {
+  return text.replace(/(^|[\s(\[{/|,;])([A-Ga-g])([#b]?)(?=$|[\s)\]}|,;/:+0-9#bo°øΔ−]|m|M|a|d|s)/g, (_match, prefix, root, accidental) => {
     const transposed = transposePitchName(`${root.toUpperCase()}${accidental || ""}`, semitones);
     return `${prefix}${transposed}`;
   });

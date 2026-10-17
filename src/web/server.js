@@ -22,6 +22,18 @@ function positiveInteger(value, fallback, name, maximum = Number.MAX_SAFE_INTEGE
   return parsed;
 }
 
+function defaultPythonPath() {
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function defaultFfmpegPath() {
+  try {
+    const staticPath = require("ffmpeg-static");
+    if (staticPath && fs.existsSync(staticPath)) return staticPath;
+  } catch (_error) {}
+  return "ffmpeg";
+}
+
 function parseWebEnvironment(env = process.env) {
   const dataRoot = path.resolve(env.CHORDPILOT_DATA_ROOT || path.join(process.cwd(), ".chordpilot-data"));
   return {
@@ -34,8 +46,8 @@ function parseWebEnvironment(env = process.env) {
       DEFAULT_UPLOAD_LIMIT_BYTES,
       "CHORDPILOT_UPLOAD_LIMIT_BYTES"
     ),
-    pythonPath: String(env.CHORDPILOT_PYTHON || "python3"),
-    ffmpegPath: String(env.CHORDPILOT_FFMPEG || "ffmpeg"),
+    pythonPath: String(env.CHORDPILOT_PYTHON || defaultPythonPath()),
+    ffmpegPath: String(env.CHORDPILOT_FFMPEG || defaultFfmpegPath()),
     ytDlpPath: String(env.CHORDPILOT_YTDLP || "yt-dlp")
   };
 }

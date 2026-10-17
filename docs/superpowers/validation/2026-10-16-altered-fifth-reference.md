@@ -1,0 +1,5 @@
+# Virtual Insanity altered-fifth check
+
+The printed 9.0–10.5 s label is B♭7♯5. Current Local Study returns B♭7♭13, with B♭7♯5 second (raw scores 2.7972 versus 2.4805). The distinction is not merely enharmonic: ♯5 omits the perfect fifth F, while ♭13 retains it. The 1.5-second Other stem has an independently detected F4 at strength 0.152 alongside F♯4 at 0.188; its normalized F pitch class is 8.74%. That extra fifth gives B♭7♭13 more coverage and a smaller unexplained-note penalty.
+
+Shorter crops reveal why a single scoring tweak is risky. At 9.0–9.5 s B♭7♯5 wins narrowly (2.9589 versus 2.9575), but at 9.5–10.0 s F4 reaches strength 0.295 and B♭7♭13 wins. At 10.0–10.5 s F♯4 is stronger (0.383), F4 is 0.057, yet B♭7♭13 still wins because its fifth remains supported. The printed highlight timing is approximate and the window may mix melody, tail or changing voicing. Without independently checked note-level timing, suppressing F across all altered dominants could delete a real natural fifth elsewhere. The two formulas and their candidates remain distinct; VOC-02 stays open for note/onset annotation and cross-song validation.

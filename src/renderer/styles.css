@@ -1,3 +1,103 @@
+@font-face {
+  font-family: "MuseJazz Text";
+  src: url("./fonts/MuseJazzText.otf") format("opentype");
+  font-display: swap;
+}
+
+.study-spectrum {
+  background: #10151c;
+  border: 1px solid #2c3542;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 12px 0;
+}
+
+.study-spectrum > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.study-spectrum-plot svg {
+  display: block;
+  width: 100%;
+  min-width: 500px;
+}
+
+.study-spectrum-plot { overflow-x: auto; }
+.bass-view { border: 1px solid #2c3542; border-radius: 6px; background: #10151c; padding: 8px; min-width: 0; }
+.bass-view-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bass-view-heading h3 { margin: 0; font-size: 12px; }
+.bass-view-heading select { width: auto; font-size: 10px; padding: 2px 4px; }
+.bass-view-current { color: #a6b9cb; font-size: 10px; margin: 6px 0; }
+.bass-fretboard-scroll, .bass-score-scroll { overflow-x: auto; min-width: 0; }
+.bass-fretboard-scroll { border-radius: 4px; background: #191a1b; }
+.bass-fretboard-scroll > svg { display: block; width: 600px; height: auto; }
+.bass-fret { stroke: #a9aaa7; stroke-width: 3; }
+.bass-nut { fill: #ddd9ca; }
+.bass-string-shadow { stroke: #110a07; opacity: .8; }
+.bass-string { stroke: #c6c7c1; }
+.bass-inlay { fill: #dcd5c3; opacity: .65; }
+.bass-string-name, .bass-fret-number { fill: #b9c0c8; font-size: 10px; }
+.bass-note-marker circle { fill: #e9b851; stroke: #161a20; stroke-width: 1.5; }
+.bass-marker-fret { fill: #10151c; font-size: 10px; font-weight: 600; }
+.bass-marker-name { fill: #ffdc88; font-size: 10px; paint-order: stroke; stroke: #20140e; stroke-width: 3; stroke-linejoin: round; }
+.bass-note-marker.bass-current circle { fill: #35e1c0; stroke: #d1fff6; stroke-width: 2; }
+.bass-note-marker.bass-current .bass-marker-name { fill: #7affdf; }
+.bass-score-scroll { margin-top: 6px; }
+.bass-score-scroll > svg { display: block; margin-inline: auto; }
+.bass-tab-note text { fill: #d8e1ec; }
+.bass-beat-number { fill: #8d9caf; font: 12px Arial, sans-serif; }
+.bass-tab-note.bass-current text { fill: #35e1c0; }
+.bass-score-scroll [data-bass-segment].bass-current path { fill: #35e1c0 !important; stroke: #35e1c0 !important; }
+.bass-range-warning { color: #f6c65b; font-size: 10px; }
+.bass-view .study-muted { font-size: 10px; margin: 6px 0 0; }
+.spectrum-grid { stroke: #283342; stroke-width: 1; }
+.spectrum-axis { fill: #99a5b5; font-size: calc(8px * var(--spectrum-text-scale, 1)); }
+.spectrum-curve { fill: none; stroke: #35d9bb; stroke-width: 1; }
+.spectrum-current { stroke: #38bba5; stroke-width: .85; stroke-dasharray: 4 2; }
+.spectrum-stabilized { fill: none; stroke: #f6c65b; stroke-width: 1; }
+.spectrum-tail-reduced { fill: none; stroke: #ac88d0; stroke-width: .85; }
+.spectrum-overtone-weighted { fill: none; stroke: #6994d4; stroke-width: .85; }
+.spectrum-tail-reduced.spectrum-final { stroke: #c59bff; stroke-width: 1; }
+.spectrum-overtone-weighted.spectrum-final { stroke: #79aaff; stroke-width: 1; }
+.spectrum-comparison-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; }
+.spectrum-comparison-legend .current { color: #38bba5; }
+.spectrum-comparison-legend .stabilized { color: #f6c65b; }
+.spectrum-comparison-legend .tail-reduced { color: #ac88d0; }
+.spectrum-comparison-legend .overtone-weighted { color: #6994d4; }
+.spectrum-comparison-legend .spectrum-final { margin-left: auto; }
+.spectrum-comparison-legend .current.spectrum-final { color: #35d9bb; }
+.spectrum-comparison-legend .tail-reduced.spectrum-final { color: #c59bff; }
+.spectrum-comparison-legend .overtone-weighted.spectrum-final { color: #79aaff; }
+.spectrum-comparison-legend button { background: transparent; border: 0; border-radius: 2px; padding: 0; min-height: 0; font: inherit; cursor: pointer; }
+.spectrum-comparison-legend button:hover { filter: brightness(1.25); }
+.spectrum-comparison-legend button:focus-visible { outline: 1px solid currentColor; outline-offset: 3px; }
+.spectrum-comparison-legend button[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.spectrum-comparison-legend button::before { content: ""; display: inline-block; width: 12px; border-top: 1px solid currentColor; margin-right: 4px; vertical-align: middle; }
+.spectrum-comparison-legend .current::before { border-top-style: dashed; }
+.spectrum-peak { fill: #f6c65b; stroke: #10151c; stroke-width: 1; }
+.spectrum-note { fill: #f6c65b; font-size: calc(9px * var(--spectrum-text-scale, 1)); font-weight: 500; }
+.spectrum-guide { stroke: #f6c65b; stroke-width: .7; opacity: .3; }
+.study-spectrum-peaks { color: #cbd5e1; font-size: 11px; line-height: 1.6; }
+.study-scoring-evidence { border-top: 1px solid #2c3542; margin-top: 8px; padding-top: 7px; }
+.study-scoring-evidence h4 { margin: 0 0 3px; font-size: 11px; font-weight: 600; }
+.study-scoring-evidence p { color: #a6b9cb; font-size: 10px; margin: 0 0 3px; }
+.study-scoring-evidence svg { display: block; width: 360px; max-width: 100%; margin-inline: auto; }
+.scoring-accompaniment { fill: #38bba5; }
+.scoring-final { fill: #f6c65b; }
+.scoring-note { fill: #b7c3d0; font-size: 9px; }
+
+.detail-spectrum {
+  background: #10151c;
+  border: 1px solid #2c3542;
+  border-radius: 6px;
+  padding: 8px;
+}
+.detail-spectrum h3 { margin: 0 0 6px; font-size: 12px; }
+.detail-spectrum svg { display: block; width: 100%; }
+.detail-spectrum p { margin: 6px 0 0; font-size: 10px; line-height: 1.5; }
+
 :root {
   color-scheme: dark;
   font-family: "Segoe UI", Arial, sans-serif;
@@ -690,6 +790,30 @@ input[type="checkbox"] {
   margin: 0 0 8px;
 }
 
+.help-analysis { scroll-margin-top: 12px; min-width: 0; }
+.help-analysis p, .help-analysis li { font-size: 12px; line-height: 1.65; }
+.help-analysis details { border-top: 1px solid #303947; padding: 12px 0; }
+.help-analysis summary { color: #eef3f7; font-size: 13px; font-weight: 600; cursor: pointer; }
+.help-analysis details:last-child { padding-bottom: 0; }
+.help-analysis .help-analysis-flow {
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 0; margin: 12px 0; list-style: none;
+}
+.help-analysis-flow li { flex: 1 1 150px; background: #172330; border: 1px solid #365269; border-radius: 6px; padding: 10px; }
+.help-analysis-flow li strong, .help-analysis-flow li span { display: block; }
+.help-analysis-flow li strong::before { content: "→ "; color: #35d9bb; }
+.help-analysis-flow li span { margin-top: 6px; color: #b9c4d2; }
+.help-formula { white-space: pre-wrap; overflow-wrap: anywhere; background: #090e14; border: 1px solid #303947; border-radius: 5px; padding: 12px; font-size: 12px; line-height: 1.7; }
+.help-evidence-pair { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+.help-evidence-pair > div { flex: 1 1 220px; }
+.help-current { color: #35d9bb; }
+.help-average, .help-proposal { color: #f6c65b; }
+.help-tail { color: #c59bff; }
+.help-proposal { display: inline-block; border: 1px solid #80672e; border-radius: 4px; margin-left: 6px; padding: 1px 5px; font-size: 10px; }
+.help-sustain-figure { margin: 16px 0; }
+.help-chart-scroll { overflow-x: auto; border-radius: 6px; }
+.help-sustain-figure img { display: block; width: 100%; min-width: 760px; height: auto; background: #fafbfc; }
+.help-sustain-figure figcaption { color: #aeb8c5; font-size: 11px; line-height: 1.5; margin-top: 8px; }
+
 .help-section ol {
   color: #b9c4d2;
   font-size: 11px;
@@ -867,6 +991,12 @@ input[type="checkbox"] {
 .study-chord { display: block; color: #91cfdf; font-size: 36px; }
 .study-result h3 { font-size: 13px; margin: 20px 0 8px; }
 .study-result p { font-size: 13px; line-height: 1.6; }
+.study-overlaps { margin: 14px 0; padding: 0 0 12px; border-bottom: 1px solid #303947; }
+.study-overlaps h3 { margin: 0 0 4px; }
+.study-overlaps p { margin: 0 0 8px; }
+.study-overlap-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.study-overlap-part { color: #d5e7f2; border-color: #435b6a; background: #1c2b35; font-family: "MuseJazz Text", "Segoe UI", sans-serif; font-size: 12px; }
+.study-overlap-part:hover { border-color: #91cfdf; background: #244050; }
 .study-candidates { display: flex; flex-wrap: wrap; gap: 8px; }
 .study-stale { color: #efcb8b; background: #382b19; padding: 8px; border-radius: 6px; }
 .study-result .piano-evidence { max-width: 500px; }
@@ -938,6 +1068,13 @@ input[type="checkbox"] {
   gap: 10px;
   padding: 4px 8px;
 }
+
+.chord-display-control { position: relative; }
+.chord-display-control > summary { cursor: pointer; padding: 4px 7px; list-style: none; border: 1px solid #394758; border-radius: 4px; }
+.chord-display-control[open] > summary { border-color: #5f819d; }
+.chord-display-options { position: absolute; top: calc(100% + 6px); right: 0; z-index: 1000; width: 260px; max-width: calc(100vw - 32px); padding: 12px; display: grid; gap: 10px; background: #151c24; border: 1px solid #46576b; border-radius: 5px; box-shadow: 0 8px 24px #0008; }
+.chord-display-options label { display: grid; gap: 4px; }
+.chord-display-options select { width: 100%; }
 
 .topbar-identity {
   align-items: center;
@@ -1289,6 +1426,17 @@ audio {
   min-width: 0;
   padding: 6px 7px 7px;
 }
+
+.analysis-preset-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysis-preset-row label { min-width: 220px; }
+.analysis-preset-row span { color: #99a5b5; font-size: 11px; }
 
 .option-group legend {
   color: #f6c65b;
@@ -1776,8 +1924,17 @@ body.resizing-detail-pane {
 }
 
 .waveform-lane {
-  min-height: 56px;
+  height: var(--waveform-track-height, 72px);
+  min-height: 64px;
+  grid-template-rows: minmax(0, 1fr) 6px;
 }
+.waveform-lane > .lane-label, .waveform-lane > .lane-body { grid-row: 1; min-height: 0; }
+.waveform-height-handle { grid-column: 1 / -1; grid-row: 2; cursor: ns-resize; background: #151e27; touch-action: none; position: relative; }
+.waveform-height-handle::after { content: ''; position: absolute; left: 48px; top: 2px; width: 22px; height: 2px; background: #627181; border-radius: 1px; }
+.waveform-height-handle:hover, .waveform-height-handle:focus-visible, .resizing-waveform-track .waveform-height-handle { background: #24564f; outline: none; }
+.waveform-view-controls { display: flex; gap: 8px; flex: 0 0 auto; }
+.waveform-view-controls label { display: flex; align-items: center; gap: 4px; font-size: 10px; white-space: nowrap; }
+.waveform-view-controls select { width: 58px; min-height: 20px; padding: 1px 3px; font-size: 10px; }
 
 .lane-label {
   align-items: stretch;
@@ -1942,7 +2099,7 @@ body.resizing-detail-pane {
   color: #e7f0ff;
   display: flex;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   height: 28px;
   justify-content: center;
   min-height: 0;
@@ -2344,12 +2501,12 @@ body.resizing-detail-pane {
 }
 
 .white-key.detected {
-  background-color: #8a929a;
+  background-color: color-mix(in srgb, #535e69 calc(var(--note-strength, 0) * var(--note-strength, 0) * 100%), #f1f3f5);
 }
 
 .black-key {
   background:
-    linear-gradient(180deg, rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.72)), rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.22))),
+    linear-gradient(180deg, rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.95)), rgba(53, 217, 187, calc(var(--note-strength, 0) * 0.4))),
     #11161d;
   border: 1px solid #05070a;
   border-radius: 0 0 3px 3px;
@@ -2368,7 +2525,7 @@ body.resizing-detail-pane {
   content: "";
   height: 5px;
   left: 50%;
-  opacity: max(0.35, var(--note-strength, 0));
+  opacity: max(0.15, var(--note-strength, 0));
   position: absolute;
   top: 5px;
   transform: translateX(-50%);
@@ -2387,6 +2544,20 @@ body.resizing-detail-pane {
   color: #6f7b8d;
   font-size: 9px;
 }
+
+.piano-focused .piano-key.detected:not(.bass-tone)::after { display: none; }
+.piano-focused .piano-key.bass-tone::after { display: block; background: #de9450; width: 6px; height: 6px; top: 5px; opacity: 1; }
+.piano-focused .piano-key.chord-tone { box-shadow: none; }
+.piano-focused .piano-key.support-highlight { box-shadow: inset 0 0 0 1px #f6c65b; }
+.piano-focused .white-key.detected:not(.chord-tone) {
+  background: color-mix(in srgb, #aeb8c5 calc(var(--note-strength, 0) * 100%), #e7edf4);
+}
+.piano-focused .black-key.detected:not(.chord-tone) {
+  background: color-mix(in srgb, #718092 calc(var(--note-strength, 0) * 100%), #11161d);
+}
+.piano-detail .piano-keys { min-width: 560px; height: 54px; }
+.piano-detail .white-key { height: 54px; font-size: 9px; }
+.piano-detail .black-key { height: 34px; font-size: 8px; }
 
 .chord-debug {
   background: #0f151d;
@@ -2449,6 +2620,114 @@ body.resizing-detail-pane {
 .detail-content {
   display: grid;
   gap: 6px;
+  align-content: start;
+}
+
+.detail-section { min-width: 0; border: 1px solid #313c4b; border-radius: 6px; background: #10151c; }
+.detail-section > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 5px 8px; font-size: 11px; color: #d8e1ec; }
+.detail-section > summary::-webkit-details-marker { display: none; }
+.detail-section > summary::before { content: '›'; width: 8px; color: #9aabba; }
+.detail-section[open] > summary::before { content: '⌄'; }
+.detail-section > summary strong { min-width: 0; }
+.detail-drag-handle { margin-left: auto; cursor: grab; color: #9aabba; border: 0; background: transparent; padding: 0 3px; font-size: 16px; line-height: 18px; }
+.detail-drag-handle:active { cursor: grabbing; }
+.detail-section-content { min-width: 0; display: grid; gap: 6px; padding: 0 8px 8px; }
+.detail-section:not([open]) > .detail-section-content { display: none; }
+.detail-section.drop-before { border-top: 3px solid #35d9bb; }
+.detail-section.drop-after { border-bottom: 3px solid #35d9bb; }
+.detail-section.detail-dragging { opacity: .5; }
+.detail-section-content > .bass-view, .detail-section-content > .detail-spectrum { border: 0; padding: 0; }
+.detail-section[data-section="bass"] h3, .detail-section[data-section="guitar"] h3, .detail-section[data-section="spectrum"] h3,
+.detail-section[data-section="chord"] .detail-chord-caption { display: none; }
+.detail-section-content .detail-key-signature-control { margin-left: auto; }
+.detail-section-content > label { display: grid; gap: 3px; }
+
+.detail-pane .detail-chord-field {
+  background: linear-gradient(135deg, #151c26, #0c1118);
+  border: 1px solid #313c4b;
+  border-radius: 6px;
+  color: #aeb8c5;
+  padding: 8px 8px 8px 16px;
+  container-type: inline-size;
+  height: 200px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+}
+
+.detail-chord-overview { display: grid; grid-template-columns: minmax(75px, .9fr) minmax(0, 1fr); gap: 8px; align-items: center; min-height: 0; overflow: auto; }
+.detail-chord-notation { min-width: 0; min-height: 0; height: 100%; }
+.detail-chord-notation svg { display: block; width: 100% !important; height: 100% !important; max-width: 100%; }
+.chord-notation-empty { display: block; font-size: 10px; color: #8693a5; line-height: 1.5; padding: 12px 0; }
+.detail-chord-reading { min-width: 0; }
+.chord-voicing { color: #a7c2cb; font-size: 11px; line-height: 1.4; font-weight: 400; margin-top: 5px; }
+.detail-chord-reading .chord-voicing { text-align: center; }
+.detail-chord-reading .detail-chord-row { flex-wrap: wrap; justify-content: center; }
+.detail-chord-reading .detail-chord-row .detail-chord-display,
+.detail-chord-reading #detailChordInput { flex: 1 0 100%; }
+.detail-chord-reading .detail-chord-display { font-size: 36px; }
+.detail-chord-alternatives { display: grid; gap: 3px; margin-top: 9px; }
+.detail-chord-alternatives button { background: transparent; border: 0; color: #99a7b9; font-family: "MuseJazz Text", "Segoe UI", sans-serif; font-size: 13px; font-weight: 400; padding: 1px 3px; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.detail-chord-alternatives button:hover { color: #f6c65b; background: #202b39; }
+@container (max-width: 180px) {
+  .detail-chord-overview { grid-template-columns: 1fr; grid-template-rows: 110px auto; gap: 4px; }
+  .detail-chord-notation { width: 100%; max-width: 150px; margin: 0 auto; }
+}
+
+.detail-chord-caption {
+  display: block;
+  font-size: 11px;
+}
+
+.detail-chord-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.detail-pane .detail-key-signature-control { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 10px; }
+.detail-pane .detail-key-signature-control input { flex: none; width: auto; margin: 0; padding: 0; }
+
+.detail-chord-display {
+  color: #f8fafc;
+  font-family: "MuseJazz Text", "Segoe UI", sans-serif;
+  font-size: 32px;
+  line-height: 1.3;
+  min-height: 42px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-chord-quality {
+  display: inline-block;
+  font-size: 0.62em;
+  margin-left: 0.03em;
+  vertical-align: 0.34em;
+}
+
+.detail-chord-bass {
+  font-size: 0.72em;
+}
+
+.detail-chord-confidence {
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 0;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.detail-chord-row { display: flex; align-items: center; gap: 6px; min-height: 42px; }
+.detail-chord-row .detail-chord-display { flex: 1; min-width: 0; text-align: center; }
+.detail-chord-row [hidden] { display: none; }
+.detail-chord-edit { display: flex; padding: 4px; min-height: 26px; flex-shrink: 0; }
+
+.detail-pane .detail-chord-field input {
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
 }
 
 .detail-alternatives {
@@ -2579,12 +2858,34 @@ body.resizing-detail-pane {
 
 .chart-reason-chord {
   color: #ffffff;
+  font-family: "MuseJazz Text", "Segoe UI", sans-serif;
   font-size: 22px;
+  font-weight: 400;
   letter-spacing: 0;
   line-height: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chord-region,
+#timelineChordText,
+.table-chord-input,
+.bar-chord-event,
+.chart-reason-options .chord-symbol,
+.suggestion-option span {
+  font-family: "MuseJazz Text", "Segoe UI", sans-serif;
+  font-weight: 400;
+}
+
+#barsTable .table-chord-input {
+  font-size: 15px;
+}
+
+.bar-chord-event,
+.chart-reason-options .chord-symbol,
+.suggestion-option span {
+  font-size: 13px;
 }
 
 .chart-reason-options {
@@ -2785,32 +3086,36 @@ table {
 }
 
 .ireal-chart {
-  background: #f5ecd8;
-  border: 1px solid #d8c9ad;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  background: #fff;
+  border: 1px solid #e2e2e2;
+  border-radius: 0;
+  box-shadow: 0 2px 12px #0002;
   color: #050505;
+  color-scheme: light;
   display: grid;
-  font-family: "Segoe Print", "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
-  gap: 0;
-  max-width: 980px;
-  padding: 14px 22px 16px;
+  font-family: "MuseJazz Text", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  gap: 6px;
+  max-width: 900px;
+  min-width: 580px;
+  padding: 20px 24px 24px;
 }
 
 .ireal-header {
-  border-bottom: 3px solid #050505;
-  font-family: "Segoe UI", Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.2;
-  margin-bottom: 8px;
-  padding: 0 0 7px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.3;
+  margin-bottom: 12px;
+  text-align: center;
 }
+
+.ireal-header strong { font-size: 24px; font-weight: 400; }
+.ireal-header span { color: #555; font-family: "Segoe UI", sans-serif; font-size: 11px; }
 
 .ireal-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(118px, 1fr));
-  min-height: 46px;
+  grid-template-columns: repeat(4, minmax(132px, 1fr));
+  min-height: 64px;
 }
 
 .ireal-measure {
@@ -2822,11 +3127,13 @@ table {
   display: grid;
   font-family: inherit;
   grid-template-columns: 9px minmax(0, 1fr) auto 9px;
-  min-height: 46px;
+  min-height: 64px;
   padding: 0 2px;
   position: relative;
-  text-align: center;
+  text-align: left;
 }
+
+.ireal-measure:focus-visible { outline: 2px solid #31817b; outline-offset: -2px; }
 
 .ireal-measure:hover {
   background: rgba(5, 5, 5, 0.045);
@@ -2841,17 +3148,22 @@ table {
 }
 
 .ireal-measure strong {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 30px;
+  font-weight: 400;
+  gap: 6px 14px;
+  justify-content: flex-start;
+  letter-spacing: 0;
+  line-height: 1.3;
+  min-width: 0;
+  padding: 4px 6px 10px;
+}
+
+.ireal-chord {
   align-items: baseline;
   display: inline-flex;
-  font-size: 19px;
-  font-weight: 800;
-  gap: 1px;
-  justify-content: center;
-  letter-spacing: 0;
-  line-height: 1;
-  overflow: hidden;
-  padding-top: 2px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2866,26 +3178,26 @@ table {
 }
 
 .ireal-bass {
-  font-size: 0.86em;
-  margin-left: 3px;
+  font-size: 0.72em;
+  margin-left: 1px;
 }
 
 .ireal-measure sup {
-  font-family: "Segoe Print", "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
-  font-size: 0.5em;
-  font-weight: 800;
+  font-family: inherit;
+  font-size: 0.58em;
+  font-weight: 400;
   line-height: 0;
   margin-left: 1px;
   position: relative;
-  top: -0.62em;
+  top: -0.5em;
   vertical-align: baseline;
 }
 
 .ireal-measure small {
-  color: #6f6047;
-  font-family: "Segoe Print", "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
+  color: #666;
+  font-family: inherit;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1;
   padding-left: 2px;
 }
@@ -2896,7 +3208,7 @@ table {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 0;
   font-weight: 900;
-  height: 34px;
+  height: 36px;
   line-height: 1;
   position: relative;
   width: 7px;
@@ -2916,11 +3228,11 @@ table {
 
 .ireal-barline::before {
   background: #050505;
-  border-radius: 2px;
+  border-radius: 0;
   content: "";
   display: block;
   height: 100%;
-  width: 3px;
+  width: 1.5px;
 }
 
 .ireal-barline.repeat::after {
@@ -2935,14 +3247,50 @@ table {
 
 .ireal-measure em {
   bottom: 2px;
-  color: #6f6047;
-  font-family: "Segoe Print", "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
+  color: #888;
+  font-family: "Segoe UI", sans-serif;
   font-size: 9px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 400;
   position: absolute;
   right: 8px;
 }
+
+.bass-chart {
+  background: #fff;
+  color: #171717;
+  color-scheme: light;
+  border: 1px solid #e2e2e2;
+  box-shadow: 0 2px 12px #0002;
+  min-width: 800px;
+  max-width: 1200px;
+  padding: 20px 24px;
+}
+.bass-chart-header { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.bass-chart-heading { display: grid; gap: 5px; }
+.bass-chart-heading strong { font: 26px "MuseJazz Text", "Segoe UI", sans-serif; }
+.bass-chart-heading span, .bass-chart-header label, .bass-chart-footer { color: #666; font-size: 11px; line-height: 1.5; }
+.bass-chart-header label { display: flex; align-items: center; gap: 6px; }
+.bass-chart-header select { width: auto; color: #333; background: #fff; border: 1px solid #bbb; font-size: 11px; padding: 3px 5px; }
+.bass-chart-systems { display: grid; gap: 14px; }
+.bass-chart-section { color: #b33d35; font: 18px "MuseJazz Text", "Segoe UI", sans-serif; margin: 0; }
+.bass-chart-system { min-width: 0; overflow-x: auto; padding-bottom: 4px; }
+.bass-chart-bars { position: relative; height: 24px; }
+.bass-chart-measure, .bass-chart-chord { cursor: pointer; }
+.bass-chart-measure-highlight { fill: transparent; stroke: transparent; }
+.bass-chart-measure.selected > .bass-chart-measure-highlight { fill: #edf8f5; stroke: #58a99c; }
+.bass-chart-measure.active > .bass-chart-measure-highlight { fill: #fff8ed; stroke: #d69b55; }
+.bass-chart-bar-select { position: absolute; color: #666; background: transparent; border: 0; border-radius: 0; padding: 0 4px 6px; font: 10px "Segoe UI", sans-serif; text-align: left; }
+.bass-chart-bar-select:hover { color: #111; background: #00000008; }
+.bass-chart-bar-select:focus-visible { outline: 2px solid #31817b; }
+.bass-chart-chords { position: relative; height: 30px; }
+.bass-chart-chord { position: absolute; display: inline-flex; align-items: baseline; white-space: nowrap; font: 25px "MuseJazz Text", "Segoe UI", sans-serif; font-synthesis: none; }
+.bass-chart-chord sup { font-size: .58em; line-height: 0; position: relative; top: -.5em; margin-left: 1px; }
+.bass-chart-staff > svg { display: block; width: 100% !important; height: auto; }
+.bass-chart .bass-tab-note text { fill: #171717; }
+.bass-chart .bass-beat-number { fill: #777; }
+.bass-chart-empty { color: #777; font-size: 11px; line-height: 1.5; margin: 8px 4px; }
+.bass-chart-footer { margin: 20px 0 0; }
 
 .chordpro-chart {
   background: #080b0f;

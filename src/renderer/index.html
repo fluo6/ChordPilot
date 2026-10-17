@@ -123,6 +123,7 @@
             <div>
               <h1>ChordPilot Help</h1>
               <p>Usage notes and a compact technical map of the analysis pipeline.</p>
+              <p><a href="#help-analysis">How Analysis Works</a> · chord stability, spectra, note levels, and sustain</p>
               <div id="helpBuildInfo" class="help-build-info">Version 0.1.1 • Built 2026-09-06 23:09 UTC</div>
             </div>
           </header>
@@ -181,7 +182,7 @@
                 <dt>Analysis</dt>
                 <dd>Controls for tempo range, key hints, chord source, stems, cache, and lyrics.</dd>
                 <dt>Table</dt>
-                <dd>Dense editing plus chart renderers for grid, iReal-style, and ChordPro text.</dd>
+                <dd>Chord chart, editable table, measure grid, bass tab and score with chords, and ChordPro views.</dd>
                 <dt>Log</dt>
                 <dd>Backend progress and analysis diagnostics.</dd>
               </dl>
@@ -276,9 +277,156 @@
               </div>
             </article>
 
+            <article id="help-analysis" class="help-section help-wide help-analysis">
+              <h2>How Analysis Works</h2>
+              <p>ChordPilot keeps measured audio evidence separate from chord interpretation. Expand a topic to see what is measured, what is averaged, and what the stability setting changes.</p>
+              <details open>
+                <summary>From audio to a chord</summary>
+                <ol class="help-analysis-flow" aria-label="Current chord analysis pipeline">
+                  <li><strong>Audio sources</strong><span>Full mix or accompaniment; bass supplies root and inversion evidence when available.</span></li>
+                  <li><strong>Timing cells</strong><span>The grid divides audio into short ranges. Each cell has a spectrum and pitch strengths.</span></li>
+                  <li><strong>Chord candidates</strong><span>Score chord tones, essential notes, key fit, bass evidence, continuity, and complexity.</span></li>
+                  <li><strong>Chosen sequence</strong><span>Auto timing stabilizes uncertain choices when enabled and groups cells into chord events.</span></li>
+                </ol>
+                <p>Audio includes new attacks, ringing notes, and instrument overtones. A spectral peak is evidence of a frequency, not proof that a separate key was played.</p>
+              </details>
+              <details>
+                <summary>Analysis presets for instrument textures</summary>
+                <p>Choose a preset under Analysis Options, then adjust any control. Presets are starting points: instruments, pedal, distortion and reverb can change the pitch evidence. General uses the existing defaults. Editing a preset's timing or filtering controls shows Custom; saved sessions retain the actual values.</p>
+                <table class="help-tech-table">
+                  <thead><tr><th>Preset</th><th>Grid / stability</th><th>Tail reduction / half-life</th><th>Overtone weighting</th></tr></thead>
+                  <tbody>
+                    <tr><th>General</th><td>One beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
+                    <tr><th>Clean Guitar / Arpeggios</th><td>One beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
+                    <tr><th>Piano / Sustained Keys</th><td>Half beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
+                    <tr><th>Reverb / FX</th><td>Half beat / Balanced</td><td>20% / 0.8 s</td><td>50%</td></tr>
+                    <tr><th>Fast Chord Changes</th><td>Half beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
+                  </tbody>
+                </table>
+                <p>All presets use Auto changes and preserve your key, source stem, separation model, tempo settings and lyrics settings. Choosing a preset does not start analysis; use Reanalyse Chords to update existing results with cached stems. New Local Studies inherit the current tail and overtone settings. Existing saved studies keep their own settings.</p>
+                <p>The clean-guitar settings were checked on Ballad's opening. Piano and Reverb / FX are conservative starting points awaiting broader instrument-specific reference checks. FX differ: longer tail estimation addresses ringing, while overtone weighting targets supported harmonic peaks; it cannot remove every effect or separate an overtone from every played note.</p>
+              </details>
+              <details>
+                <summary>Detailed, Balanced, and Sustained stability</summary>
+                <p>Chord Stability applies to <strong>Auto changes</strong>. Fixed grid and Legacy skip this pass. Sustained helps recognize one harmony across guitar or piano arpeggios. It stabilizes chord choices; <strong>it does not subtract lingering notes</strong>.</p>
+                <table class="help-tech-table">
+                  <thead><tr><th>Setting</th><th>Local / context score</th><th>Context radius</th><th>Normal change cost</th></tr></thead>
+                  <tbody>
+                    <tr><th>Detailed</th><td>No extra stability pass</td><td>—</td><td>—</td></tr>
+                    <tr><th>Balanced</th><td>85% / 15%</td><td>±1 bar</td><td>0.8 score units</td></tr>
+                    <tr><th>Sustained · arpeggios</th><td>60% / 40%</td><td>±2 bars</td><td>1.6 score units</td></tr>
+                  </tbody>
+                </table>
+                <p>Context averages neighboring cells, including earlier and later audio. The highest-scoring sequence wins after subtracting chord-change costs. There is no fixed minimum chord duration.</p>
+                <pre class="help-formula">cell score = duration / beat duration ×
+  [(1 − w) × (local score + 0.8 × context root strength)
+   + w × context score − complexity cost]</pre>
+                <p><code>w</code> is 0.15 for Balanced or 0.40 for Sustained. With weak bass evidence, complexity cost is <code>λ × max(0, chord-tone count − 5)</code>, with λ = 0.35 or 0.70 respectively. A five-note maj9 chord has no extra cost from this term.</p>
+                <ul>
+                  <li>Keeping the same chord costs 0. Related voicings or extensions cost 55% of the normal change cost: 0.44 in Balanced or 0.88 in Sustained.</li>
+                  <li>A confirmed bass change or silence boundary reduces the change cost to 0.05. Bass confidence of at least 62% constrains competing root and inversion choices.</li>
+                  <li>A clear local triad contrasting with nearby roots protects the local chord: at least 75% of pitch strength in its root, third, and fifth, with at least 10% in each.</li>
+                </ul>
+                <p>These numbers are internal score weights, not percentages of audio removed. The separate experimental Tail Reduction setting defaults to <strong>0% (off)</strong>.</p>
+                <p>If the separated Bass stem is below 0.00001 RMS or below 3% of the accompaniment's RMS, it is too quiet to supply reliable roots. Local Study compares it against the loudest selected non-Bass source. A strong measured low accompaniment pitch can provide a fallback, labelled with its source. This is a low note, not proof of the chord root. Upper tones are not promoted past a weaker detected lower note, and compatible inversions remain available.</p>
+                <p>For guitar passages with a weak Bass stem, two corroborating low-note and guide-tone observations can bound the stability context. Observations need clear third/seventh evidence, and ambiguous nested pitch sets can remain one harmony. A confirmed root receives a score bonus equal to the transition cost (0.8 Balanced, 1.6 Sustained) per beat of evidence. This keeps changing upper voicings from replacing a supported ii–V–I with a later tonic. Original cell evidence and context boundaries remain saved.</p>
+                <p>A slash-voicing winner can corroborate a different root only when a matching-root candidate is within 0.35 raw score units and retains its strongly measured chord tones. Retained pitch peaks are used when available, so broad spectral spill does not protect an unmeasured note. This avoids turning a supported Cmaj9/E inversion into Em7.</p>
+                <p>A dominant 13th voicing can omit the fifth and ninth when the measured major third, minor seventh and thirteenth each supply at least 6% of normalized chroma. The seventh and thirteenth then count as essential tones. A weak or absent defining tone retains the ordinary missing-tone penalties. This applies to both song analysis and Local Study; chord formulas remain supplied by PyChord.</p>
+                <p>Seventh voicings can also omit a weak perfect fifth when the independently measured third and seventh each supply at least 6% of chroma. If the fifth remains below the 4.5% essential-tone threshold after bass blending, the measured seventh replaces it in essential-tone scoring. Sixth chords, altered fifths and suspended chords keep their ordinary requirements. This shared rule applies to song analysis and Local Study.</p>
+              </details>
+              <details>
+                <summary>Half-diminished chords and harmonic families</summary>
+                <p>A root partial can resemble a major third and favor a dominant chord over m7♭5. With Overtone Weighting enabled, Auto/Fixed timing and Local Study can give a close half-diminished candidate extra support when root, minor third, flattened fifth and seventh are all measured. Root and minor third also need matching octave peaks. A major-third peak inside the voicing additionally requires measured roots one and two octaves below, close frequency agreement with the lowest root's fifth partial, and a minor third at least 3 dB stronger. Higher major-third peaks may follow that corroborated peak's measured octaves. Conflicting bass, missing tones, stronger independent major thirds or poorly matched frequencies block the preference.</p>
+                <p>The credit is 1.3 × Overtone Weighting strength, capped at 0.65 raw score units, and applies only within that score gap. Merged events weight support by cell duration. This is a conservative ranking heuristic, not proof that an upper note is an overtone. It does not remove spectrum peaks, change keyboard notes or infer a missing root. Noisy transitions and weak minor thirds can still return another chord.</p>
+              </details>
+              <details>
+                <summary>Fading roots and early chord evidence</summary>
+                <p>Auto timing and Local Study can retain a chord supported by the first 250 ms of a 0.5–2 second interval when its root fades. This uses only audio inside that cell or selection. Fixed timing keeps its original cell ranking.</p>
+                <p>The early chord needs a clear lead, its root must remain measured in the same octave and within 30 cents, and its defining tones must persist. New strong notes or clear low-note guidance block the preference. A conflicting major/minor third with at least 6% of measured pitch-class evidence also blocks it, even when weak in the individual MIDI-note evidence; chords such as 7♯9 that include both thirds remain eligible. Equal-length first/last windows must show root power falling below 75%; the early root's retained strength must also exceed its whole-interval strength by 1.5×. A close candidate can receive up to 0.45 raw score units, weighted by supported duration when cells merge. This changes ranking, not the measured notes or spectrum. Supporting ranges and decay ratios are saved; it is a conservative heuristic, not proof of the performed chord boundary.</p>
+              </details>
+              <details>
+                  <summary>Waveform zoom and track heights</summary>
+                  <p>Arrangement's Wave control zooms waveform amplitude from 0.25× to 8× without changing sound or analysis. Height scales the waveform lanes together. Drag a track's bottom-edge grip to resize it independently; double-click or press Home on the grip to reset that track. ↑ / ↓ adjusts its height in small steps. Zoom and individual heights are saved with the session. Display peaks can flatten at high amplitude zoom; the underlying audio is unchanged.</p>
+                </details>
+                <details>
+                  <summary>What the keyboard and spectrum show</summary>
+                  <p>Beat Detail sections can be expanded or collapsed by clicking their headers. Drag a header's grip to reorder sections, or focus the grip and use Alt + ↑ / ↓. The section order and collapsed state are saved with the session. Playback updates the contents without changing your layout.</p>
+                <div class="help-evidence-pair">
+                  <div><strong class="help-current">Current cell · teal dashed curve</strong><p>The measured spectrum for the active grid cell. The curve animates between saved cells during playback.</p></div>
+                  <div><strong class="help-average">Chord average · amber curve</strong><p>Evidence averaged across the continuous span of the same chosen chord, including adjacent bars. Chord changes, gaps, or source changes end the span.</p></div>
+                  <div><strong class="help-tail">Tail reduced · purple curve</strong><p>When enabled, this is the current cell after predicted ringing power is subtracted. This evidence feeds chord scoring and the chord average.</p></div>
+                </div>
+                <p>Beat Detail and Local Study use the same pitch extractor, highlighting rules, and estimated dB scaling. Beat Detail combines measured accompaniment and bass pitches over the chosen chord passage; Local Study combines sources over its selected range. These different averaging intervals can produce different strengths. Detected chord tones at or above −24 dB are emphasized; other evidence is visually muted. This focus does not change chord scoring or audition levels.</p>
+                <p>Beat Detail starts at C1 and extends through B4; scroll horizontally for higher notes. Highlights follow estimated MIDI octaves rather than repeating pitch classes, and an orange dot identifies the lowest measured octave matching the bass reference. The frequency plot remains the labelled accompaniment source, so bass-only notes can appear on the keyboard without a matching accompaniment peak. Reanalyze older sessions to add measured bass-octave evidence; its octave is never invented. Legacy evidence without octave estimates is explicitly labelled as pitch classes.</p>
+                <p>The original and chord-average curves each have their own 0 dB peak. The tail-reduced curve shares the original reference so its attenuation remains visible. The average combines <strong>linear power</strong>, weighted by cell duration and source level when available. Older spectra without a source-level reference use duration-weighted relative power; reanalysis adds that reference.</p>
+                <p>The <strong>Pitch-class input to chord scorer</strong> bars show twelve normalized note classes, not another frequency spectrum. Teal is the selected harmonic source (usually accompaniment) after tail/overtone processing; amber is the input after a reliable Bass pitch is blended at up to 30% of its confidence. The stated percentage is that blend weight. Chord ranking also uses root/inversion agreement, essential notes, key and continuity, so the tallest bar alone does not name the chord. Reanalyse older results to add these bars.</p>
+                <pre class="help-formula">average power(f) = Σ [cell duration × cell power(f)] / Σ cell duration
+relative dB(f) = 10 × log10(power(f) / reference peak power)</pre>
+                <p>This passage average is a display step after chord recognition. It is not a filtered audio signal and is not fed back into chord scoring. Local Study averages over its selected range.</p>
+              </details>
+              <details>
+                  <summary>Bass fretboard, TAB and score</summary>
+                  <p>Bass Notes shows the measured bass line for the selected bar. Amber positions belong to that bar; teal marks the note at the playback cursor. Each measured pitch gets one suggested position, preferring a low fret. Four strings use E–A–D–G; five strings add low B. The selected instrument is saved with the session.</p>
+                  <p>Bass fundamentals are tracked independently of the chord grid using a YIN-style repeating-waveform estimate: 120 ms frames every 20 ms, with an 80 ms rescue window for brief notes. This can recover a weak fundamental beneath stronger overtones. A longer integral period is accepted only when it explains the waveform substantially better; a pure upper note is not automatically lowered an octave. The same fundamentals supply bass/root evidence to chord analysis and Local Study.</p>
+                  <p>A continuous bass slide can pass through several semitones without playing separate notes. For fragments shorter than 160 ms, the tracker checks continuing pitch movement above 500 cents per second between neighbouring pitches, confirms it with central 60 ms windows, and requires no renewed attack (less than a 1.4× level rise). Stable short chromatic notes are preserved. Rejected one-frame pitch glitches do not become the reference for filtering the next note.</p>
+                  <p>Frames need at least 80% periodicity and tuning within 40 cents. Isolated 20 ms detections are discarded. Brief notes need a stable pitch core; low-confidence short notes also require a measured fundamental or a stable pair of second and third harmonics. Neighboring pitches under 160 ms are checked for a decaying release, while stable passing notes between longer notes can remain. A return below 10% of a recent note's RMS within 0.6 s is treated as ringing: the same pitch continues the previous held note, and a different pitch is omitted. Quiet legato notes, slides and very fast fills can still be missed. The score uses a finer grid when a confirmed short note would disappear on 1/16, and phrase-based fingering favours small hand shifts and nearby strings.</p>
+                  <p>The bass-clef score is written one octave above the sounding pitch, as for electric bass. Score and TAB share rhythmic spacing, stems, beams, dotted values, rests and ties, including holds across bar lines. The chart's time signature and measured beat positions map detected starts and ends to the nearest sixteenth note; when a complete beat map is unavailable, spacing follows the bar's duration. Gaps without a detected pitch appear as rests. This is estimated rhythm: very short notes can disappear, triplets and swing are approximated, and an incorrect beat grid or meter produces incorrect notation. Hover a note for its original times; playback highlighting follows those original times.</p>
+                  <p>Chord and bar-boundary edits preserve measured note times and refresh the notation. Older sessions can show rhythmic values from their coarse cell timings; Reanalyse Chords with existing stems for independent bass-note timing. Actual string/fret choices remain suggestions. Notes outside the selected tuning or 24 frets show × in TAB.</p>
+                </details>
+                <details>
+                <summary>Relative dB, key shading, and note volume</summary>
+                <p>Grey fills and teal highlights follow relative dB; amber outlines identify chord tones. Hover a key for its estimated relative dB. Spectral levels are used when available; otherwise levels are estimated from saved note strengths.</p>
+                <pre class="help-formula">note amplitude multiplier = 10^(relative dB / 20)</pre>
+                <table class="help-tech-table"><thead><tr><th>Relative level</th><th>Amplitude multiplier</th></tr></thead><tbody><tr><td>0 dB</td><td>1.00</td></tr><tr><td>−6 dB</td><td>0.50</td></tr><tr><td>−20 dB</td><td>0.10</td></tr></tbody></table>
+                <p>Single-key and group playback use this scaling. Master volume, bass compensation, group gain normalization, and the output compressor also affect the final sound. Highlight intensity is adjusted for visibility.</p>
+              </details>
+              <details>
+                <summary>Physical sustain and tail subtraction <span class="help-proposal">Experimental · optional</span></summary>
+                <p>A struck note keeps ringing after its attack. When another note starts, the spectrum can contain both the new note and the old tail. In one arpeggio, both may belong to the same chord.</p>
+                <figure class="help-sustain-figure"><div class="help-chart-scroll"><img src="./help/sustain-explained.svg" alt="Two line charts: C fades while E starts at one second; optional tail subtraction retains new-note attack energy. The example uses 100% reduction of the predicted tail." loading="lazy" /></div><figcaption>Illustrative power envelopes, not a recording. Assumed power half-life: 0.5 seconds; analysis interval: 0.25 seconds; reduction strength: 100%.</figcaption></figure>
+                <ol class="help-analysis-flow" aria-label="Optional carry-over reduction pipeline">
+                  <li><strong>Previous spectrum</strong><span>Predict how much of each frequency remains after decay.</span></li>
+                  <li><strong>Subtract the tail</strong><span>Subtract the predicted contribution from current power, keeping values at or above zero.</span></li>
+                  <li><strong>Reduced evidence</strong><span>Convert reduced spectral power to pitch strengths, then score and stabilize chords. Original measurements remain saved.</span></li>
+                </ol>
+                <pre class="help-formula">decay factor = 2^(−analysis interval / power half-life)
+fresh power(f, t) = max(0, current power(f, t)
+                         − strength × decay factor × previous power(f, t))</pre>
+                <p>A 0.25-second interval and 0.5-second power half-life give a decay factor of about <strong>0.707</strong>. At 100% strength, this subtracts up to 70.7% of the previous frame’s power at each frequency; at 50%, up to 35.4%. It is not a fixed percentage of current audio volume. The spectrum caption reports the actual power removed.</p>
+                <p>To try it, set <strong>Tail Reduction to 50%</strong> and <strong>Tail Half-life to 0.5 s</strong>, then reanalyze with Auto or Fixed timing. Set 0% for a baseline comparison. The first timing cell has no prior cell and is left unchanged. Local Study uses the equally sized range immediately before the selection, clipped at the song start; its saved fingerprint includes that context.</p>
+                <p>This changes analysis evidence, not playback audio. The independent bass detector uses original audio. When Bass is too quiet, the low accompaniment reference uses retained pitches after tail reduction and overtone weighting, so a removed tail cannot return as a bass note. In a Bass + Other Local Study, tail subtraction is applied to Other. Bass contributes verified fundamentals to keyboard evidence; its original spectrum can still show harmonic peaks. Real instruments decay differently, and useful arpeggio tones can be reduced too. Compare against 0% before accepting a changed chord.</p>
+              </details>
+              <details>
+                <summary>Overtones (泛音) and fundamental evidence <span class="help-proposal">Experimental</span></summary>
+                <p>One instrument note can create peaks at several multiples of its fundamental frequency. A peak label therefore describes a measured frequency, not necessarily a separately played key. Overtone Weighting defaults to <strong>50%</strong> for new Auto/Fixed analyses and Local Studies; <strong>0%</strong> restores the baseline. Saved results remain snapshots until reanalyzed.</p>
+                <p>The detector requires a measured fundamental plus at least three of its second through sixth partials, including the second and third, within 30 cents. The fundamental must reach 8% of the strongest peak's power; candidate partials must reach 0.4%. To avoid treating noise as tones, a fundamental must also exceed eight times the local median power, and partials four times that median. An isolated octave or fifth is insufficient. Peaks stronger than their proposed fundamental, and the frequency bands of upper fundamentals supported by their own harmonic families, are protected.</p>
+                <pre class="help-formula">affected partial power = current power × (1 − 0.75 × strength)
+50% strength → retain at least 62.5% power (about −2 dB)
+100% strength → retain at least 25% power (about −6 dB)</pre>
+                <p>Weighting runs after optional tail subtraction and before chord scoring and stability. The keyboard uses the resulting pitch weights. The original spectrum remains visible; the blue Overtone weighted curve shares its original 0 dB reference. The amber chord average uses the final weighted cells and its own peak reference. Captions report the actual power removed, which differs from the strength setting.</p>
+                <p>This is a conservative heuristic, not full note transcription. Weak or missing fundamentals can be missed, and overlapping played notes remain ambiguous. Real piano and guitar strings can have stretched partials; the 30-cent tolerance accommodates small departures, but this version does not fit a string-stiffness model. It preserves residual energy rather than deleting harmonics. It does not yet compare independent note onsets. The sound recording and bass-root detector remain unchanged.</p>
+                <p>Background: <a href="https://archives.ismir.net/ismir2006/paper/000125.pdf" target="_blank" rel="noreferrer">Klapuri's work on harmonic salience and cancellation</a>. ChordPilot uses the simpler family-weighting rule above, not a reproduction of that paper's complete estimator.</p>
+                <p>Instrument physics: <a href="https://phys.unsw.edu.au/jw/harmonics.html" target="_blank" rel="noreferrer">UNSW Music Acoustics: How harmonic are harmonics?</a></p>
+              </details>
+            </article>
+
             <article class="help-section help-wide">
               <h2>Technical Notes</h2>
               <p>Piano sound: <a href="https://github.com/Tonejs/audio/tree/master/salamander" target="_blank" rel="noreferrer">Salamander Grand Piano</a> by Alexander Holm, licensed under <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a>.</p>
+              <p>Chord lettering: <a href="https://github.com/musescore/MuseScore/tree/main/fonts/musejazz" target="_blank" rel="noreferrer">MuseJazz Text</a> by Torsten Hämmerle and Abraham Lee, licensed under the <a href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL Open Font License 1.1</a>.</p>
+              <p>Staff engraving: <a href="https://github.com/0xfe/vexflow" target="_blank" rel="noreferrer">VexFlow 4.2.5</a>, bundled locally under the <a href="./vendor/VexFlow-LICENSE.txt" target="_blank">MIT license</a>, with <a href="./vendor/Bravura-OFL.txt" target="_blank">Bravura glyphs under SIL OFL 1.1</a>. The chord card shows strongest measured octaves per supported tone plus measured bass; whole-note heads indicate pitches, not rhythmic duration.</p>
+              <p>The chord card's key checkbox uses the detected/native key of the measured audio. With it enabled, both staves show that signature and only chromatic accidentals or naturals appear beside notes. Turn it off for explicit note accidentals. The choice is saved in the session and changes notation only. If no valid key is available, the checkbox is disabled.</p>
+              <p>The Notation menu in the project header chooses Text (Dm11, Cmaj7) or Jazz (D−11, CΔ7) symbols and letter or number roots. Number roots can use the song tonic as 1, or the relative major in minor keys (Am becomes 6m in C). Chromatic roots use ♭2, ♭3, ♯4, ♭6 and ♭7; without a valid key, letters remain visible. Local Study uses its saved analysis key. This device remembers the preference. Analysis, playback, staff pitches, saved chord names and exports retain their original musical meaning; edit fields use letter names. Simplify Chords still independently controls shortened extension labels.</p>
+              <p>Chord vocabulary includes 6/9 and m6/9 (root, third, fifth, sixth and ninth, without a seventh), diminished seventh, minor-major seventh and common altered dominants: 7♭5, 7♯5, 7♭9, 7♯9, 7♯11 and 7♭13, plus maj7♯11. You can enter C6/9, C69 or C6add9; an inversion such as C6/9/E keeps E as the bass. Extensions need measured note evidence; supporting a symbol does not guarantee recognition in a dense recording.</p>
+              <p>Bass noise reference: whole-track and Local Study tracking share a recording-level threshold measured in the same resampled analysis bandwidth: max(0.0001, 0.005 × the recording’s 95th-percentile frame RMS). The gate checks each short frame, so rests do not dilute a valid note into rejection. Only amplitude calibration uses the wider recording; selected pitch evidence stays within the chosen range. This helps prevent quiet periodic background tones becoming bass guidance, but it cannot prove musical relevance. Bass-only selections without a verified fundamental show N.C.; the original spectrum remains available.</p>
+              <details>
+                <summary>Voicing patterns</summary>
+                <p>A chord name describes harmony; a voicing describes the pitches and their octave spacing. Optional “Possible …” subtitles identify So What, quartal, drop-2 and drop-3 patterns in Beat Detail and Local Study. Hover over the subtitle to see the original measured pitches. Reanalyse older results to capture the short audio slices needed for this feature.</p>
+                <p>Quartal describes fourth-based spacing. So What names a specific quartal shape: three ascending perfect fourths followed by a major third. Its subtitle reads “Possible quartal · So What shape” to show the family and specific pattern together. Drop-2 and drop-3 lower the second or third voice from the top of a close four-note chord by one octave. These labels describe a possible spacing pattern, not confirmed fingering or hand allocation.</p>
+                <p>Other established families include shell voicings, rootless A/B positions, close and spread voicings, drop-2+4, upper-structure triads, stacked thirds and the Kenny Barron chord. These are research references; automatic subtitles currently cover the first four patterns only.</p>
+                <p>The detector compares both halves of short slices, checks that each voice persists in smaller 40 ms slices, and requires repeated support. It keeps the bass stem separate, preserves octaves and leaves the subtitle blank when the shape is unclear. A long arpeggio average cannot establish a simultaneous voicing. Subtitles do not change chord recognition or confidence.</p>
+                <p>Learn more: <a href="https://www.earlmacdonald.com/jazz-piano-lessons/" target="_blank" rel="noopener noreferrer">Earl MacDonald’s jazz piano lessons</a>, <a href="https://college.berklee.edu/bt/203/lesson.html" target="_blank" rel="noopener noreferrer">Berklee’s drop-2+4 lesson</a>, and <a href="https://www.jazzbooks.com/mm5/samples/D-HVSP.pdf" target="_blank" rel="noopener noreferrer">Mark Levine’s voicing menu sample</a>.</p>
+              </details>
               <table class="help-tech-table">
                 <tbody>
                   <tr>
@@ -328,6 +476,25 @@
           <p id="fileLabel">Choose an MP3 or WAV to begin.</p>
         </div>
         <div class="topbar-actions">
+          <details class="chord-display-control">
+            <summary title="Choose chord spelling and letter or scale-degree roots">Notation</summary>
+            <div class="chord-display-options">
+              <label>Chord symbols
+                <select id="chordNotationStyleInput">
+                  <option value="text">Text · Dm11 / Cmaj7</option>
+                  <option value="jazz">Jazz · D−11 / CΔ7</option>
+                </select>
+              </label>
+              <label title="Numbers follow the displayed song key. Tonic uses the song's root as 1; Relative major makes Am the 6m of C. Chromatic roots use ♭2, ♭3, ♯4, ♭6 and ♭7. Without a known key, letter names remain visible.">Chord roots
+                <select id="chordRootStyleInput">
+                  <option value="letters">Letter names</option>
+                  <option value="tonic">Numbers · song tonic = 1</option>
+                  <option value="relative">Numbers · relative major = 1</option>
+                </select>
+              </label>
+              <span id="chordDisplayPreview" class="study-muted"></span>
+            </div>
+          </details>
           <button id="chooseBtn" type="button">Choose Audio</button>
           <button id="analyzeBtn" type="button" disabled>Analyze</button>
           <div id="topbarAnalysisBadge" class="topbar-analysis-badge hidden" role="status" aria-live="polite">
@@ -336,6 +503,7 @@
           </div>
           <button id="openSessionBtn" type="button">Open Session</button>
           <button id="saveSessionBtn" type="button" disabled>Save Session</button>
+          <button id="saveSessionAsBtn" type="button" disabled>Save As…</button>
         </div>
       </header>
 
@@ -442,6 +610,19 @@
           <button type="button" data-study-current title="Open Local Study with 0.5 seconds before and after the playback position">Study this moment</button>
         </div>
         <div class="collapsible-content options-grid">
+          <div class="analysis-preset-row">
+            <label>Preset
+              <select id="analysisPresetInput" aria-describedby="analysisPresetHint">
+                <option value="general" selected>General</option>
+                <option value="clean_guitar">Clean Guitar / Arpeggios</option>
+                <option value="piano">Piano / Sustained Keys</option>
+                <option value="reverb_fx">Reverb / FX</option>
+                <option value="fast_changes">Fast Chord Changes</option>
+                <option value="custom" disabled>Custom</option>
+              </select>
+            </label>
+            <span id="analysisPresetHint">General starting point. Keeps brief changes; no sustain-tail subtraction.</span>
+          </div>
           <fieldset class="option-group">
             <legend>Timing + Key</legend>
             <div class="option-group-grid">
@@ -460,6 +641,26 @@
               <option value="beat" selected>One beat</option>
               <option value="half_beat">Half beat</option>
             </select>
+          </label>
+          <label title="Auto timing only. Consolidates uncertain voicing changes in guitar or piano arpeggios. Sustained uses more context and can omit brief changes; clear bass changes remain protected.">
+            Chord Stability
+            <select id="chordStabilityInput">
+              <option value="detailed" selected>Detailed</option>
+              <option value="balanced">Balanced</option>
+              <option value="sustained">Sustained · arpeggios</option>
+            </select>
+          </label>
+          <label title="Experimental subtraction of estimated ringing tails before chord scoring. 0% is off; try 50% first. Auto or Fixed timing only.">
+            Tail Reduction (%) · experimental
+            <input id="tailReductionInput" type="number" min="0" max="100" step="10" value="0" />
+          </label>
+          <label title="Assumed time for ringing power to halve. Larger values predict longer tails. This changes analysis evidence, not the audio playback.">
+            Tail Half-life (s)
+            <input id="tailHalfLifeInput" type="number" min="0.1" max="3" step="0.1" value="0.5" />
+          </label>
+          <label title="Experimental: downweight likely overtones supported by several harmonic peaks. 0% is off; 50% retains at least 62.5% of each affected peak's power. Auto or Fixed timing only.">
+            Overtone Weighting (%) · experimental
+            <input id="overtoneWeightingInput" type="number" min="0" max="100" step="10" value="50" />
           </label>
           <label>
             Analysis Key
@@ -536,14 +737,14 @@
             Alternatives
             <input id="alternativesInput" type="number" min="1" max="12" value="6" />
           </label>
-          <label title="Which audio source ChordPilot should trust for chord notes. Auto Stem usually picks accompaniment; Full Mix uses the original song; Bass/Vocals are useful for tricky arrangements.">
-            Chord Source
+          <label title="The main source for chord tones. Auto uses Other/accompaniment plus separate Bass root guidance when available, falling back to Full Mix if Other is missing. All choices consult reliable Bass evidence when available. Bass influence is confidence-weighted, up to 30%, with additional root/inversion scoring; this is analysis evidence, not an audio mix.">
+            Harmony Source
             <select id="chordSourceInput">
-              <option value="auto" selected>Auto Stem</option>
-              <option value="other">Other / Accomp</option>
-              <option value="full_mix">Full Mix</option>
-              <option value="vocals">Vocals</option>
-              <option value="bass">Bass</option>
+              <option value="auto" selected title="Other supplies chord tones; Bass supplies root guidance. Falls back to Full Mix if Other is unavailable.">Auto: Other + Bass</option>
+              <option value="other" title="Other/accompaniment supplies chord tones, with separate Bass root guidance when available.">Other + Bass</option>
+              <option value="full_mix" title="Full Mix supplies chord tones, with separate Bass root guidance when available.">Full Mix</option>
+              <option value="vocals" title="Vocals supply chord tones, with separate Bass root guidance when available.">Vocals</option>
+              <option value="bass" title="Bass supplies the main chord tones as well as root guidance. Use for inspecting bass-led evidence; it may not reveal the complete chord.">Bass as chord tones</option>
             </select>
           </label>
           <label title="Stem separation model used in high quality mode. htdemucs is balanced; htdemucs_ft can be more detailed but slower; mdx_extra can help on some dense mixes.">
@@ -706,6 +907,20 @@
               <button id="zoomInBtn" type="button" title="Zoom in">+</button>
               <button id="zoomFitBtn" type="button" title="Fit timeline">Fit</button>
             </div>
+            <div class="waveform-view-controls">
+              <label title="Vertical waveform amplitude zoom. Display only; playback volume is unchanged.">Wave
+                <select id="waveformGainInput" aria-label="Waveform amplitude zoom">
+                  <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option>
+                  <option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+                </select>
+              </label>
+              <label title="Overall waveform track height. Drag each track's bottom edge to resize it independently.">Height
+                <select id="trackHeightZoomInput" aria-label="Waveform track height zoom">
+                  <option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option>
+                  <option value="2">2×</option><option value="3">3×</option><option value="4">4×</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div id="timelineViewport" class="timeline-viewport collapsible-content">
             <div id="playhead" class="playhead"></div>
@@ -740,20 +955,44 @@
         <aside class="detail-pane collapsible">
           <div class="detail-title">
             <button class="collapse-toggle" type="button" title="Collapse section">v</button>
-            <strong>Bar Detail</strong>
-            <span id="detailBarLabel">No bar</span>
+            <strong>Beat Detail</strong>
+            <span id="detailBarLabel">No beat</span>
           </div>
           <div class="collapsible-content detail-content">
+            <div class="detail-chord-field">
+              <div class="detail-chord-heading">
+                <span class="detail-chord-caption">Chord</span>
+                <label class="detail-key-signature-control" title="Use the detected key signature on the staff. Turn off to show explicit accidentals. This changes notation only.">
+                  <input id="detailKeySignatureInput" type="checkbox" checked />
+                  <span id="detailKeySignatureLabel">No key</span>
+                </label>
+              </div>
+              <div class="detail-chord-overview">
+                <div id="detailChordNotation" class="detail-chord-notation" role="img"></div>
+                <div class="detail-chord-reading">
+                  <div class="detail-chord-row">
+                    <div id="detailChordDisplay" class="detail-chord-display"></div>
+                    <input id="detailChordInput" type="text" aria-label="Edit chord" hidden />
+                    <span id="detailChordConfidence" class="confidence detail-chord-confidence" title="Chord confidence" hidden></span>
+                    <button id="detailChordEditBtn" type="button" class="detail-chord-edit" title="Edit chord" aria-label="Edit chord" aria-controls="detailChordInput" aria-expanded="false" disabled>
+                      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z M13 6l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    </button>
+                  </div>
+                  <div id="detailChordVoicing" class="chord-voicing" hidden></div>
+                  <div id="detailChordAlternatives" class="detail-chord-alternatives" aria-label="Alternative chord readings"></div>
+                </div>
+              </div>
+            </div>
+            <div id="detailKeyboard" aria-label="Beat detected notes"></div>
+            <section id="detailBass" class="bass-view" aria-label="Bar bass notes"></section>
+            <section id="detailGuitar" class="bass-view guitar-view" aria-label="Bar guitar notes"></section>
+            <section id="detailSpectrum" class="detail-spectrum" aria-label="Beat frequency spectrum"></section>
             <label>
               Section
               <input id="detailSectionInput" type="text" />
             </label>
             <label>
-              Chord
-              <input id="detailChordInput" type="text" />
-            </label>
-            <label>
-              Start
+              Bar Start
               <input id="detailStartInput" type="number" step="0.01" />
             </label>
             <label>
@@ -788,16 +1027,17 @@
             <label class="renderer-picker" title="Switch chord chart renderer">
               Renderer
               <select id="chartRendererInput">
-                <option value="table" selected>Editable Table</option>
+                <option value="ireal" selected>Chord Chart</option>
+                <option value="table">Editable Table</option>
                 <option value="grid">Measure Grid</option>
-                <option value="ireal">iReal Style</option>
+                <option value="bass">Bass Tab + Score</option>
                 <option value="chordpro">ChordPro Text</option>
               </select>
             </label>
           </div>
           <div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div>
-          <div id="chartPreview" class="chart-preview collapsible-content hidden"></div>
-          <table id="barsTable" class="collapsible-content">
+          <div id="chartPreview" class="chart-preview collapsible-content"></div>
+          <table id="barsTable" class="collapsible-content hidden">
             <thead>
               <tr>
                 <th>Bar</th>
@@ -872,6 +1112,9 @@
               <label>Low frequency (Hz)<input id="studyLowInput" type="number" min="20" max="500" value="65" /></label>
               <label>High frequency (Hz)<input id="studyHighInput" type="number" min="500" max="5000" value="1800" /></label>
               <label>Candidates<input id="studyAlternativesInput" type="number" min="1" max="12" value="6" /></label>
+              <label title="Experimental: subtract a predicted tail using the equally sized interval immediately before this selection. 0% is off.">Tail Reduction (%)<input id="studyTailReductionInput" type="number" min="0" max="100" step="10" value="0" /></label>
+              <label>Tail Half-life (s)<input id="studyTailHalfLifeInput" type="number" min="0.1" max="3" step="0.1" value="0.5" /></label>
+              <label title="Downweight likely harmonic partials before chord scoring and keyboard highlighting. 0% is off. The original spectrum and audio are preserved.">Overtone Weighting (%)<input id="studyOvertoneWeightingInput" type="number" min="0" max="100" step="10" value="50" /></label>
               <label><input id="studySimplifyInput" type="checkbox" checked /> Simplify chords</label>
             </div>
           </details>
@@ -935,12 +1178,22 @@
     <script src="./shell.js"></script>
     <script src="./formatters.js"></script>
     <script src="./chord-events.js"></script>
+    <script src="./chord-display.js"></script>
     <script src="./bars.js"></script>
+    <script src="./vendor/vexflow-bravura-4.2.5.js"></script>
+    <script src="./chord-notation.js"></script>
+    <script src="./chord-voicing.js"></script>
+    <script src="./bass-view.js"></script>
+    <script src="./guitar-view.js"></script>
+    <script src="./detail-sections.js"></script>
+    <script src="./waveform.js"></script>
+    <script src="./arrangement-waveforms.js"></script>
     <script src="./timeline.js"></script>
     <script src="./stems.js"></script>
     <script src="./metronome.js"></script>
     <script src="./actions.js"></script>
     <script src="./study.js"></script>
+    <script src="./study-spectrum.js"></script>
     <script src="./study-playback.js"></script>
     <script src="./keyboard.js"></script>
     <script src="./renderer.js"></script>

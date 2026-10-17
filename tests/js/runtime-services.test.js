@@ -27,7 +27,7 @@ test("range analysis sends exact inputs to backend and resolves only registered 
   assert.deepEqual(JSON.parse(args[args.indexOf("--sources") + 1]), { bass });
 });
 
-function fakeChild({ stdout = "", stderr = "", code = 0, onSpawn } = {}) {
+function fakeChild({ stdout = "", stdoutChunks = [], stderr = "", code = 0, onSpawn } = {}) {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -35,6 +35,7 @@ function fakeChild({ stdout = "", stderr = "", code = 0, onSpawn } = {}) {
   queueMicrotask(() => {
     onSpawn?.();
     if (stdout) child.stdout.emit("data", Buffer.from(stdout));
+    for (const chunk of stdoutChunks) child.stdout.emit("data", chunk);
     if (stderr) child.stderr.emit("data", Buffer.from(stderr));
     child.emit("close", code);
   });
@@ -71,11 +72,102 @@ test("YouTube URLs reject non-YouTube hosts", () => {
   assert.throws(() => normalizeYoutubeUrl("https://example.com/watch?v=x"), /Only YouTube/);
 });
 
+test("YouTube setup cancellation returns without starting a download", async (t) => {
+  const { services } = makeServices(t, {
+    ensureYoutubeTools: async () => null,
+    spawnImpl() { throw new Error("cancelled setup must not launch yt-dlp"); }
+  });
+  assert.equal(await services.downloadYoutubeAudio("https://youtu.be/abc"), null);
+});
+
+test("YouTube download immediately uses newly installed tools for the original link", async (t) => {
+  const calls = [];
+  const { root, services } = makeServices(t, {
+    ensureYoutubeTools: async () => ({ ytDlpPath: "installed-yt-dlp", ffmpegPath: "installed-ffmpeg", ytDlpFfmpegLocation: "/installed/tools", jsRuntime: "node:/installed/node" }),
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return fakeChild({ stdout: command === "installed-yt-dlp" ? path.join(root, "song.mp3") : "" });
+    }
+  });
+  fs.writeFileSync(path.join(root, "song.mp3"), "audio");
+  const audio = await services.downloadYoutubeAudio("https://youtu.be/abc");
+  assert.equal(audio.sourceUrl, "https://www.youtube.com/watch?v=abc");
+  assert.equal(calls[0].command, "installed-yt-dlp");
+  assert.ok(calls[0].args.includes("node:/installed/node"));
+  assert.ok(calls[0].args.includes("/installed/tools"));
+  assert.equal(calls[0].args.at(-1), "https://www.youtube.com/watch?v=abc");
+  assert.ok(calls.some((call) => call.command === "installed-ffmpeg"));
+});
+
+test("YouTube import preserves Chinese filenames with Windows output encoding", async (t) => {
+  const { root, services } = makeServices(t, {
+    spawnImpl(command, args) {
+      if (command !== "yt-dlp") return fakeChild();
+      const filename = path.join(root, "袁娅维 Tia Ray - Love Can Fly [LJZJhK6JL4s].mp3");
+      const encodingIndex = args.indexOf("--encoding");
+      // Windows' legacy output encoding drops the Chinese characters unless overridden.
+      const stdout = encodingIndex >= 0 && args[encodingIndex + 1] === "utf-8" ? filename : filename.replace("袁娅维", "");
+      return fakeChild({ stdout });
+    }
+  });
+  const filename = path.join(root, "袁娅维 Tia Ray - Love Can Fly [LJZJhK6JL4s].mp3");
+  fs.writeFileSync(filename, "audio");
+  const audio = await services.downloadYoutubeAudio("https://youtu.be/LJZJhK6JL4s");
+  assert.equal(audio.path, filename);
+});
+
+test("YouTube import preserves multibyte filenames split across stdout chunks", async (t) => {
+  const { root, services } = makeServices(t, {
+    spawnImpl(command) {
+      if (command !== "yt-dlp") return fakeChild();
+      const filename = path.join(root, "袁娅维 🎵 [abc].mp3");
+      const bytes = Buffer.from(filename + "\n");
+      const split = bytes.indexOf(Buffer.from("袁")) + 1;
+      return fakeChild({ stdoutChunks: [bytes.subarray(0, split), bytes.subarray(split)] });
+    }
+  });
+  const filename = path.join(root, "袁娅维 🎵 [abc].mp3");
+  fs.writeFileSync(filename, "audio");
+  const audio = await services.downloadYoutubeAudio("https://youtu.be/abc");
+  assert.equal(audio.path, filename);
+});
+
+test("analysis uses installed FFmpeg even when a Python candidate has stale settings", async (t) => {
+  let backendEnv;
+  const { root, services } = makeServices(t, {
+    pythonCandidates: [{ command: "python", prefix: ["backend.py"], env: { PYTHONHOME: "configured-home", CHORDPILOT_FFMPEG: "" } }],
+    ensureYoutubeTools: async () => ({ ytDlpPath: "installed-yt-dlp", ffmpegPath: "installed-ffmpeg", jsRuntime: "deno:deno" }),
+    spawnImpl(command, _args, options) {
+      if (command === "python") { backendEnv = options.env; return fakeChild({ stdout: "{}" }); }
+      return fakeChild({ stdout: command === "installed-yt-dlp" ? path.join(root, "song.mp3") : "" });
+    }
+  });
+  fs.writeFileSync(path.join(root, "song.mp3"), "audio");
+  await services.downloadYoutubeAudio("https://youtu.be/abc");
+  await services.analyze({ audioPath: path.join(root, "song.mp3") });
+  assert.equal(backendEnv.CHORDPILOT_FFMPEG, "installed-ffmpeg");
+  assert.equal(backendEnv.PYTHONHOME, "configured-home");
+});
+
 test("session file operations round-trip JSON without Electron", async (t) => {
   const { root, services } = makeServices(t);
   const filename = path.join(root, "session.json");
   await services.writeSessionFile(filename, { app: "ChordPilot", version: 1 });
   assert.equal((await services.readSessionFile(filename)).session.version, 1);
+});
+
+test("failed session replacement preserves the previous JSON and removes its temporary file", async (t) => {
+  const { root, services } = makeServices(t);
+  const filename = path.join(root, "session.json");
+  fs.writeFileSync(filename, '{"version":1}');
+  const rename = fs.renameSync;
+  t.mock.method(fs, "renameSync", (source, destination) => {
+    if (destination === filename) throw new Error("replacement failed");
+    return rename(source, destination);
+  });
+  await assert.rejects(services.writeSessionFile(filename, { version: 2 }), /replacement failed/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(filename)), { version: 1 });
+  assert.equal(fs.readdirSync(root).some((name) => name.endsWith(".part")), false);
 });
 
 test("factory creates configured runtime directories", (t) => {

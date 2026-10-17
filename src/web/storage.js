@@ -285,11 +285,19 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
   }
 
   function fsyncFile(filePath) {
-    const descriptor = fs.openSync(filePath, "r");
+    let descriptor;
     try {
+      descriptor = fs.openSync(filePath, "r+");
       fs.fsyncSync(descriptor);
+    } catch (error) {
+      if (error.code === "EPERM" || error.code === "EINVAL" || error.code === "EBADF" || error.code === "EROFS") {
+        return;
+      }
+      throw error;
     } finally {
-      fs.closeSync(descriptor);
+      if (descriptor !== undefined) {
+        try { fs.closeSync(descriptor); } catch (_error) {}
+      }
     }
   }
 
@@ -302,7 +310,11 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     try {
       descriptor = fs.openSync(partPath, "w", 0o600);
       fs.writeFileSync(descriptor, content);
-      fs.fsyncSync(descriptor);
+      try {
+        fs.fsyncSync(descriptor);
+      } catch (error) {
+        if (error.code !== "EPERM" && error.code !== "EINVAL" && error.code !== "EBADF") throw error;
+      }
     } finally {
       if (descriptor !== undefined) fs.closeSync(descriptor);
     }
@@ -461,6 +473,7 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
       removeOwnedFile("tmp", sourcePath);
       return privatePath({ ...publicRecord(record) }, destination);
     } catch (error) {
+      console.error("commitMedia error:", error);
       try {
         removeOwnedFile(directoryKey, destinationPart);
         removeOwnedFile(directoryKey, destination);
@@ -476,8 +489,14 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     if (!sourcePath || !fs.existsSync(sourcePath) || !fs.lstatSync(sourcePath).isFile()) {
       throw new StorageError("SOURCE_FILE_MISSING", "The source media file is unavailable.");
     }
-    const name = sanitizeName(originalName || path.basename(sourcePath), "media");
-    const tempPath = createTempPath(`.${extensionFor(name)}.part`);
+    const sourceExtension = extensionFor(sourcePath);
+    let resolvedOriginalName = originalName || path.basename(sourcePath);
+    if (!path.extname(resolvedOriginalName) && sourceExtension && sourceExtension !== "bin") {
+      resolvedOriginalName = `${resolvedOriginalName}.${sourceExtension}`;
+    }
+    const name = sanitizeName(resolvedOriginalName, "media");
+    const extension = extensionFor(name, sourceExtension);
+    const tempPath = createTempPath(`.${extension}.part`);
     try {
       if (copy) {
         ensureDirectory("tmp");
@@ -515,9 +534,13 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
       return known || referenceFrom(value);
     }
     if (value.path) {
+      const sourceExt = path.extname(value.path);
+      const originalName = value.name
+        ? (path.extname(value.name) ? value.name : `${value.name}${sourceExt}`)
+        : path.basename(value.path);
       return publicRecord(await registerExisting({
         sourcePath: value.path,
-        originalName: value.name || path.basename(value.path),
+        originalName,
         kind: value.kind || kind,
         copy
       }));
@@ -528,9 +551,11 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
   async function normalizeStems(stems, options) {
     if (!Array.isArray(stems)) return stems;
     return Promise.all(stems.map(async (stem) => {
+      const safeStem = redactPaths(stem);
       const media = await normalizeMedia(stem, "stem", options);
-      if (!media) return redactPaths(stem);
-      return { ...media, ...(stem?.name ? { name: stem.name } : {}) };
+      if (!media) return safeStem;
+      const result = { ...safeStem, ...media, ...(stem?.name ? { name: stem.name } : {}) };
+      return Object.hasOwn(media, "path") ? privatePath(result, media.path) : result;
     }));
   }
 
@@ -552,8 +577,9 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     if (!Array.isArray(stems)) return stems;
     return Promise.all(stems.map(async (stem) => {
       const media = await normalizeSessionMedia(stem, "stem");
+      const safeStem = redactPaths(stem);
       const ref = media ? referenceFrom(media) : referenceFrom(stem);
-      return ref ? { ...ref, ...(stem?.name ? { name: stem.name } : {}) } : redactPaths(stem);
+      return ref ? { ...safeStem, ...ref, ...(stem?.name ? { name: stem.name } : {}) } : safeStem;
     }));
   }
 
@@ -600,7 +626,7 @@ function createStorage({ root, cacheRoot: configuredCacheRoot, randomUUID = cryp
     return stems.map((stem) => {
       const media = hydrateMedia(stem);
       if (!media) return media;
-      const hydrated = { ...media, ...(stem?.name ? { name: stem.name } : {}) };
+      const hydrated = { ...redactPaths(stem), ...media, ...(stem?.name ? { name: stem.name } : {}) };
       return Object.hasOwn(media, "path") ? privatePath(hydrated, media.path) : hydrated;
     });
   }

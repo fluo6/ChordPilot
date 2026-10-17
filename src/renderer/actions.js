@@ -1,4 +1,5 @@
 function startProjectWithAudio(audio, statusText = "Audio loaded") {
+  state.sessionPath = null;
   if (typeof resetStudyState === "function") resetStudyState();
   state.audio = audio;
   state.chart = null;
@@ -46,21 +47,27 @@ async function startFromYoutubeLink(event) {
     return;
   }
 
-  const finishLoading = beginLoading("Downloading YouTube audio...");
+  const finishLoading = beginLoading("Preparing YouTube download...");
   elements.youtubeStartBtn.disabled = true;
-  elements.youtubeSourceHint.textContent = "Downloading and converting audio...";
+  elements.youtubeSourceHint.textContent = "Checking YouTube tools...";
   setStatus("Downloading YouTube audio...");
   clearLog();
 
   try {
     const audio = await window.chordPilot.downloadYoutubeAudio(url);
+    if (!audio) {
+      elements.youtubeSourceHint.textContent = "Setup cancelled. Click Start From Link when you’re ready.";
+      setStatus("YouTube setup cancelled");
+      return;
+    }
     startProjectWithAudio(audio, "YouTube audio loaded");
     elements.youtubeUrlInput.value = "";
     elements.youtubeSourceHint.textContent = "Downloads audio as MP3, then opens it as a new project.";
   } catch (error) {
     elements.youtubeSourceHint.textContent = "Download failed.";
-    setStatus(error.message);
-    showErrorDialog("YouTube Download Error", error.message);
+    const message = String(error.message || "YouTube download failed.").replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "");
+    setStatus(message);
+    showErrorDialog("YouTube Download Error", message);
   } finally {
     elements.youtubeStartBtn.disabled = false;
     finishLoading();
@@ -299,14 +306,6 @@ async function analyzeAudio(settings = {}) {
   }
 
   const mode = elements.analysisModeInput.value;
-  if (mode === "high-quality" && window.chordPilot?.isWebRuntime) {
-    const proceed = window.confirm(
-      "High Quality Stems uses heavy AI processing.\n\nIn the web runtime, this currently runs on the server CPU and may take several minutes depending on the hardware.\n\nAre you sure you want to proceed?"
-    );
-    if (!proceed) {
-      return;
-    }
-  }
 
   setStatus("Analyzing...");
   clearLog();
@@ -343,6 +342,7 @@ async function analyzeAudio(settings = {}) {
     appendLog(`result: ${state.chart.bars.length} bars, key ${chartKeyText(state.chart)}, tempo ${state.chart.tempo}`);
     addJob(`Analysis ready: ${state.chart.bars.length} bars`, "done");
     renderHome();
+    openEditorPanel("arrange");
     setStatus(`Draft ready: ${state.chart.bars.length} bars - ${engine}`);
   } catch (error) {
     appendLog(`error: ${error.message}`);
@@ -704,14 +704,18 @@ function buildSessionPayload() {
       metronomeVolume: state.metronomeVolume,
       tuningReferenceHz: state.tuningReferenceHz,
       timelineZoom: state.timelineZoom,
+      waveformView: state.waveformView,
       followTimeCursor: state.followTimeCursor !== false,
       detailPaneWidth: state.detailPaneWidth,
+      notationUseKeySignature: state.notationUseKeySignature !== false,
+      bassStrings: state.bassStrings === 5 ? 5 : 4,
+      detailSectionLayout: state.detailSectionLayout,
       currentTime: elements.audioPlayer.currentTime || 0
     }
   };
 }
 
-async function saveSession() {
+async function saveSession(options = {}) {
   if (typeof saveCurrentStudy === "function" && (state.study?.pendingRuns?.length || (state.study?.openStudyId && state.study?.dirty)) && !saveCurrentStudy({ silent: true })) {
     setStudyMessage("Complete the current study's range and sources before saving this session."); return;
   }
@@ -723,9 +727,12 @@ async function saveSession() {
   }
 
   const finishLoading = beginLoading("Saving session...");
+  const projectAudio = state.audio;
+  const projectChart = state.chart;
   try {
-    const result = await window.chordPilot.saveSession(session);
+    const result = await window.chordPilot.saveSession(session, { path: state.sessionPath, saveAs: Boolean(options.saveAs) });
     if (result?.path) {
+      if (state.audio === projectAudio && state.chart === projectChart) state.sessionPath = result.path;
       if (typeof studySaveToken === "function" && studySaveToken() === studySaveSnapshot) {
         state.study.dirty = false;
         renderStudy();
@@ -760,8 +767,15 @@ function restoreSessionPayload(session) {
   state.metronomeVolume = Number.isFinite(Number(session.ui?.metronomeVolume)) ? Number(session.ui.metronomeVolume) : state.metronomeVolume;
   state.tuningReferenceHz = Number.isFinite(Number(session.ui?.tuningReferenceHz)) ? Number(session.ui.tuningReferenceHz) : 440;
   state.timelineZoom = Number(session.ui?.timelineZoom) || 1;
+  if (typeof normalizeWaveformView === 'function') state.waveformView = normalizeWaveformView(session.ui?.waveformView);
   state.followTimeCursor = session.ui?.followTimeCursor !== false;
   state.detailPaneWidth = Number(session.ui?.detailPaneWidth) || state.detailPaneWidth;
+  state.notationUseKeySignature = session.ui?.notationUseKeySignature !== false;
+  state.bassStrings = session.ui?.bassStrings === 5 ? 5 : 4;
+  if (typeof normalizeDetailSectionLayout === 'function') {
+    state.detailSectionLayout = normalizeDetailSectionLayout(session.ui?.detailSectionLayout);
+    applyDetailSectionLayout();
+  }
   elements.analysisModeInput.value = session.analysis?.mode || state.chart?.analysis_engine?.mode || "fast";
   applyAnalysisOptions(session.analysis?.options || state.chart?.analysis_engine?.options || {}, { legacyDefaults: true });
 
@@ -806,6 +820,7 @@ async function openSession() {
       return;
     }
     restoreSessionPayload(result.session);
+    state.sessionPath = result.path;
     rememberSession(result.path, result.session);
     addJob(`Session opened: ${result.session.chart?.title || result.session.audio?.name || "Untitled"}`, "done");
     const missing = result.session.audio?.exists === false ? " - audio file missing" : "";
@@ -826,6 +841,7 @@ async function openSessionPath(sessionPath) {
       return;
     }
     restoreSessionPayload(result.session);
+    state.sessionPath = result.path;
     rememberSession(result.path, result.session);
     addJob(`Session opened: ${result.session.chart?.title || result.session.audio?.name || "Untitled"}`, "done");
     const missing = result.session.audio?.exists === false ? " - audio file missing" : "";

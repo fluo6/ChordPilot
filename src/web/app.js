@@ -22,6 +22,15 @@ function inlineFilename(name) {
     .replace(/"/g, "-") || "media";
 }
 
+function fixOriginalName(name) {
+  if (!name) return name;
+  try {
+    const fixed = Buffer.from(name, "latin1").toString("utf8");
+    if (!fixed.includes("\uFFFD")) return fixed;
+  } catch (_error) {}
+  return name;
+}
+
 function apiError(error) {
   if (error instanceof HttpError) return error;
   if (error.code === "INVALID_STUDY") return new HttpError(400, "INVALID_STUDY", error.message);
@@ -252,9 +261,13 @@ function createWebApp({
 
   app.get("/api/media/:id", asyncRoute(async (req, res) => {
     const media = await resolveMedia(req.params.id);
+    if (media.extension && media.extension !== "bin") {
+      res.type(media.extension);
+    }
     await new Promise((resolve, reject) => {
       res.sendFile(media.path, {
         acceptRanges: true,
+        dotfiles: "allow",
         headers: { "Content-Disposition": `inline; filename="${inlineFilename(media.name)}"` }
       }, (error) => (error ? reject(error) : resolve()));
     });
@@ -277,7 +290,7 @@ function createWebApp({
     try {
       media = await storage.commitMedia({
         tempPath: req.file.path,
-        originalName: req.file.originalname,
+        originalName: fixOriginalName(req.file.originalname),
         kind: "source"
       });
     } finally {
@@ -360,7 +373,7 @@ function createWebApp({
             mode: req.body?.mode || "fast",
             options: req.body?.options || {}
           });
-          const normalizedChart = await storage.normalizeChart(result, { copy: false });
+          const normalizedChart = await storage.normalizeChart(result, { copy: true });
           if (normalizedChart?.stems?.ok) storage.associateStudyStems(media.id, normalizedChart.stems.stems);
           return normalizedChart;
         } finally {
@@ -492,6 +505,9 @@ function createWebApp({
   app.use((error, _req, res, next) => {
     if (res.headersSent) return next(error);
     const stable = apiError(error);
+    if (stable.status >= 500) {
+      console.error("Server error:", error);
+    }
     res.status(stable.status).json({ error: { code: stable.code, message: stable.message } });
   });
 

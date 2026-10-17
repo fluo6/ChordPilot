@@ -10,6 +10,23 @@ function studyRangeError(start, end, duration = Infinity) {
   return "";
 }
 
+function studyChordOverlaps(bars, start, end) {
+  if (studyRangeError(start, end)) return [];
+  const slices = (Array.isArray(bars) ? bars : []).flatMap((bar) => Array.isArray(bar?.chord_events) ? bar.chord_events : [])
+    .filter((event) => Number.isFinite(event?.start) && Number.isFinite(event?.end) &&
+      event.end > event.start && typeof event.chord === "string" && event.chord && event.end > start && event.start < end)
+    .map((event) => ({ start: Math.max(start, event.start), end: Math.min(end, event.end), chord: event.chord }))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged = [];
+  for (const slice of slices) {
+    const previous = merged.at(-1);
+    if (previous && previous.chord === slice.chord && slice.start <= previous.end + .001) previous.end = Math.max(previous.end, slice.end);
+    else merged.push(slice);
+  }
+  const visible = merged.filter((slice) => slice.end - slice.start >= .05 - 1e-9);
+  return new Set(visible.map((slice) => slice.chord)).size > 1 ? visible : [];
+}
+
 function advanceStudySelection(anchor, time) {
   return anchor === null ? { anchor: time, range: null } : { anchor: null, range: [Math.min(anchor, time), Math.max(anchor, time)] };
 }
@@ -28,6 +45,9 @@ function studySettings(value = {}) {
     chroma_low_hz: number("chroma_low_hz", 65, 20, 500),
     chroma_high_hz: number("chroma_high_hz", 1800, 500, 5000),
     chord_alternatives: Math.round(number("chord_alternatives", 6, 1, 12)),
+    tail_reduction: number("tail_reduction", 0, 0, 1),
+    tail_half_life: number("tail_half_life", .5, .1, 3),
+    overtone_weighting: number("overtone_weighting", .5, 0, 1),
     simplify_chords: value?.simplify_chords !== false
   };
 }
@@ -42,7 +62,9 @@ function createStudyState(settings = {}) {
 
 function studyDetectionSettings(settings, algorithmVersion) {
   const normalized = studySettings(settings);
-  if (["local-study-v3", "local-study-v4", "local-study-v5", "local-study-v6"].includes(algorithmVersion)) delete normalized.simplify_chords;
+  const version = Number(/^local-study-v(\d+)$/.exec(algorithmVersion)?.[1] || 0);
+  if (version >= 3) delete normalized.simplify_chords;
+  if (version < 10 && settings?.overtone_weighting === undefined) normalized.overtone_weighting = 0;
   return normalized;
 }
 
@@ -51,11 +73,28 @@ function normalizeStudyRun(run) {
       !Array.isArray(run.range) || studyRangeError(run.range[0], run.range[1]) ||
       !Number.isFinite(run.chord_confidence) || !Number.isFinite(run.pitch_confidence)) return null;
   const object = (value) => value && typeof value === "object" && !Array.isArray(value);
+  const spectrum = (value) => object(value) && Array.isArray(value.frequencies_hz) && value.frequencies_hz.length >= 2 && value.frequencies_hz.length <= 768 &&
+    (value.reference_power === undefined || Number.isFinite(value.reference_power) && value.reference_power >= 0) &&
+    value.frequencies_hz.every((frequency, index, all) => Number.isFinite(frequency) && frequency > 0 && (index === 0 || frequency > all[index - 1])) &&
+    Array.isArray(value.magnitudes_db) && value.magnitudes_db.length === value.frequencies_hz.length &&
+    value.magnitudes_db.every((db) => Number.isFinite(db) && db >= -80 && db <= 0) &&
+    Array.isArray(value.peaks) && value.peaks.length <= 24 && value.peaks.every((peak) => object(peak) &&
+      Number.isInteger(peak.midi) && peak.midi >= 21 && peak.midi <= 108 && typeof peak.note === "string" &&
+      Number.isFinite(peak.frequency_hz) && peak.frequency_hz > 0 && Number.isFinite(peak.level_db) && peak.level_db >= -80 && peak.level_db <= 0);
   const evidence = (value) => object(value) && (value.detected_notes === undefined ||
     Array.isArray(value.detected_notes) && value.detected_notes.every((note) => object(note) && typeof note.note === "string" && Number.isFinite(note.strength))) &&
+    (value.scoring_pitch_classes === undefined || Array.isArray(value.scoring_pitch_classes) && value.scoring_pitch_classes.length === 12 &&
+      value.scoring_pitch_classes.every((item) => object(item) && typeof item.note === "string" &&
+        Number.isFinite(item.accompaniment) && item.accompaniment >= 0 && item.accompaniment <= 1 &&
+        Number.isFinite(item.scored) && item.scored >= 0 && item.scored <= 1)) &&
+    (value.scoring_bass_weight === undefined || Number.isFinite(value.scoring_bass_weight) && value.scoring_bass_weight >= 0 && value.scoring_bass_weight <= .3) &&
+    (value.scoring_source === undefined || typeof value.scoring_source === "string" && value.scoring_source.length <= 80) &&
     (value.detected_pitches === undefined || Array.isArray(value.detected_pitches) && value.detected_pitches.every((note) =>
       object(note) && Number.isInteger(note.midi) && note.midi >= 21 && note.midi <= 108 && typeof note.note === "string" &&
-      Number.isFinite(note.strength) && note.strength >= 0 && note.strength <= 1 && Number.isFinite(note.frequency_hz) && note.frequency_hz > 0));
+      Number.isFinite(note.strength) && note.strength >= 0 && note.strength <= 1 && Number.isFinite(note.frequency_hz) && note.frequency_hz > 0)) &&
+    (value.spectrum === undefined || spectrum(value.spectrum)) &&
+    (value.tail_reduced_spectrum === undefined || spectrum(value.tail_reduced_spectrum)) &&
+    (value.overtone_weighted_spectrum === undefined || spectrum(value.overtone_weighted_spectrum));
   if (run.evidence !== undefined && !evidence(run.evidence)) return null;
   if (run.source_evidence !== undefined && (!object(run.source_evidence) || !Object.values(run.source_evidence).every(evidence))) return null;
   if (run.alternatives !== undefined && (!Array.isArray(run.alternatives) || !run.alternatives.every((item) =>
@@ -67,7 +106,7 @@ function normalizeStudyRun(run) {
   const safe = studyCopy(run);
   safe.sources = studySourceNames(run.sources);
   if (!safe.sources.length) return null;
-  safe.settings = studySettings(run.settings);
+  safe.settings = studySettings({ ...run.settings, overtone_weighting: run.settings?.overtone_weighting ?? 0 });
   // Historical evidence is data, never permission to open a saved filesystem location.
   const stripLocations = (value) => {
     if (Array.isArray(value)) return value.map(stripLocations);
@@ -92,7 +131,7 @@ function normalizeStudies(value) {
     });
     return [{
       id: item.id, name: String(item.name || "Study"), start: item.start, end: item.end,
-      sources, settings: studySettings(item.settings), notes: String(item.notes || ""),
+      sources, settings: studySettings({ ...item.settings, overtone_weighting: item.settings?.overtone_weighting ?? 0 }), notes: String(item.notes || ""),
       corrected_chord: String(item.corrected_chord || ""), created_at: String(item.created_at || ""),
       updated_at: String(item.updated_at || ""), runs,
       selected_run_id: runIds.has(item.selected_run_id) ? item.selected_run_id : runs.at(-1)?.id || null

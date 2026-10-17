@@ -258,13 +258,8 @@ function renderStudyWaveform() {
   const zoom = Number(studyElement("studyZoomInput").value) || 1;
   const width = Math.max(600, studyElement("studyWaveViewport").clientWidth * zoom);
   body.style.width = `${width}px`; canvas.width = width; canvas.height = 100;
-  const context = canvas.getContext("2d");
   const peaks = state.chart?.waveform || [];
-  context.clearRect(0, 0, width, 100); context.fillStyle = "#7397aa";
-  peaks.forEach((peak, index) => {
-    const height = Math.max(1, Number(peak) * 84);
-    context.fillRect(index / peaks.length * width, (100 - height) / 2, Math.max(1, width / peaks.length - 1), height);
-  });
+  drawWaveform(canvas, peaks);
   const duration = studyDuration();
   const range = studyElement("studyRangeOverlay");
   const anchor = studyElement("studyRangeAnchor");
@@ -283,13 +278,34 @@ function renderStudyWaveform() {
   studyElement("studyWaveHint").textContent = "Wheel to zoom around the selection; pan away to zoom under the mouse. Drag waveform to pan; drag selection or its edges to adjust. Ctrl/⌘-click endpoints or enable Select Range." + (peaks.length ? "" : " Analyze the song for a waveform preview.");
   state.study.waveScrollLeft = studyElement("studyWaveViewport").scrollLeft;
 }
+function renderStudyChordOverlaps(run, container) {
+  const overlaps = studyChordOverlaps(state.chart?.bars, run.range[0], run.range[1]);
+  if (!overlaps.length) return;
+  const section = studyText("section", "", "study-overlaps");
+  section.append(studyText("h3", "Arrangement chords in this selection"));
+  section.append(studyText("p", "Current song analysis estimates a chord change here; its boundaries are approximate. The large chord above summarizes the full selection. Choose a part, then Analyze Selection to inspect it separately.", "study-muted"));
+  const list = studyText("div", "", "study-overlap-list");
+  for (const part of overlaps) {
+    const chord = displayChordSymbol(part.chord, false, run.key_context?.key || run.settings?.known_key || run.settings?.song_key);
+    const button = studyText("button", `${part.start.toFixed(3)}–${part.end.toFixed(3)}s · ${chord}`, "study-overlap-part");
+    button.type = "button";
+    button.title = "Use this interval as the Local Study range";
+    button.addEventListener("click", () => {
+      state.study.message = "Range selected from the arrangement. Analyze Selection to inspect its audio.";
+      setStudyRange(part.start, part.end);
+    });
+    list.append(button);
+  }
+  section.append(list);
+  container.append(section);
+}
 function renderStudyResult() {
   const container = studyElement("studyResult"); container.replaceChildren();
   const run = studyCurrentRun(); const runs = studyCurrentRuns();
   const history = studyElement("studyRunInput"); history.replaceChildren();
   const comparison = studyElement("studyCompareInput"); comparison.replaceChildren(new Option("No comparison", ""));
   runs.forEach((item, index) => {
-    const label = `Run ${index + 1} · ${item.chord} · ${item.algorithm_version || "saved"}`;
+    const label = `Run ${index + 1} · ${displayChordSymbol(item.chord, false, item.key_context?.key || item.settings?.known_key || item.settings?.song_key)} · ${item.algorithm_version || "saved"}`;
     history.append(new Option(label, item.id)); comparison.append(new Option(label, item.id));
   });
   history.disabled = !runs.length; comparison.disabled = runs.length < 2;
@@ -297,15 +313,21 @@ function renderStudyResult() {
   if (!run) { container.append(studyText("p", "Choose a short passage and analyze it to inspect its harmony.", "study-muted")); return; }
   const draft = state.study.draft;
   const matches = JSON.stringify(run.range) === JSON.stringify([draft.start, draft.end]) && JSON.stringify([...run.sources].sort()) === JSON.stringify([...draft.sources].sort()) && JSON.stringify(studyDetectionSettings(run.settings, run.algorithm_version)) === JSON.stringify(studyDetectionSettings(draft.settings, run.algorithm_version));
-  const displayedChord = displayChordSymbol(run.chord, draft.settings.simplify_chords);
+  const displayedChord = displayChordSymbol(run.chord, draft.settings.simplify_chords, run.key_context?.key || run.settings?.known_key || run.settings?.song_key);
   container.append(studyText("strong", displayedChord, "study-chord"));
-  if (displayedChord !== run.chord) container.append(studyText("p", `Detected: ${run.chord}`, "study-muted"));
+  const voicing = studyText('div', '', 'chord-voicing');
+  renderChordVoicing(voicing, run, run.chord);
+  container.append(voicing);
+  if (displayedChord !== displayChordSymbol(run.chord, false, run.key_context?.key || run.settings?.known_key || run.settings?.song_key)) container.append(studyText("p", `Detected: ${run.chord}`, "study-muted"));
   container.append(studyText("p", `${run.range[0].toFixed(3)}–${run.range[1].toFixed(3)}s · ${run.sources.join(" + ")} · ${run.key_context?.key || run.settings?.known_key || "?"} key`));
-  container.append(studyText("p", `Chord confidence ${Math.round(run.chord_confidence * 100)}% · Pitch focus ${Math.round(run.pitch_confidence * 100)}%`, "study-muted"));
+  renderStudyChordOverlaps(run, container);
+  const confidenceLine = studyText("p", `Chord confidence ${Math.round(run.chord_confidence * 100)}% · Pitch focus ${Math.round(run.pitch_confidence * 100)}%`, "study-muted");
+  confidenceLine.title = "Heuristic ranking scores, not calibrated probabilities of correctness.";
+  container.append(confidenceLine);
   container.append(studyText("p", matches ? "Saved analysis snapshot · Original audio" : "This result uses earlier inputs. Analyze again for the current selection.", matches ? "study-muted" : "study-stale"));
   const exactPitches = Array.isArray(run.evidence?.detected_pitches);
-  const bassMidi = run.source_evidence?.bass?.detected_pitches?.find((pitch) => normalizePitchName(pitch.note.replace(/-?\d+$/, "")) === run.bass_reference?.note)?.midi;
-  const piano = createPianoEvidence({ chord: run.chord, evidence: run.evidence }, run.chord, { exactPitches, pitchClassesOnly: !exactPitches, bassMidi, bassNote: run.bass_reference?.note });
+  const bassMidi = measuredBassMidi(run.bass_reference, run.bass_reference?.detected_pitches || run.source_evidence?.bass?.detected_pitches || []);
+  const piano = createPianoEvidence({ chord: run.chord, evidence: run.evidence }, run.chord, { exactPitches, pitchClassesOnly: !exactPitches, bassMidi, bassNote: run.bass_reference?.note, focusEvidence: true });
   container.append(studyText("h3", exactPitches ? "Detected notes · A0–C8" : "Pitch classes · reanalyze for octaves"), piano);
   const notes = exactPitches ? run.evidence.detected_pitches : run.evidence?.detected_notes || [];
   container.append(studyText("p", notes.map((note) => `${note.note} ${Math.round(note.strength * 100)}%`).join(" · ") || "No strong pitched notes detected."));
@@ -314,10 +336,12 @@ function renderStudyResult() {
     const positions = notes.map((note) => piano.querySelector(`[data-midi="${note.midi}"]`).offsetLeft);
     viewport.scrollLeft = Math.max(0, (Math.min(...positions) + Math.max(...positions)) / 2 - viewport.clientWidth / 2);
   }
-  if (run.bass_reference) container.append(studyText("p", `Bass reference: ${run.bass_reference.note} · ${Math.round(run.bass_reference.confidence * 100)}% confidence`));
+  if (run.bass_reference) container.append(studyText("p", `${run.bass_reference.origin === "accompaniment" ? "Low accompaniment note" : "Bass reference"}: ${run.bass_reference.note} · ${Math.round(run.bass_reference.confidence * 100)}% confidence`));
+  if (run.source_evidence?.bass?.used_for_notes === false) container.append(studyText("p", "No reliable bass fundamental was found; its original spectrum remains available.", "study-muted"));
+  container.append(createStudySpectrum(run));
   const alternatives = studyText("div", "", "study-candidates");
   (run.alternatives || []).forEach((item) => {
-    const button = studyText("button", `${item.chord} · ${Math.round(item.score * 100)}%`); button.type = "button";
+    const button = studyText("button", `${displayChordSymbol(item.chord, false, run.key_context?.key || run.settings?.known_key || run.settings?.song_key)} · ${Math.round(item.score * 100)}%`); button.type = "button";
     button.title = (item.reasons || []).join("; ");
     button.addEventListener("click", () => { state.study.draft.corrected_chord = item.chord; state.study.dirty = true; renderStudy(); });
     alternatives.append(button);
@@ -340,7 +364,7 @@ function renderStudy() {
   if (!elements.studyPanel) return;
   const draft = state.study.draft;
   if (!draft.settings.song_key && !studyCurrentRuns().length) draft.settings.song_key = studySeedSettings().song_key;
-  const fields = { studyStartInput: draft.start, studyEndInput: draft.end, studyNameInput: draft.name, studyNotesInput: draft.notes, studyCorrectionInput: draft.corrected_chord, studyKeyInput: draft.settings.known_key, studyLowInput: draft.settings.chroma_low_hz, studyHighInput: draft.settings.chroma_high_hz, studyAlternativesInput: draft.settings.chord_alternatives };
+  const fields = { studyStartInput: draft.start, studyEndInput: draft.end, studyNameInput: draft.name, studyNotesInput: draft.notes, studyCorrectionInput: draft.corrected_chord, studyKeyInput: draft.settings.known_key, studyLowInput: draft.settings.chroma_low_hz, studyHighInput: draft.settings.chroma_high_hz, studyAlternativesInput: draft.settings.chord_alternatives, studyTailReductionInput: draft.settings.tail_reduction * 100, studyTailHalfLifeInput: draft.settings.tail_half_life, studyOvertoneWeightingInput: draft.settings.overtone_weighting * 100 };
   Object.entries(fields).forEach(([id, value]) => { const input = studyElement(id); if (document.activeElement !== input) input.value = value ?? ""; });
   studyElement("studySimplifyInput").checked = draft.settings.simplify_chords;
   studyElement("studyVolumeInput").value = state.masterVolume;
@@ -409,9 +433,10 @@ function initializeStudy() {
     if (["start", "end"].includes(field)) state.study.wavePanned = false;
     state.study.selectionAnchor = null; studyChanged(); renderStudy();
   }));
-  const settings = { studyKeyInput: "known_key", studyLowInput: "chroma_low_hz", studyHighInput: "chroma_high_hz", studyAlternativesInput: "chord_alternatives", studySimplifyInput: "simplify_chords" };
+  const settings = { studyKeyInput: "known_key", studyLowInput: "chroma_low_hz", studyHighInput: "chroma_high_hz", studyAlternativesInput: "chord_alternatives", studySimplifyInput: "simplify_chords", studyTailReductionInput: "tail_reduction", studyTailHalfLifeInput: "tail_half_life", studyOvertoneWeightingInput: "overtone_weighting" };
   Object.entries(settings).forEach(([id, field]) => studyElement(id).addEventListener("change", (event) => {
     state.study.draft.settings[field] = field === "simplify_chords" ? event.target.checked : field === "known_key" ? event.target.value : Number(event.target.value);
+    if (["tail_reduction", "overtone_weighting"].includes(field)) state.study.draft.settings[field] /= 100;
     state.study.draft.settings = studySettings(state.study.draft.settings); studyChanged(); renderStudy();
   }));
   studyElement("studyRunInput").addEventListener("change", (event) => selectStudyRun(event.target.value));

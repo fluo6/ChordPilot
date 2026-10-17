@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 from chordpilot_audio import audio_duration, load_audio, waveform_peaks
 from chordpilot_cache import read_analysis_cache, write_analysis_cache, append_history
 from chordpilot_chords import *
 from chordpilot_lyrics import generate_lyrics_reference, apply_lyrics_to_bars
 from chordpilot_stems import run_demucs
-from chordpilot_timing import analysis_cell_bounds, group_chord_cells
+from chordpilot_bass import bass_note_events, bass_reference_from_events
+from chordpilot_timing import analysis_cell_bounds, group_chord_cells, stabilize_chord_cells
+from chordpilot_spectrum import spectral_power_for_crop, spectrum_from_power, reduce_sustain_tail, apply_tail_to_chroma, detected_pitches_for_crop, attenuate_detected_pitches, reduce_overtones, apply_overtone_weighting, voicing_frames_for_crop
 
 def estimate_with_librosa(path: Path) -> dict[str, Any]:
     result: dict[str, Any] = {}
@@ -91,23 +95,25 @@ def onset_envelope(audio: Any, sr: int, frame: int, hop: int, np: Any) -> Any:
     return envelope
 
 def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_bpm: int = 70, max_bpm: int = 190) -> int:
+    fallback = max(min_bpm, min(max_bpm, 120))
     if len(envelope) < 8:
-        return 120
+        return fallback
 
     env = envelope - envelope.mean()
     corr = np.correlate(env, env, mode="full")[len(env) - 1:]
     min_lag = max(1, int((60.0 / max_bpm) * sr / hop))
     max_lag = min(len(corr) - 1, int((60.0 / min_bpm) * sr / hop))
     if max_lag <= min_lag:
-        return 120
+        return fallback
 
     lag = int(np.argmax(corr[min_lag:max_lag]) + min_lag)
     bpm = 60.0 * sr / (hop * lag)
-    while bpm < 80:
+    # The octave preference must stay inside the user's requested search range.
+    while bpm < 80 and bpm * 2 <= max_bpm:
         bpm *= 2
-    while bpm > 180:
+    while bpm > 180 and bpm / 2 >= min_bpm:
         bpm /= 2
-    return int(round(bpm))
+    return max(min_bpm, min(max_bpm, int(round(bpm))))
 
 def estimate_beat_times(envelope: Any, tempo: int, sr: int, hop: int, np: Any, offset: float = 0.0) -> list[float]:
     beat_period = 60.0 / max(tempo, 1)
@@ -227,15 +233,83 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
     }
 
 def add_bass_reference_to_bars(bars: list[dict[str, Any]], bass_audio: Any, bass_sr: int, np: Any, source: str = "bass stem") -> None:
+    notes = bass_note_events(bass_audio, bass_sr, np)
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
-        end = min(len(bass_audio) / float(bass_sr), float(bars[index + 1].get("start", start + 2.0)) if index + 1 < len(bars) else start + 2.0)
-        bass_reference = estimate_bass_reference(bass_audio, bass_sr, start, end, np)
+        end = min(len(bass_audio) / float(bass_sr), float(bars[index + 1]['start']) if index + 1 < len(bars) else len(bass_audio) / float(bass_sr))
+        bar['bass_events'] = [{**note, 'start': max(start, note['start']), 'end': min(end, note['end'])}
+                              for note in notes if note['end'] > start and note['start'] < end]
+        bass_reference = bass_reference_from_events(notes, start, end)
         if bass_reference is None:
             continue
         bass_reference["source"] = source
         bar["bass_root"] = bass_reference["note"]
         bar["bass_reference"] = bass_reference
+
+
+def chord_reference_for_segment(audio: Any, sr: int, start: float, end: float, np: Any,
+                                bass_audio: Any = None, bass_sr: int | None = None,
+                                bass_notes: list[dict[str, Any]] | None = None,
+                                bass_noise_floor: float | None = None) -> dict[str, Any] | None:
+    """Prefer audible separated bass; otherwise retain a strong measured low accompaniment note."""
+    crop = audio[math.ceil(start * sr):math.floor(end * sr)]
+    level = float(np.sqrt(np.mean(crop ** 2))) if len(crop) else 0.
+    if bass_audio is not None and bass_sr:
+        bass_crop = bass_audio[math.ceil(start * bass_sr):math.floor(end * bass_sr)]
+        bass_level = float(np.sqrt(np.mean(bass_crop ** 2))) if len(bass_crop) else 0.
+        if bass_level >= max(1e-5, level * .03):
+            reference = (bass_reference_from_events(bass_notes, start, end) if bass_notes is not None
+                         else estimate_bass_reference(bass_audio, bass_sr, start, end, np, bass_noise_floor))
+            if reference:
+                return {**reference, 'origin': 'bass', 'source': 'bass stem'}
+    if level < 1e-5:
+        return None
+    pitches = detected_pitches_for_crop(crop, sr, np)
+    chroma = chroma_for_segment(crop, sr, 0, len(crop) / sr, np)
+    return accompaniment_reference_for_evidence(pitches, chord_evidence(chroma, start, end, '', np)['detected_notes'])
+
+
+def accompaniment_reference_for_evidence(pitches: list[dict[str, Any]], notes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Use the same retained pitches for low-note guidance and chord recognition."""
+    candidates = [pitch for pitch in pitches if pitch['midi'] <= 60 and pitch['strength'] >= .04
+        and abs(1200 * math.log2(pitch['frequency_hz'] / (440 * 2 ** ((pitch['midi'] - 69) / 12)))) <= 30]
+    if not candidates:
+        return None
+    pitch = min(candidates, key=lambda item: item['midi'])
+    if pitch['strength'] < .15:
+        return None  # A weaker lower note prevents promoting its stronger upper chord tone to bass.
+    return {'note': PITCH_NAMES[pitch['midi'] % 12], 'pitch_class': pitch['midi'] % 12,
+        'confidence': round(min(.95, .55 + pitch['strength'] * .6), 3),
+        'origin': 'accompaniment', 'source': 'low accompaniment pitch',
+        'detected_notes': notes, 'detected_pitches': pitches}
+
+def fading_root_for_crop(crop: Any, sr: int, start: float, chroma: Any, evidence: dict[str, Any],
+                         reference: dict[str, Any] | None, ranked: list[dict[str, Any]],
+                         key: str, np: Any, options: dict[str, Any]) -> dict[str, Any] | None:
+    from chordpilot_chords import fading_chord_hint, chroma_for_segment
+    count = round(sr * .25)
+    if len(crop) < 2 * count or len(crop) > sr * 2 or (reference or {}).get('confidence', 0) >= .62:
+        return None
+    # Both attack and decay measurements stay inside this cell/selection.
+    # Equal window lengths keep FFT peak power comparable.
+    early_crop = crop[:count]
+    power = spectral_power_for_crop(early_crop, sr, np)
+    late_power = spectral_power_for_crop(crop[-count:], sr, np)
+    early_chroma = chroma_for_segment(early_crop, sr, 0, count / sr, np, options)
+    early_evidence = chord_evidence(early_chroma, start, start + count / sr, '', np)
+    early_evidence['detected_pitches'] = detected_pitches_for_crop(early_crop, sr, np)
+    early_evidence['spectrum'] = spectrum_from_power(power, sr, np, bin_count=192)
+    early_chroma = apply_overtone_weighting(early_evidence, early_chroma, power, sr, np, options, bin_count=192)
+    reference = accompaniment_reference_for_evidence(early_evidence['detected_pitches'], early_evidence['detected_notes'])
+    decay = {}
+    for pitch in early_evidence['detected_pitches']:
+        index = round(pitch['frequency_hz'] * (len(power) - 1) * 2 / sr)
+        before = float(power[max(0, index - 1):index + 2].sum())
+        after = float(late_power[max(0, index - 1):index + 2].sum())
+        decay[str(pitch['midi'])] = after / before if before > 0 else 1
+    return fading_chord_hint(chroma, evidence, None, {'chroma': early_chroma,
+        'evidence': early_evidence, 'bass_reference': reference, 'root_decay': decay}, ranked, key, np, options)
+
 
 def duration_weighted_bar_chroma(bars: list[dict[str, Any]], duration: float, tempo: int, time_signature: str, np: Any) -> Any:
     seconds_per_bar = (60.0 / max(tempo, 1)) * parse_beats_per_bar(time_signature)
@@ -262,47 +336,39 @@ def duration_weighted_cell_chroma(audio: Any, sr: int, bars: list[dict[str, Any]
             total += chroma_for_segment(audio, sr, cell_start, cell_end, np, options) * (cell_end - cell_start)
     return total
 
-def refine_cell_bass_boundaries(cells: list[dict[str, Any]], bass_audio: Any, sr: int, np: Any) -> bool:
-    """Refine supported root changes within a bar using local bass evidence."""
-    changed = False
+def refine_cell_bass_boundaries(cells: list[dict[str, Any]], bass_audio: Any, sr: int, np: Any,
+                                bass_notes: list[dict[str, Any]] | None = None) -> bool:
+    """Refine supported root changes using adjacent independent bass fundamentals."""
     if len(cells) < 2:
-        return changed
-    bar_start, bar_end = float(cells[0]["start"]), float(cells[-1]["end"])
+        return False
+    if bass_notes is None:
+        bass_notes = bass_note_events(bass_audio, sr, np, cells[0]['start'], cells[-1]['end'])
+    changed = False
     for left, right in zip(cells, cells[1:]):
-        old, new = left.get("bass_reference") or {}, right.get("bass_reference") or {}
-        old_pc, new_pc = old.get("pitch_class"), new.get("pitch_class")
-        if old_pc is None or new_pc is None or old_pc == new_pc or min(float(old.get("confidence", 0)), float(new.get("confidence", 0))) < .62:
+        old, new = left.get('bass_reference') or {}, right.get('bass_reference') or {}
+        if old.get('origin') == 'accompaniment' or new.get('origin') == 'accompaniment':
             continue
-        boundary = float(right["start"])
-        minimum = min(boundary - float(left["start"]), float(right["end"]) - boundary)
+        old_pc, new_pc = old.get('pitch_class'), new.get('pitch_class')
+        if old_pc is None or new_pc is None or old_pc == new_pc or min(old.get('confidence', 0), new.get('confidence', 0)) < .62:
+            continue
+        boundary = float(right['start'])
+        minimum = min(boundary - left['start'], right['end'] - boundary)
         radius = max(0, min(minimum * .8, minimum - .08))
-        samples = []
-        for center in np.arange(boundary - radius, boundary + radius + .001, .02):
-            reference = estimate_bass_reference(bass_audio, sr, max(bar_start, center - .09), min(bar_end, center + .09), np)
-            if not reference or reference["pitch_class"] not in {old_pc, new_pc} or float(reference["confidence"]) < .62:
-                continue
-            strengths = {item["note"]: float(item["strength"]) for item in reference["detected_notes"]}
-            samples.append((float(center), strengths.get(PITCH_NAMES[new_pc], 0) - strengths.get(PITCH_NAMES[old_pc], 0)))
         crossings = []
-        handled_negative = None
-        for index in range(1, len(samples) - 2):
-            after = samples[index]
-            before = next((sample for sample in reversed(samples[:index]) if sample[1] < 0), None)
-            if before is None or before[0] == handled_negative:
+        for before, after in zip(bass_notes, bass_notes[1:]):
+            if before['midi'] % 12 != old_pc or after['midi'] % 12 != new_pc:
                 continue
-            gap = after[0] - before[0]
-            if before[1] < 0 <= after[1] and gap <= .22 and samples[index + 2][0] - after[0] <= .045 and all(value >= 0 for _, value in samples[index:index + 3]):
-                # During a noisy/gliding attack, use the first stable new pitch
-                # rather than interpolating across unsupported intermediate notes.
-                crossing = after[0] if gap > .025 else before[0] + gap * (-before[1]) / (after[1] - before[1])
-                crossings.append((crossing, [before[0], after[0]]))
-                handled_negative = before[0]
+            if after['start'] - before['end'] > .16 or min(before['confidence'], after['confidence']) < .8:
+                continue
+            crossing = (before['end'] + after['start']) / 2
+            if abs(crossing - boundary) <= radius:
+                crossings.append((crossing, [before['end'], after['start']]))
         if crossings:
             crossing, bracket = min(crossings, key=lambda value: abs(value[0] - boundary))
             refined = round(crossing, 6)
             if abs(refined - boundary) > .005:
-                left["end"] = right["start"] = refined
-                right["_boundary_refinement"] = {"grid_time": boundary, "time": refined, "bass_bracket": bracket}
+                left['end'] = right['start'] = refined
+                right['_boundary_refinement'] = {'grid_time': boundary, 'time': refined, 'bass_bracket': bracket}
                 changed = True
     return changed
 
@@ -311,6 +377,11 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
                               time_signature: str, beat_times: list[float], np: Any,
                               options: dict[str, Any], evidence_source: str,
                               bass_audio: Any = None, bass_sr: int | None = None, key: str = "C") -> None:
+    bass_notes = None
+    if bass_audio is not None and bass_sr:
+        if not all(isinstance(bar.get('bass_events'), list) for bar in bars):
+            add_bass_reference_to_bars(bars, bass_audio, bass_sr, np)
+        bass_notes = [note for bar in bars for note in bar['bass_events']]
     mode = options.get("chord_timing", "legacy")
     if mode == "legacy":
         return
@@ -326,26 +397,79 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
         bar_cells = []
         for cell_start, cell_end in bounds:
             chroma = chroma_for_segment(audio, sr, cell_start, cell_end, np, options)
-            reference = estimate_bass_reference(bass_audio, int(bass_sr), cell_start, cell_end, np) if bass_audio is not None and bass_sr else None
+            reference = chord_reference_for_segment(audio, sr, cell_start, cell_end, np, bass_audio, bass_sr, bass_notes)
             evidence = chord_evidence(chroma, cell_start, cell_end, evidence_source, np)
             cell = {"start": cell_start, "end": cell_end, "chord": "N.C.", "confidence": 0.0,
                     "chord_confidence": 0.0, "pitch_confidence": detected_pitch_confidence(chroma, np),
                     "alternatives": [], "evidence": evidence, "bass_reference": reference, "_chroma": chroma}
             bar_cells.append(cell)
             cells.append(cell)
-        if mode == "auto" and bass_audio is not None and bass_sr and refine_cell_bass_boundaries(bar_cells, bass_audio, int(bass_sr), np):
+        if mode == "auto" and bass_audio is not None and bass_sr and refine_cell_bass_boundaries(bar_cells, bass_audio, int(bass_sr), np, bass_notes):
             for cell in bar_cells:
                 chroma = chroma_for_segment(audio, sr, cell["start"], cell["end"], np, options)
                 cell.update({"_chroma": chroma, "evidence": chord_evidence(chroma, cell["start"], cell["end"], evidence_source, np),
-                    "bass_reference": estimate_bass_reference(bass_audio, int(bass_sr), cell["start"], cell["end"], np)})
+                    "bass_reference": chord_reference_for_segment(audio, sr, cell["start"], cell["end"], np, bass_audio, bass_sr, bass_notes)})
         cells_by_bar.append(bar_cells)
     if not cells:
         return
-    provisional = [rank_chord_candidates(cell["_chroma"], key, None, None, cell.get("bass_reference"), np, options)[0][0]["chord"] for cell in cells]
+    previous_power, previous_center = None, None
+    for cell in cells:
+        crop = audio[math.ceil(cell['start'] * sr):math.floor(cell['end'] * sr)]
+        power = spectral_power_for_crop(crop, sr, np)
+        original_spectrum = spectrum_from_power(power, sr, np, bin_count=192)
+        recognition_power = power
+        cell['evidence']['detected_pitches'] = detected_pitches_for_crop(crop, sr, np)
+        if bass_audio is not None and bass_sr and cell.get('bass_reference') and cell['bass_reference'].get('origin') != 'accompaniment':
+            bass_crop = bass_audio[math.ceil(cell['start'] * bass_sr):math.floor(cell['end'] * bass_sr)]
+            cell['bass_reference']['raw_detected_pitches'] = detected_pitches_for_crop(bass_crop, bass_sr, np)
+            if options.get('overtone_weighting', .5) > 0:
+                bass_power = spectral_power_for_crop(bass_crop, bass_sr, np)
+                weighted_bass, bass_info = reduce_overtones(bass_power, bass_sr, np, options.get('overtone_weighting', .5))
+                cell['bass_reference']['overtone_weighting'] = bass_info
+                cell['bass_reference']['raw_detected_pitches'] = attenuate_detected_pitches(cell['bass_reference']['raw_detected_pitches'], bass_power, weighted_bass, bass_sr, np, minimum_strength=0)
+        center = (cell['start'] + cell['end']) / 2
+        if options.get('tail_reduction', 0) > 0:
+            reduced, info = reduce_sustain_tail(power, previous_power, center - previous_center if previous_center is not None else 0, options, np)
+            recognition_power = reduced
+            if info['applied'] and info['removed_fraction'] > 1e-9:
+                original_notes = cell['evidence'].get('detected_notes', [])
+                original_pitches = cell['evidence']['detected_pitches']
+                cell['_chroma'] = apply_tail_to_chroma(cell['_chroma'], power, reduced, sr, np, options)
+                cell['evidence'] = chord_evidence(cell['_chroma'], cell['start'], cell['end'], evidence_source, np)
+                cell['evidence']['original_detected_notes'] = original_notes
+                cell['evidence']['original_detected_pitches'] = original_pitches
+                cell['evidence']['detected_pitches'] = attenuate_detected_pitches(original_pitches, power, reduced, sr, np)
+            cell['evidence']['tail_reduction'] = info
+            cell['evidence']['tail_reduced_spectrum'] = spectrum_from_power(reduced, sr, np, bin_count=192,
+                reference_power=original_spectrum['reference_power'])
+        cell['evidence']['spectrum'] = original_spectrum
+        cell['_chroma'] = apply_overtone_weighting(cell['evidence'], cell['_chroma'], recognition_power, sr, np, options, bin_count=192)
+        if (cell.get('bass_reference') or {}).get('origin') == 'accompaniment':
+            cell['bass_reference'] = accompaniment_reference_for_evidence(
+                cell['evidence']['detected_pitches'], cell['evidence']['detected_notes'])
+        previous_power, previous_center = power, center
+    provisional = []
+    for cell in cells:
+        registered = half_diminished_hint(cell['_chroma'], cell['evidence'], cell.get('bass_reference'), np, options) if not any(
+            name in evidence_source.lower() for name in ('bass', 'drum', 'vocal')) else None
+        if registered:
+            cell['evidence']['registered_chord'] = registered
+        ranked, _ = rank_chord_candidates(cell['_chroma'], key, None, None, cell.get('bass_reference'), np, options,
+            registered_hint=registered)
+        if mode == 'auto':
+            crop = audio[math.ceil(cell['start'] * sr):math.floor(cell['end'] * sr)]
+            hint = fading_root_for_crop(crop, sr, cell['start'], cell['_chroma'], cell['evidence'],
+                cell.get('bass_reference'), ranked, key, np, options)
+            if hint:
+                cell['evidence']['fading_root'] = hint
+                ranked, _ = rank_chord_candidates(cell['_chroma'], key, None, None,
+                    cell.get('bass_reference'), np, options, fading_hint=hint, registered_hint=registered)
+        provisional.append(ranked[0]['chord'])
     limit = int(options.get("chord_alternatives", 6))
     for index, cell in enumerate(cells):
         ranked, libraries = rank_chord_candidates(cell["_chroma"], key, provisional[index - 1] if index else None,
-            provisional[index + 1] if index + 1 < len(cells) else None, cell.get("bass_reference"), np, options)
+            provisional[index + 1] if index + 1 < len(cells) else None, cell.get("bass_reference"), np, options,
+            fading_hint=cell['evidence'].get('fading_root'), registered_hint=cell['evidence'].get('registered_chord'))
         best = ranked[0]
         alternatives = [{"chord": item["chord"], "score": item["score"], "raw_score": item["raw_score"], "reasons": item.get("reasons", [])} for item in ranked[:limit]]
         pitch_confidence = detected_pitch_confidence(cell["_chroma"], np)
@@ -354,23 +478,81 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
                      "pitch_confidence": pitch_confidence, "alternatives": alternatives,
                      "debug": {"chosen_chord": best["chord"], "chosen_score": best["score"], "alternatives": alternatives,
                                "library_candidates": libraries or ["internal templates"]}})
+        if mode == 'auto' and options.get('chord_stability', 'detailed') != 'detailed':
+            cell['_ranked'] = [{'chord': item['chord'], 'raw_score': item['raw_score']} for item in ranked]
+    if mode == 'auto':
+        stabilize_chord_cells(cells, np, {**options, 'beat_period': 60.0 / max(tempo, 1), 'beats_per_bar': beats_per_bar, 'key': key})
+    for cell in cells:
+        cell.pop('_ranked', None)
     for bar, bar_cells in zip(bars, cells_by_bar):
         grouped = group_chord_cells(bar_cells, np, {"beat_period": 60.0 / max(tempo, 1)}) if mode == "auto" else bar_cells
         events = []
         for group in grouped:
-            reference = estimate_bass_reference(bass_audio, int(bass_sr), group["start"], group["end"], np) if bass_audio is not None and bass_sr else group.get("bass_reference")
-            ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, reference, np, options)
+            raw_cells = group.get("cells", [group])
+            hints = [cell['evidence']['fading_root'] for cell in raw_cells
+                if cell['evidence'].get('fading_root', {}).get('chord') == group['chord']]
+            group_hint = None
+            if hints:
+                supported = sum(cell['end'] - cell['start'] for cell in raw_cells
+                    if cell['evidence'].get('fading_root', {}).get('chord') == group['chord'])
+                fraction = supported / (group['end'] - group['start'])
+                group_hint = {**hints[0], 'bonus': .45 * fraction, 'support_fraction': fraction,
+                    'support_ranges': [hint['early_range'] for hint in hints]}
+            registered_cells = [cell for cell in raw_cells
+                if cell['evidence'].get('registered_chord', {}).get('chord') == group['chord']]
+            registered = None
+            if registered_cells:
+                duration = group['end'] - group['start']
+                registered = {**registered_cells[0]['evidence']['registered_chord'],
+                    'bonus': sum(cell['evidence']['registered_chord']['bonus'] * (cell['end'] - cell['start']) / duration
+                        for cell in registered_cells),
+                    'support_ranges': [[cell['start'], cell['end']] for cell in registered_cells]}
+            reference = chord_reference_for_segment(audio, sr, group['start'], group['end'], np, bass_audio, bass_sr, bass_notes)
+            if (reference or {}).get('origin') == 'accompaniment':
+                # Averaging retained cell pitches avoids reintroducing subtracted sustain tails.
+                pitches = {}
+                for cell in raw_cells:
+                    weight = (cell['end'] - cell['start']) / (group['end'] - group['start'])
+                    for pitch in cell['evidence']['detected_pitches']:
+                        item = pitches.setdefault(pitch['midi'], {**pitch, 'strength': 0.})
+                        item['strength'] += pitch['strength'] * weight
+                notes = chord_evidence(group['_chroma'], group['start'], group['end'], evidence_source, np)['detected_notes']
+                reference = accompaniment_reference_for_evidence(list(pitches.values()), notes)
+            if registered and (reference or {}).get('confidence', 0) >= .62 and reference.get('pitch_class') != parse_candidate_symbol(registered['chord'])['root']:
+                registered = None
+            ranked, libraries = rank_chord_candidates(group["_chroma"], key, None, None, reference, np, options,
+                fading_hint=group_hint, registered_hint=registered)
             selected = next((item for item in ranked if item["chord"] == group["chord"]), ranked[0])
             pitch_confidence = detected_pitch_confidence(group["_chroma"], np)
             evidence = chord_evidence(group["_chroma"], group["start"], group["end"], evidence_source, np)
-            raw_cells = group.get("cells", [group])
+            evidence.update(scored_pitch_class_evidence(group["_chroma"], reference, np))
+            evidence['scoring_source'] = evidence_source
+            if group_hint:
+                evidence['fading_root'] = group_hint
+            if registered:
+                evidence['registered_chord'] = registered
+            if not any(name in evidence_source.lower() for name in ('bass', 'drum', 'vocal')):
+                crop = audio[math.ceil(group['start'] * sr):math.floor(group['end'] * sr)]
+                group_power = spectral_power_for_crop(crop, sr, np)
+                retained_power = group_power
+                if options.get('tail_reduction', 0) > 0:
+                    context_start = max(0., group['start'] - (group['end'] - group['start']))
+                    context = audio[math.ceil(context_start * sr):math.floor(group['start'] * sr)]
+                    previous = spectral_power_for_crop(context, sr, np) if len(context) >= 3 else None
+                    retained_power, _ = reduce_sustain_tail(group_power, previous, (group['end'] - context_start) / 2, options, np)
+                evidence['voicing_frames'] = [{**frame, 'start': round(group['start'] + frame['start'], 4),
+                    'end': round(group['start'] + frame['end'], 4)} for frame in
+                    voicing_frames_for_crop(crop, sr, np, options, group_power, retained_power)]
             alternatives = [{"chord": item["chord"], "score": item["score"], "raw_score": item["raw_score"], "reasons": item.get("reasons", [])} for item in ranked[:limit]]
             events.append({"start": round(float(group["start"]), 3), "end": round(float(group["end"]), 3),
                 "chord": group["chord"], "confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3),
                 "chord_confidence": round(max(0.0, min(.98, float(selected["score"]) * .72 + pitch_confidence * .28)), 3), "pitch_confidence": pitch_confidence,
                 "alternatives": alternatives, "evidence": evidence, "bass_reference": reference,
-                "debug": {"cells": [{"start": cell["start"], "end": cell["end"], "chord": cell["chord"],
+                "debug": {"stability": options.get('chord_stability') if mode == 'auto' and options.get('chord_stability', 'detailed') != 'detailed' else None,
+                    "selection_reasons": [f"Consolidated with {options.get('chord_stability')} chord stability; original beat detections remain in the debug cells."] if group.get('_stability') else selected.get('reasons', []),
+                    "cells": [{"start": cell["start"], "end": cell["end"], "chord": cell["chord"],
                     "boundary_refinement": cell.get("_boundary_refinement"),
+                    "stability": cell.get("_stability"),
                     "detected_chord": cell.get("detected_chord", cell["chord"]), "confidence": cell["confidence"], "alternatives": cell["alternatives"], "evidence": cell["evidence"],
                     "bass_reference": cell.get("bass_reference")} for cell in raw_cells], "library_candidates": libraries}})
         if not events:
@@ -385,54 +567,10 @@ def estimate_bass_root(audio: Any, sr: int, start: float, end: float, np: Any) -
     reference = estimate_bass_reference(audio, sr, start, end, np)
     return None if reference is None else int(reference["pitch_class"])
 
-def estimate_bass_reference(audio: Any, sr: int, start: float, end: float, np: Any) -> dict[str, Any] | None:
-    start_sample = max(0, int(start * sr))
-    end_sample = min(len(audio), max(start_sample, int(end * sr)))
-    segment = audio[start_sample:end_sample]
-    if len(segment) < 1024:
-        return None
+def estimate_bass_reference(audio: Any, sr: int, start: float, end: float, np: Any,
+                            noise_floor: float | None = None) -> dict[str, Any] | None:
+    return bass_reference_from_events(bass_note_events(audio, sr, np, start, end, noise_floor), start, end)
 
-    frame = min(len(segment), max(1024, int(sr * 0.37)))
-    fft_size = 1 << (frame * 4 - 1).bit_length()
-    window = np.hanning(frame)
-    chroma = np.zeros(12, dtype=np.float64)
-    starts = list(range(0, len(segment) - frame + 1, max(1, frame // 2)))
-    if starts[-1] != len(segment) - frame:
-        starts.append(len(segment) - frame)
-    for offset in starts:
-        spectrum = np.abs(np.fft.rfft(segment[offset:offset + frame] * window, n=fft_size))
-        peaks = np.flatnonzero((spectrum[1:-1] > spectrum[:-2]) & (spectrum[1:-1] >= spectrum[2:])) + 1
-        peak_max = float(spectrum.max())
-        for peak in peaks:
-            if spectrum[peak] < peak_max * 0.08:
-                continue
-            # Interpolate a spectral peak before mapping to a semitone.
-            left, center, right = np.log(np.maximum(spectrum[peak - 1:peak + 2], 1e-15))
-            denominator = left - 2 * center + right
-            delta = 0.5 * (left - right) / denominator if denominator else 0.0
-            frequency = (peak + float(np.clip(delta, -0.5, 0.5))) * sr / fft_size
-            if 27.0 <= frequency <= 260.0:
-                midi = int(round(12 * math.log2(frequency / 440.0) + 69))
-                chroma[midi % 12] += float(spectrum[peak])
-    if chroma.max() <= 0:
-        return None
-    total = float(chroma.sum()) or 1.0
-    normalized = chroma / total
-    order = np.argsort(normalized)[::-1]
-    root = int(order[0])
-    top = float(normalized[root])
-    second = float(normalized[int(order[1])]) if len(order) > 1 else 0.0
-    confidence = round(max(0.0, min(0.98, (top * 1.2) + ((top - second) * 1.7))), 3)
-    return {
-        "pitch_class": root,
-        "note": PITCH_NAMES[root],
-        "confidence": confidence,
-        "detected_notes": [
-            {"note": PITCH_NAMES[int(index)], "strength": round(float(normalized[int(index)]), 3)}
-            for index in order[:4]
-            if float(normalized[int(index)]) > 0.03
-        ],
-    }
 
 def build_bars(duration: float, tempo: int, time_signature: str, beat_times: list[float] | None) -> list[Bar]:
     beats_per_bar = parse_beats_per_bar(time_signature)
@@ -500,7 +638,7 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     options = normalize_analysis_options(raw_options)
     known_key = str(options.get("known_key") or "").strip()
     normalized_mode = "high-quality" if mode in {"high-quality", "hq", "stems"} else "fast"
-    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}"
+    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v1"
     log(f"analyze: {path}")
     log(f"mode: {normalized_mode}")
     log(f"options: {json.dumps(options, sort_keys=True)}")

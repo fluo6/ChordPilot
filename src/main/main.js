@@ -3,6 +3,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createChordPilotServices, safeFileName, shouldShowBackendLog } = require("../runtime/chordpilot-services");
+const { createYoutubeSetup } = require("./youtube-setup");
+const { createSessionFiles } = require("./session-files");
 
 const isDev = !app.isPackaged;
 const appRoot = app.isPackaged ? path.join(process.resourcesPath, "app") : path.join(__dirname, "..", "..");
@@ -206,36 +208,29 @@ ipcMain.handle("chart:export", async (_event, payload) => {
   return services.exportChart({ chart, format, outputPath: result.filePath });
 });
 
-ipcMain.handle("session:save", async (_event, session) => {
-  const title = session?.chart?.title || session?.audio?.name || "chordpilot-session";
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: "Save ChordPilot Session",
-    defaultPath: path.join(os.homedir(), "Desktop", `${safeFileName(title, "chordpilot-session")}.chordpilot-session.json`),
-    filters: [
-      { name: "ChordPilot Session", extensions: ["chordpilot-session.json", "json"] },
-      { name: "JSON", extensions: ["json"] }
-    ]
-  });
-  return result.canceled || !result.filePath ? null : services.writeSessionFile(result.filePath, session);
+const sessionFiles = createSessionFiles({
+  dialog,
+  getWindow: () => mainWindow,
+  getServices: () => services,
+  preferencesPath: path.join(app.getPath("userData"), "session-preferences.json"),
+  fallbackFolder: path.join(os.homedir(), "Desktop")
 });
-
-ipcMain.handle("session:open", async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Open ChordPilot Session",
-    properties: ["openFile"],
-    filters: [
-      { name: "ChordPilot Session", extensions: ["chordpilot-session.json", "json"] },
-      { name: "JSON", extensions: ["json"] },
-      { name: "All Files", extensions: ["*"] }
-    ]
-  });
-  return result.canceled || result.filePaths.length === 0 ? null : services.readSessionFile(result.filePaths[0]);
-});
-
-ipcMain.handle("session:openPath", async (_event, sessionPath) => services.readSessionFile(sessionPath));
+ipcMain.handle("session:save", (_event, session, options) => sessionFiles.save(session, options));
+ipcMain.handle("session:open", () => sessionFiles.open());
+ipcMain.handle("session:openPath", (_event, sessionPath) => sessionFiles.openPath(sessionPath));
 
 app.whenReady().then(() => {
   const userData = app.getPath("userData");
+  const youtubeSetup = createYoutubeSetup({
+    toolsDir: path.join(userData, "Tools"),
+    candidates: {
+      ytDlp: [process.env.CHORDPILOT_YTDLP, getYtDlpPath()].filter(Boolean),
+      ffmpeg: [process.env.CHORDPILOT_FFMPEG, path.join(appRoot, "Tools", "ffmpeg.exe"), path.join(process.resourcesPath || appRoot, "Tools", "ffmpeg.exe"), getBundledFfmpegPath(), "ffmpeg"].filter(Boolean),
+      deno: process.platform === "darwin" ? ["/opt/homebrew/bin/deno", "/usr/local/bin/deno"] : [],
+      node: process.platform === "darwin" ? ["/opt/homebrew/bin/node", "/usr/local/bin/node"] : []
+    },
+    emitLog: emitBackendLog
+  });
   services = createChordPilotServices({
     appRoot,
     backendScript,
@@ -247,6 +242,19 @@ app.whenReady().then(() => {
     ffmpegPath: getBundledFfmpegPath() || "ffmpeg",
     ytDlpPath: getYtDlpPath(),
     ytDlpFfmpegLocation: getYtDlpFfmpegLocation(),
+    ensureYoutubeTools: () => youtubeSetup.ensureReady(async (missing) => {
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: "question",
+        title: "Set up YouTube downloads",
+        message: "Download and install the required YouTube tools?",
+        detail: `${missing.map((name) => `• ${name}`).join("\n")}\n\nChordPilot will download these tools from their official GitHub releases into your ChordPilot user folder. No administrator access is needed. Once setup finishes, your YouTube link will continue automatically.`,
+        buttons: ["Download & Install", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      });
+      return result.response === 0;
+    }),
     env: backendEnv(process.env),
     toUrl: pathToFileUrl,
     emitLog: emitBackendLog

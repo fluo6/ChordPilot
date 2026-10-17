@@ -1,4 +1,5 @@
 let metronomeContext = null;
+let pianoOutput = null;
 let metronomeTimer = null;
 const metronomeScheduledTicks = new Map();
 
@@ -30,17 +31,29 @@ function ensureMetronomeContext(feature = "Metronome") {
   return metronomeContext;
 }
 
-async function playPianoNote(midi) {
-  return playPianoNotes([midi]);
+async function playPianoNote(midi, levelDb = 0) {
+  return playPianoNotes([midi], { [midi]: levelDb });
 }
 
-async function playPianoNotes(notes) {
+async function playPianoNotes(notes, levelsDb = {}) {
   const midis = [...new Set((Array.isArray(notes) ? notes : []).filter((midi) => Number.isInteger(midi) && midi >= 21 && midi <= 108))];
   if (!midis.length) return;
+  const amplitudes = new Map(midis.map(midi => [midi,
+    10 ** (Math.max(-80, Math.min(0, Number.isFinite(levelsDb[midi]) ? levelsDb[midi] : 0)) / 20)]));
+  const normalization = Math.sqrt(Math.max(1, [...amplitudes.values()].reduce((sum, amplitude) => sum + amplitude ** 2, 0)));
   const volume = Math.max(0, Math.min(1, Number(state.masterVolume ?? 1) || 0));
   if (!volume) return;
   const context = ensureMetronomeContext("Note playback");
   if (!context) return;
+  if (!pianoOutput) {
+    pianoOutput = context.createDynamicsCompressor();
+    pianoOutput.threshold.value = -4;
+    pianoOutput.knee.value = 6;
+    pianoOutput.ratio.value = 12;
+    pianoOutput.attack.value = .003;
+    pianoOutput.release.value = .18;
+    pianoOutput.connect(context.destination);
+  }
   const voices = midis.map((midi) => {
     // Recordings every minor third keep pitch shifts within one semitone.
     const sampleMidi = 21 + Math.round((midi - 21) / 3) * 3;
@@ -53,9 +66,9 @@ async function playPianoNotes(notes) {
     const source = context.createMediaElementSource(audio);
     const gain = context.createGain();
     const bassPresence = Math.max(0, Math.min(1, (65 - midi) / 24));
-    const peak = volume * 0.65 * (1 + bassPresence * 0.5) / midis.length;
+    const peak = volume * 0.85 * (1 + bassPresence * 0.5) * amplitudes.get(midi) / normalization;
     gain.gain.setValueAtTime(peak, context.currentTime);
-    source.connect(gain); gain.connect(context.destination);
+    source.connect(gain); gain.connect(pianoOutput);
     let timer = null;
     const cleanup = () => {
       clearTimeout(timer);

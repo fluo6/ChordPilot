@@ -2,12 +2,14 @@
 
 ChordPilot is an Electron desktop MVP for creating editable chord charts from MP3/WAV files. Electron handles file selection, audio preview, cleanup, and export buttons. Python performs the analysis and export work through a simple JSON command line contract.
 
+See [TODO.md](TODO.md) for open work, deferred features, known limitations and the current validation baseline.
+
 ## Features
 
 - Select MP3/WAV audio from the desktop app.
 - Run a Python analysis backend to estimate key, BPM, time signature, bars, chords, and rough sections.
 - Detect and edit supported chord changes inside a measure, with Auto changes, Fixed grid, and Legacy one-chord-per-bar timing modes.
-- Choose a fast full-mix analysis path now, with a planned high-quality stem-separated path for cleaner results.
+- Choose fast full-mix analysis or high-quality Demucs stem separation, using accompaniment for chord tones and Bass for root/inversion evidence.
 - Edit key, tempo, time signature, section names, bar numbers, chord symbols, repeats, and notes.
 - Split, merge, add, duplicate, and delete bars while listening to the audio.
 - Export cleaned charts to TXT, CSV, JSON, and MusicXML.
@@ -101,6 +103,12 @@ For embedded distributions that need an explicit runtime home, also set `CHORDPI
 ```powershell
 npm start
 ```
+
+### YouTube links on Windows
+
+Paste a YouTube link and select **Start From Link**. If the downloader, audio conversion tools, or a compatible JavaScript runtime are missing, ChordPilot shows a confirmation popup. Select **Download & Install** to download the required tools from their official GitHub releases. The app verifies each download, shows setup progress, and continues the same YouTube link automatically. No restart, terminal commands, or administrator access are needed.
+
+Automatic tool setup supports 64-bit Windows and stores its tools under ChordPilot's user data folder. Existing compatible tools are reused. You can cancel without losing the pasted link; if setup fails, select **Start From Link** again to retry. This setup covers YouTube tools (yt-dlp, FFmpeg/FFprobe, and Deno when no compatible Node.js or Deno is available). Python analysis dependencies follow the setup instructions above.
 
 ## Run in a browser on your LAN
 
@@ -270,75 +278,8 @@ The analysis pipeline is intentionally layered:
 - Chordino/NNLS Chroma can be added later as an external command stage.
 - A fallback generator returns a useful editable chart when analysis dependencies are absent or audio decoding fails.
 
-## Analysis Plan
+## How analysis works
 
-ChordPilot should support two analysis modes:
+**Fast** analyzes the decoded mix. **High Quality Stems** separates vocals, drums, bass and accompaniment with Demucs, then estimates chord tones primarily from accompaniment and uses Bass as separate root/inversion evidence. The selected chord source, instrument/FX preset, timing grid, stability and spectral controls are available under Analysis Options. The result is an editable estimate; percentages are heuristic ranking scores, not calibrated probabilities.
 
-### Fast Mode
-
-Fast mode keeps the current MVP behavior: decode the selected MP3/WAV, analyze the full mix directly, estimate tempo, beat grid, bars, key, and rough chords, then open the editable cleanup table. This mode is intended for quick drafts and low-friction iteration.
-
-Fast mode output remains:
-
-- Editable bar-by-bar chord chart.
-- Estimated key, BPM, and time signature.
-- Rough sections and bar starts.
-- Chord confidence where available.
-- Manual cleanup for chords, bars, section names, repeats, key changes, split/merge bars, and exports.
-
-### High-Quality Mode
-
-High-quality mode should be optional because it is slower and heavier. After the user uploads an MP3/WAV, the backend should run Demucs to separate the track into stems such as:
-
-- `vocals`
-- `drums`
-- `bass`
-- `other` or accompaniment
-- optionally full mix reference
-
-The Electron UI should show the separated stems before relying on the analysis result. Each stem should appear as its own waveform lane with:
-
-- Stem name and render status.
-- Solo, mute, and volume controls.
-- Linked playback with the original track.
-- Per-stem waveform display.
-- Beat/bar marker overlay where available.
-- Clear warnings if a stem is missing, quiet, clipped, or likely low quality.
-
-The user should be able to inspect the stems, solo the accompaniment/bass/drums, and decide whether the separation is good enough before accepting the high-quality analysis.
-
-High-quality analysis should use stems this way:
-
-- Use the `other`/accompaniment stem for chord recognition, reducing noise from vocals and drums.
-- Use the `bass` stem to infer root movement and improve chord choices and inversions.
-- Use the `drums` stem or full mix for tempo, beat, and downbeat detection.
-- Use the full mix as a fallback when a stem is weak or unusable.
-- Preserve chord alternatives and confidence scores where the recognizer can provide them.
-
-The final result should still open in the same cleanup workflow:
-
-- Editable key, BPM, time signature, and key changes.
-- Editable sections, bar numbers, chord symbols, repeats, and notes.
-- Waveform-linked beat and bar markers.
-- Split/merge/add/duplicate/delete bars while listening.
-- Chord confidence and alternatives where possible.
-- Export to TXT, CSV, JSON, and MusicXML.
-
-### Backend Shape
-
-The Python backend should keep the existing JSON command contract and add a high-quality analysis command or option, for example:
-
-```powershell
-python backend/chordpilot.py analyze "song.mp3" --mode high-quality
-```
-
-The high-quality pipeline should cache heavy artifacts under the temp cache:
-
-- Decoded source WAV.
-- Demucs stem files.
-- Stem waveform summaries.
-- Beat/downbeat grid.
-- Chord/root estimates.
-- Final draft chart JSON.
-
-This keeps repeat analysis fast and makes the log panel useful for showing progress through decode, separation, waveform rendering, beat tracking, chord recognition, and chart generation.
+Reanalyse Chords uses the available decoded audio and stems without rerunning Demucs; Reanalyse All + Stems repeats separation. Local Study analyzes an exact selected interval and saves its input settings and evidence alongside later reruns. Its full-range result may differ from a grouped timeline event at a chord change. See [TODO.md](TODO.md) for current algorithm limitations and [reference run instructions](docs/superpowers/validation/reference-runs.md) for reproducible checks.

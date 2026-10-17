@@ -43,7 +43,7 @@ function hasCompletePreviewStems(stems, previewStems = previewStemByName()) {
   }
   return stems.every((stem) => {
     const preview = previewStems.get(stem.name);
-    return preview?.url && preview?.path;
+    return preview?.url && (preview?.path || window.chordPilot?.isWebRuntime);
   });
 }
 
@@ -65,7 +65,7 @@ function createStemPlayers(stemsResult, previousMix = stemMixSnapshot()) {
     const stem = previewStem ? { ...sourceStem, ...previewStem } : sourceStem;
     const previous = previousMix.players.get(stem.name);
     const audio = new Audio(stem.url);
-    audio.preload = "metadata";
+    audio.preload = "auto";
     const player = {
       stem,
       audio,
@@ -166,12 +166,10 @@ function applyStemMix() {
     return Promise.resolve(false);
   }
 
-  // Keep the source audible until at least one stem has actually started.
-  // Once a stem control is used, switch to the stem mix immediately so changes are audible.
-  const forceStemMix = Boolean(state.useStemMixPlayback);
-  elements.audioPlayer.muted = forceStemMix;
+  // Keep the source muted while stem mix is starting to prevent double playback / phasing.
+  elements.audioPlayer.muted = true;
   return Promise.all(audiblePlayers.map(async (player) => {
-    syncStemTime(player);
+    syncStemTime(player, { isSeek: true });
     try {
       await player.audio.play();
       return true;
@@ -185,24 +183,70 @@ function applyStemMix() {
     const stemStarted = results.some(Boolean);
     elements.audioPlayer.muted = stemStarted;
     return stemStarted;
+  }).catch(() => {
+    if (request === stemPlaybackRequest && !isSourcePlaybackMode() && !elements.audioPlayer.paused) {
+      elements.audioPlayer.muted = false;
+    }
+    return false;
   });
 }
 
-function syncStemTime(player) {
-  const time = elements.audioPlayer.currentTime || 0;
-  if (Math.abs(player.audio.currentTime - time) > 0.08) {
-    player.audio.currentTime = time;
+function setPlayerPlaybackRate(player, rate) {
+  if (typeof setMediaPlaybackRate === "function") {
+    setMediaPlaybackRate(player.audio, rate);
+  } else {
+    try {
+      player.audio.playbackRate = rate;
+      player.audio.defaultPlaybackRate = rate;
+    } catch (_error) {}
   }
 }
 
-function syncStemTimes() {
+function syncStemTime(player, { isSeek = false } = {}) {
+  const masterTime = Number(elements.audioPlayer?.currentTime) || 0;
+  const stemTime = Number(player.audio?.currentTime) || 0;
+  const drift = stemTime - masterTime;
+  const baseRate = Math.max(0.05, Number(elements.audioPlayer?.playbackRate || state.playbackRate) || 1);
+
+  if (isSeek || elements.audioPlayer?.paused) {
+    if (Math.abs(drift) > 0.01 && !player.audio?.seeking) {
+      player.audio.currentTime = masterTime;
+    }
+    setPlayerPlaybackRate(player, baseRate);
+    return;
+  }
+
+  // Catastrophic drift (> 0.4s) - e.g. background tab or severe system lag
+  if (Math.abs(drift) > 0.4) {
+    const now = Date.now();
+    if (!player.audio?.seeking && (!player._lastHardSeek || now - player._lastHardSeek > 1500)) {
+      player._lastHardSeek = now;
+      player.audio.currentTime = masterTime;
+      setPlayerPlaybackRate(player, baseRate);
+    }
+    return;
+  }
+
+  // Micro-rate adjustment (PLL slewing) to eliminate drift smoothly without audio seeks/dropouts
+  if (drift < -0.025) {
+    const slew = Math.min(1.05, 1.0 + Math.abs(drift) * 0.25);
+    setPlayerPlaybackRate(player, baseRate * slew);
+  } else if (drift > 0.025) {
+    const slew = Math.max(0.95, 1.0 - Math.abs(drift) * 0.25);
+    setPlayerPlaybackRate(player, baseRate * slew);
+  } else {
+    setPlayerPlaybackRate(player, baseRate);
+  }
+}
+
+function syncStemTimes({ isSeek = false } = {}) {
   if (!state.stemPlayers.length) {
     return;
   }
   const solo = state.soloStem;
   state.stemPlayers.forEach((player) => {
     if ((!solo || player.stem.name === solo) && !player.muted) {
-      syncStemTime(player);
+      syncStemTime(player, { isSeek });
     }
   });
 }
@@ -221,5 +265,8 @@ function playStems() {
 }
 
 function pauseStems() {
-  state.stemPlayers.forEach((player) => player.audio.pause());
+  state.stemPlayers.forEach((player) => {
+    player.audio.pause();
+    setPlayerPlaybackRate(player, Number(state.playbackRate) || 1);
+  });
 }

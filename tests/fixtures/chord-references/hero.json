@@ -1,0 +1,31 @@
+{
+  "title":"Hero — CHORDS-LIBRARY piano, strings and reverb reference",
+  "source_url":"https://www.youtube.com/watch?v=Y02UJ35PvXY",
+  "reference_kind":"Manually read score chord labels and purple highlights; selected verse/chorus windows in the first 95 seconds, not a complete authoritative transcription.",
+  "highlight_resolution_seconds":0.25,
+  "timing_note":"Key E, 4/4. Highlight boundaries are approximate and may lag performed onsets. Intro before the first lyric highlight around 9.25 s is unscored. Windows avoid most boundaries; short inversions are reported with their timing limitation.",
+  "settings":{"known_key":"E","tail_reduction":0,"tail_half_life":0.5,"overtone_weighting":0.5,"chord_timing":"auto","chord_grid":"beat","chord_stability":"detailed","simplify_chords":false},
+  "windows":[
+    {"start":10.0,"end":11.8,"chord":"Eadd9"},
+    {"start":18.0,"end":20.0,"chord":"C#m7"},
+    {"start":21.7,"end":22.6,"chord":"B9sus4","printed_chord":"B9sus"},
+    {"start":23.3,"end":24.1,"chord":"B"},
+    {"start":25.5,"end":27.3,"chord":"Eadd9"},
+    {"start":29.5,"end":31.5,"chord":"D/F#"},
+    {"start":34.0,"end":35.8,"chord":"Cadd9"},
+    {"start":37.6,"end":38.3,"chord":"B9sus4","printed_chord":"B9sus"},
+    {"start":39.2,"end":40.4,"chord":"B"},
+    {"start":42.0,"end":43.4,"chord":"Eadd9"},
+    {"start":46.0,"end":47.5,"chord":"C#m7"},
+    {"start":48.4,"end":48.8,"chord":"E/B","note":"Short inversion: highlight timing uncertain to 0.25 s."},
+    {"start":50.0,"end":51.5,"chord":"Aadd9"},
+    {"start":52.5,"end":52.9,"chord":"Eadd9/Ab","printed_chord":"E(add9)/G#","note":"Short inversion; enharmonic bass name used by parser."},
+    {"start":53.7,"end":54.6,"chord":"F#m7"},
+    {"start":55.4,"end":56.1,"chord":"B9sus4","printed_chord":"A/B","note":"A/B contains B,A,C#,E: the root, seventh, ninth and suspended fourth of B9sus4 with optional fifth omitted. Use this canonical suspended-dominant comparison in line with the app's naming preference."},
+    {"start":57.4,"end":59.0,"chord":"E"},
+    {"start":61.5,"end":62.5,"chord":"C#m7"},
+    {"start":66.0,"end":67.5,"chord":"Aadd9"},
+    {"start":13.8,"end":16.0,"chord":"D6/9","expected_intervals":[0,4,7,9,14],"note":"Added to the supported vocabulary in local-study-v17. Count exact sixth/ninth agreement separately from harmonic function."}
+  ],
+  "reference_note":"Root and function scores do not establish exact extensions or slash-bass accuracy. D6/9 is now supported and included; older reports used only the first 19 windows."
+}

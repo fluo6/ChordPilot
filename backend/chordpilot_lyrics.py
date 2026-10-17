@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from chordpilot_common import *
 
 
@@ -74,6 +76,19 @@ def select_lyrics_source(
     return source_path, "full mix"
 
 
+def resolve_lyrics_device() -> str:
+    configured = os.environ.get("CHORDPILOT_TORCH_DEVICE", "").strip().lower()
+    if configured in {"cuda", "cpu"}:
+        return configured
+    try:
+        torch = __import__("torch")
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
+
+
 def transcribe_with_faster_whisper(
     audio_path: Path,
     model_name: str,
@@ -81,12 +96,14 @@ def transcribe_with_faster_whisper(
     language: str = "",
 ) -> tuple[list[dict[str, Any]], str]:
     module = __import__("faster_whisper", fromlist=["WhisperModel"])
+    device = resolve_lyrics_device()
+    compute_type = "float16" if device == "cuda" else "int8"
     try:
-        model = module.WhisperModel(model_name, device="cpu", compute_type="int8", local_files_only=True)
-        log(f"lyrics: using cached faster-whisper {model_name} model")
+        model = module.WhisperModel(model_name, device=device, compute_type=compute_type, local_files_only=True)
+        log(f"lyrics: using cached faster-whisper {model_name} model on {device.upper()}")
     except Exception:
-        log(f"lyrics: cached faster-whisper {model_name} model missing; trying online download")
-        model = module.WhisperModel(model_name, device="cpu", compute_type="int8")
+        log(f"lyrics: cached faster-whisper {model_name} model missing; trying online download on {device.upper()}")
+        model = module.WhisperModel(model_name, device=device, compute_type=compute_type)
     segments, info = model.transcribe(
         str(audio_path),
         beam_size=1,
@@ -122,8 +139,9 @@ def transcribe_with_openai_whisper(
     language: str = "",
 ) -> tuple[list[dict[str, Any]], str]:
     whisper = __import__("whisper")
-    model = whisper.load_model(model_name, device="cpu")
-    result = model.transcribe(str(audio_path), fp16=False, verbose=False, language=language or None)
+    device = resolve_lyrics_device()
+    model = whisper.load_model(model_name, device=device)
+    result = model.transcribe(str(audio_path), fp16=(device == "cuda"), verbose=False, language=language or None)
     detected_language = str(result.get("language") or language or "")
     lines = []
     for segment in result.get("segments", []):

@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const https = require("node:https");
 const path = require("node:path");
+const { StringDecoder } = require("node:string_decoder");
 
 const downloadPercentRegex = /\[download\]\s+([0-9]+(?:\.[0-9]+)?)%/;
 
@@ -185,9 +186,11 @@ function createChordPilotServices({
   spawnImpl,
   httpsGet,
   ytDlpFfmpegLocation,
+  ensureYoutubeTools,
 }) {
   const spawn = spawnImpl || require("node:child_process").spawn;
-  const configuredEnv = env || process.env;
+  const configuredEnv = { ...(env || process.env) };
+  let youtubeToolsReady = false;
   const makeUrl =
     toUrl || ((filePath) => `file://${filePath.replace(/\\/g, "/")}`);
   const log = emitLog || (() => {});
@@ -431,8 +434,19 @@ function createChordPilotServices({
 
   async function downloadYoutubeAudio(rawUrl) {
     const url = normalizeYoutubeUrl(rawUrl);
+    if (!url) throw new Error("Paste a YouTube link first.");
+    let jsRuntime;
+    if (ensureYoutubeTools) {
+      const tools = await ensureYoutubeTools();
+      if (!tools) return null;
+      ({ ytDlpPath, ffmpegPath, ytDlpFfmpegLocation, jsRuntime } = tools);
+      configuredEnv.CHORDPILOT_FFMPEG = ffmpegPath;
+      youtubeToolsReady = true;
+    }
     const outputDir = importDir;
     const args = [
+      "--encoding",
+      "utf-8",
       "--no-playlist",
       "-x",
       "--audio-format",
@@ -449,8 +463,9 @@ function createChordPilotServices({
     ];
 
     if (ytDlpFfmpegLocation) {
-      args.splice(8, 0, "--ffmpeg-location", ytDlpFfmpegLocation);
+      args.splice(0, 0, "--ffmpeg-location", ytDlpFfmpegLocation);
     }
+    if (jsRuntime) args.splice(0, 0, "--js-runtimes", jsRuntime);
 
     log(`youtube: starting download with ${ytDlpPath}`);
     return new Promise((resolve, reject) => {
@@ -466,8 +481,9 @@ function createChordPilotServices({
 
       let stdout = "";
       let stderr = "";
+      const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
       const handleChunk = (chunk, stream) => {
-        const text = chunk.toString("utf8");
+        const text = decoders[stream].write(chunk);
         if (stream === "stdout") {
           stdout += text;
         } else {
@@ -491,6 +507,8 @@ function createChordPilotServices({
         reject(new Error(`Could not start yt-dlp: ${error.message}`)),
       );
       child.on("close", async (code) => {
+        stdout += decoders.stdout.end();
+        stderr += decoders.stderr.end();
         if (code !== 0) {
           reject(
             new Error(
@@ -682,7 +700,7 @@ function createChordPilotServices({
           [...(candidate.prefix || [backendScript]), ...args],
           {
             cwd: appRoot,
-            env: { ...configuredEnv, ...(candidate.env || {}) },
+            env: { ...configuredEnv, ...(candidate.env || {}), ...(youtubeToolsReady ? { CHORDPILOT_FFMPEG: ffmpegPath } : {}) },
             windowsHide: true,
           },
         );
@@ -804,7 +822,13 @@ function createChordPilotServices({
   }
 
   async function writeSessionFile(sessionPath, session) {
-    fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2), "utf8");
+    const temporaryPath = `${sessionPath}.${crypto.randomUUID()}.part`;
+    try {
+      fs.writeFileSync(temporaryPath, JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx" });
+      fs.renameSync(temporaryPath, sessionPath);
+    } finally {
+      if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+    }
     return { path: sessionPath };
   }
 
