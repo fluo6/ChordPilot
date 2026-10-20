@@ -17,7 +17,7 @@ def estimate_with_librosa(path: Path) -> dict[str, Any]:
         return result
 
     try:
-        y, sr = librosa.load(str(path), mono=True, duration=240)
+        y, sr = librosa.load(str(path), mono=True)
         tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
         tempo_value = float(tempo[0] if hasattr(tempo, "__len__") else tempo)
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
@@ -28,10 +28,49 @@ def estimate_with_librosa(path: Path) -> dict[str, Any]:
 
     return result
 
+def estimate_rhythm(audio: Any, sr: int, np: Any, options: dict[str, Any] | None = None) -> dict[str, Any]:
+    options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
+    hop, frame = int(options.get('onset_hop', 512)), int(options.get('onset_frame', 2048))
+    envelope = onset_envelope(audio, sr, frame, hop, np)
+    minimum, maximum = int(options.get('min_bpm', 60)), int(options.get('max_bpm', 190))
+    tempo = estimate_tempo_from_envelope(envelope, sr, hop, np, minimum, maximum)
+    beats = []
+    engine = 'no rhythmic evidence; tempo fallback'
+    if len(envelope) and float(envelope.std()) > 1e-8:
+        librosa = try_import('librosa')
+        if librosa:
+            try:
+                _, frames = librosa.beat.beat_track(onset_envelope=envelope, sr=sr,
+                                                   hop_length=hop, bpm=float(tempo), trim=False)
+                # Librosa's default trim can remove a real attack at t=0.
+                # Trim only unsupported endpoints, retaining interior gaps.
+                frames = np.asarray(frames, dtype=int)
+                supported = np.flatnonzero(envelope[frames] >= .1 * envelope.max())
+                frames = frames[supported[0]:supported[-1] + 1] if len(supported) else []
+                beats = [float(index) * hop / sr for index in frames]
+                engine = 'librosa onset beat tracking'
+            except Exception as exc:
+                log(f'rhythm: librosa unavailable ({exc}); using onset dynamic programming')
+        if not beats:
+            beats = estimate_beat_times(envelope, tempo, sr, hop, np)
+            engine = 'onset dynamic programming' if beats else engine
+    # Report a tempo derived from several measured intervals without using its
+    # rounded display value to reconstruct timing.
+    exact = float(tempo)
+    if len(beats) > 1:
+        span = min(8, len(beats) - 1)
+        intervals = np.asarray(beats[span:]) - np.asarray(beats[:-span])
+        exact = float(np.clip(np.median(60 * span / intervals[intervals > 0]), minimum, maximum))
+    offset = float(options.get('beat_offset', 0))
+    duration = len(audio) / float(sr)
+    beats = sorted({round(value + offset, 3) for value in beats if 0 <= value + offset < duration})
+    log(f'rhythm: {engine}; {exact:.3f} BPM; {len(beats)} beats')
+    return {'tempo': round(exact), 'tempo_exact': round(exact, 4), 'beat_times': beats,
+            'tempo_beats': engine, 'bar_alignment': 'manual beat phase' if options.get('bar_phase') else 'first tracked beat; unverified downbeat'}
+
 def estimate_builtin(path: Path, options: dict[str, Any] | None = None) -> dict[str, Any]:
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
     np = __import__("numpy")
-    signal = __import__("scipy.signal", fromlist=["find_peaks"])
 
     log("analysis: decoding/loading audio")
     audio, sr = load_audio(path)
@@ -39,15 +78,8 @@ def estimate_builtin(path: Path, options: dict[str, Any] | None = None) -> dict[
         return {}
 
     log(f"analysis: {round(len(audio) / float(sr), 2)}s at {sr} Hz")
-    hop = int(options.get("onset_hop", 512))
-    frame = int(options.get("onset_frame", 2048))
-    log("analysis: computing onset envelope")
-    envelope = onset_envelope(audio, sr, frame, hop, np)
-    log("analysis: estimating tempo")
-    tempo = estimate_tempo_from_envelope(envelope, sr, hop, np, int(options.get("min_bpm", 60)), int(options.get("max_bpm", 190)))
-    log(f"analysis: tempo estimate {tempo} BPM")
-    beat_times = estimate_beat_times(envelope, tempo, sr, hop, np, float(options.get("beat_offset", 0.0)))
-    log(f"analysis: beat grid {len(beat_times)} beats")
+    rhythm = estimate_rhythm(audio, sr, np, options)
+    tempo, beat_times = rhythm['tempo'], rhythm['beat_times']
     log("analysis: estimating bar chords from chroma")
     bars = estimate_bars_from_audio(audio, sr, tempo, "4/4", beat_times, np, "full mix", options)
     estimated_key = estimate_key_from_chroma(duration_weighted_cell_chroma(audio, sr, bars, tempo, "4/4", beat_times, np, options), np) if bars else "C"
@@ -64,6 +96,7 @@ def estimate_builtin(path: Path, options: dict[str, Any] | None = None) -> dict[
         clean_bars.append({key_name: value for key_name, value in bar.items() if key_name != "_chroma"})
 
     return {
+        **rhythm,
         "duration": len(audio) / float(sr),
         "tempo": tempo,
         "beat_times": beat_times,
@@ -77,14 +110,13 @@ def onset_envelope(audio: Any, sr: int, frame: int, hop: int, np: Any) -> Any:
         return np.zeros(1)
 
     window = np.hanning(frame)
-    previous = None
+    # Frame indices represent original-audio time, including at the file edges.
+    audio = np.pad(audio, (frame // 2, frame // 2))
+    previous = 0.
     values = []
     for start in range(0, len(audio) - frame, hop):
         spectrum = np.abs(np.fft.rfft(audio[start:start + frame] * window))
-        if previous is None:
-            values.append(0.0)
-        else:
-            values.append(float(np.maximum(spectrum - previous, 0).sum()))
+        values.append(float(np.maximum(spectrum - previous, 0).sum()))
         previous = spectrum
 
     envelope = np.asarray(values, dtype=np.float32)
@@ -100,7 +132,9 @@ def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_
         return fallback
 
     env = envelope - envelope.mean()
-    corr = np.correlate(env, env, mode="full")[len(env) - 1:]
+    size = 1 << (2 * len(env) - 1).bit_length()
+    spectrum = np.fft.rfft(env, size)
+    corr = np.fft.irfft(spectrum * spectrum.conj(), size)[:len(env)]
     min_lag = max(1, int((60.0 / max_bpm) * sr / hop))
     max_lag = min(len(corr) - 1, int((60.0 / min_bpm) * sr / hop))
     if max_lag <= min_lag:
@@ -116,31 +150,63 @@ def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_
     return max(min_bpm, min(max_bpm, int(round(bpm))))
 
 def estimate_beat_times(envelope: Any, tempo: int, sr: int, hop: int, np: Any, offset: float = 0.0) -> list[float]:
-    beat_period = 60.0 / max(tempo, 1)
-    duration = len(envelope) * hop / float(sr)
-    if duration <= 0:
+    """Track an onset-supported beat path; the tempo is a prior, not a clock."""
+    envelope = np.maximum(0., np.nan_to_num(np.asarray(envelope, dtype=float)))
+    if not len(envelope) or float(envelope.max()) <= 1e-8 or float(envelope.std()) <= 1e-8:
         return []
-
-    search_seconds = min(duration, beat_period * 4)
-    search_frames = max(1, int(search_seconds * sr / hop))
-    first_frame = int(np.argmax(envelope[:search_frames])) if len(envelope) else 0
-    first_time = max(0.0, first_frame * hop / float(sr) + offset)
-    if first_time > beat_period:
-        first_time = first_time % beat_period
-
+    period = 60.0 * sr / (max(float(tempo), 1.) * hop)
+    steps = np.arange(max(1, int(period * .5)), max(2, int(period * 2) + 1))
+    penalty = -30 * np.log(steps / period) ** 2
+    strength = envelope / envelope.std()
+    scores = np.zeros(len(envelope))
+    previous = np.full(len(envelope), -1, dtype=int)
+    for index, value in enumerate(strength):
+        count = int(np.searchsorted(steps, index, side='right'))
+        if count:
+            candidates = scores[index - steps[:count]] + penalty[:count]
+            best = int(np.argmax(candidates))
+            if candidates[best] > 0:
+                previous[index] = index - steps[best]
+                scores[index] = candidates[best]
+        scores[index] += value
+    index = int(np.argmax(scores))
+    frames = []
+    while index >= 0:
+        frames.append(index)
+        index = int(previous[index])
+    frames.reverse()
+    # Do not extrapolate beats into silence at either end. Interior missing
+    # attacks retain their position in the beat sequence.
+    supported = [i for i, frame_index in enumerate(frames) if envelope[frame_index] >= .1 * envelope.max()]
+    if not supported:
+        return []
     times = []
-    value = first_time
-    while value < duration:
-        times.append(round(value, 3))
-        value += beat_period
-    return times
+    for frame_index in frames[supported[0]:supported[-1] + 1]:
+        fraction = 0.
+        if 0 < frame_index < len(envelope) - 1:
+            left, middle, right = envelope[frame_index - 1:frame_index + 2]
+            curvature = left - 2 * middle + right
+            if curvature < 0 and middle >= max(left, right):
+                fraction = float(np.clip(.5 * (left - right) / curvature, -.5, .5))
+        time = (frame_index + fraction) * hop / float(sr) + offset
+        if time >= 0:
+            times.append(round(time, 3))
+    return sorted(set(times))
+
+def measured_bar_starts(beat_times: list[float], beats_per_bar: int, phase: int = 0) -> list[float]:
+    beats = sorted({float(value) for value in beat_times if math.isfinite(float(value)) and float(value) >= 0})
+    phase %= beats_per_bar
+    # Keep a short pickup measure before the selected first full downbeat.
+    return ([beats[0]] if phase and beats else []) + beats[phase::beats_per_bar]
+
 
 def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: str, beat_times: list[float], np: Any, evidence_source: str = "full mix", options: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
     beats_per_bar = parse_beats_per_bar(time_signature)
     seconds_per_bar = (60.0 / max(tempo, 1)) * beats_per_bar
     duration = len(audio) / float(sr)
-    starts = sorted({float(beat_times[index]) for index in range(0, len(beat_times), beats_per_bar) if math.isfinite(float(beat_times[index])) and float(beat_times[index]) >= 0}) if beat_times else []
+    phase = int(options.get('bar_phase', 0)) % beats_per_bar
+    starts = measured_bar_starts(beat_times, beats_per_bar, phase)
     if not starts:
         starts = [index * seconds_per_bar for index in range(max(8, int(math.ceil(duration / seconds_per_bar))))]
 
@@ -148,7 +214,7 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
     sections = expand_sections(len(starts))
     bars = []
     for index, start in enumerate(starts):
-        end = min(duration, starts[index + 1] if index + 1 < len(starts) else start + seconds_per_bar)
+        end = min(duration, starts[index + 1] if index + 1 < len(starts) else duration)
         chroma = chroma_for_segment(audio, sr, start, end, np, options)
         chord, confidence = estimate_chord(chroma, np)
         alternatives = chord_alternatives(chroma, np, int(options.get("chord_alternatives", 6)))
@@ -173,6 +239,9 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
                 "_chroma": chroma,
             }
         )
+    if bars and phase and beat_times:
+        bars[0]['pickup_beats'] = min(phase, len(beat_times))
+        bars[0]['section'] = 'Pickup'
     return bars
 
 def select_high_quality_chord_source(source_path: Path, stem_paths: dict[str, Path], options: dict[str, Any]) -> tuple[Path, str]:
@@ -200,7 +269,8 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
     bass_sr = None
 
     log("hq: estimating beat grid from drums/full mix")
-    rhythm_result = estimate_builtin(rhythm_path, options)
+    rhythm_audio, rhythm_sr = load_audio(rhythm_path)
+    rhythm_result = estimate_rhythm(rhythm_audio, rhythm_sr, np, options)
     tempo = int(rhythm_result.get("tempo") or 120)
     beat_times = rhythm_result.get("beat_times") or []
 
@@ -224,6 +294,7 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
         clean_bars.append(clean_bar)
 
     return {
+        **rhythm_result,
         "duration": duration,
         "tempo": tempo,
         "beat_times": beat_times,
@@ -312,11 +383,10 @@ def fading_root_for_crop(crop: Any, sr: int, start: float, chroma: Any, evidence
 
 
 def duration_weighted_bar_chroma(bars: list[dict[str, Any]], duration: float, tempo: int, time_signature: str, np: Any) -> Any:
-    seconds_per_bar = (60.0 / max(tempo, 1)) * parse_beats_per_bar(time_signature)
     total = np.zeros(12)
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
-        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + seconds_per_bar)
+        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else duration)
         total += bar["_chroma"] * max(0.0, end - start)
     return total
 
@@ -331,8 +401,8 @@ def duration_weighted_cell_chroma(audio: Any, sr: int, bars: list[dict[str, Any]
     beats_per_bar = parse_beats_per_bar(time_signature)
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
-        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + (60.0 / max(tempo, 1)) * beats_per_bar)
-        for cell_start, cell_end in analysis_cell_bounds(start, end, beat_times, options.get("chord_grid", "beat"), beats_per_bar, tempo):
+        end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else duration)
+        for cell_start, cell_end in analysis_cell_bounds(start, end, beat_times, options.get("chord_grid", "beat"), bar.get('pickup_beats', beats_per_bar), tempo):
             total += chroma_for_segment(audio, sr, cell_start, cell_end, np, options) * (cell_end - cell_start)
     return total
 
@@ -392,8 +462,8 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
     cells_by_bar: list[list[dict[str, Any]]] = []
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
-        end = min(song_duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else start + (60.0 / max(tempo, 1)) * beats_per_bar)
-        bounds = analysis_cell_bounds(start, end, beat_times, str(options.get("chord_grid", "beat")), beats_per_bar, tempo)
+        end = min(song_duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else song_duration)
+        bounds = analysis_cell_bounds(start, end, beat_times, str(options.get("chord_grid", "beat")), bar.get('pickup_beats', beats_per_bar), tempo)
         bar_cells = []
         for cell_start, cell_end in bounds:
             chroma = chroma_for_segment(audio, sr, cell_start, cell_end, np, options)
@@ -572,16 +642,14 @@ def estimate_bass_reference(audio: Any, sr: int, start: float, end: float, np: A
     return bass_reference_from_events(bass_note_events(audio, sr, np, start, end, noise_floor), start, end)
 
 
-def build_bars(duration: float, tempo: int, time_signature: str, beat_times: list[float] | None) -> list[Bar]:
+def build_bars(duration: float, tempo: int, time_signature: str, beat_times: list[float] | None, phase: int = 0) -> list[Bar]:
     beats_per_bar = parse_beats_per_bar(time_signature)
     seconds_per_bar = (60.0 / max(tempo, 1)) * beats_per_bar
     estimated_count = max(8, min(160, int(math.ceil(duration / seconds_per_bar))))
 
     starts: list[float] = []
-    if beat_times and len(beat_times) >= beats_per_bar * 2:
-        for index in range(0, len(beat_times), beats_per_bar):
-            starts.append(float(beat_times[index]))
-        starts = starts[:estimated_count]
+    if beat_times:
+        starts = [start for start in measured_bar_starts(beat_times, beats_per_bar, phase) if start < duration]
 
     if not starts:
         starts = [round(index * seconds_per_bar, 3) for index in range(estimated_count)]
@@ -638,7 +706,7 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     options = normalize_analysis_options(raw_options)
     known_key = str(options.get("known_key") or "").strip()
     normalized_mode = "high-quality" if mode in {"high-quality", "hq", "stems"} else "fast"
-    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v1"
+    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v2-rhythm-v1"
     log(f"analyze: {path}")
     log(f"mode: {normalized_mode}")
     log(f"options: {json.dumps(options, sort_keys=True)}")
@@ -656,7 +724,7 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     else:
         log("analyze: source file not found; using fallback draft")
 
-    librosa_result = estimate_with_librosa(path)
+    librosa_result: dict[str, Any] = {}
     time_signature = "4/4"
 
     builtin_result: dict[str, Any] = {}
@@ -687,7 +755,13 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
             raise
         builtin_result = {"error": str(exc)}
 
+    if not builtin_result.get('bars'):
+        librosa_result = estimate_with_librosa(path)
     duration = float(builtin_result.get("duration") or audio_duration(path))
+    if librosa_result:
+        offset = float(options.get('beat_offset', 0))
+        librosa_result['beat_times'] = sorted({round(float(value) + offset, 3)
+            for value in librosa_result.get('beat_times', []) if 0 <= float(value) + offset < duration})
     tempo = int(builtin_result.get("tempo") or librosa_result.get("tempo") or 120)
     essentia_key = estimate_key_with_essentia(path) if not known_key else None
     builtin_key = str(builtin_result.get("key") or "").strip()
@@ -701,12 +775,15 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     else:
         failure = str(builtin_result.get("error", "missing analyzer"))
         log("analysis: creating no-chord fallback chart")
-        bars = build_bars(duration, tempo, time_signature, librosa_result.get("beat_times"))
+        bars = build_bars(duration, tempo, time_signature, librosa_result.get("beat_times"), options['bar_phase'])
         for index, bar in enumerate(bars):
             bar.chord = "N.C."
             bar.confidence = 0.0
             bar.notes = f"Analysis failed: {failure}" if index == 0 else "No chord estimate; enter manually."
         bars_payload = [asdict(bar) for bar in bars]
+        if bars_payload and options['bar_phase'] and librosa_result.get('beat_times'):
+            bars_payload[0]['pickup_beats'] = min(options['bar_phase'], len(librosa_result['beat_times']))
+            bars_payload[0]['section'] = 'Pickup'
         chord_engine = f"unavailable: {builtin_result.get('error', 'missing analyzer')}"
         confidence_note = "no chord estimate"
 
@@ -717,13 +794,15 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
         "waveform": waveform_peaks(path),
         "key": key,
         "tempo": tempo,
+        "tempo_exact": builtin_result.get('tempo_exact', float(tempo)),
         "time_signature": time_signature,
         "beat_times": builtin_result.get("beat_times") or librosa_result.get("beat_times") or [],
         "analysis_engine": {
             "mode": normalized_mode,
             "options": options,
             "duration": "decoded audio" if builtin_result.get("duration") else "fallback",
-            "tempo_beats": "librosa" if librosa_result else "fallback",
+            "tempo_beats": builtin_result.get('tempo_beats') or ("librosa" if librosa_result else "fallback"),
+            "bar_alignment": builtin_result.get('bar_alignment', 'manual beat phase' if options['bar_phase'] else 'first tracked beat; unverified downbeat'),
             "key": key_source,
             "chords": chord_engine,
             "confidence": confidence_note,

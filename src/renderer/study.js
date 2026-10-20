@@ -201,7 +201,7 @@ function selectStudyRun(id) {
 }
 async function analyzeStudySelection() {
   const owner = state.study;
-  if (owner.busy) return;
+  if (owner.busy || state.drumBusy) return;
   const error = studyRangeError(owner.draft.start, owner.draft.end, studyDuration());
   if (error) { setStatus(error); return; }
   const available = studyOriginalSources();

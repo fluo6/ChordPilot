@@ -292,19 +292,22 @@
               </details>
               <details>
                 <summary>Analysis presets for instrument textures</summary>
-                <p>Choose a preset under Analysis Options, then adjust any control. Presets are starting points: instruments, pedal, distortion and reverb can change the pitch evidence. General uses the existing defaults. Editing a preset's timing or filtering controls shows Custom; saved sessions retain the actual values.</p>
+                <p>Choose a preset by the instruments, arrangement, playing style and effects you hear. Genre examples are guidance: a neo-soul song may have rhythmic piano, sustained keys or a layered reverberant arrangement. Presets are starting points; adjust any control. General uses the existing defaults. Editing timing or filtering controls shows Custom; saved sessions retain the actual values.</p>
                 <table class="help-tech-table">
-                  <thead><tr><th>Preset</th><th>Grid / stability</th><th>Tail reduction / half-life</th><th>Overtone weighting</th></tr></thead>
+                  <thead><tr><th>Preset</th><th>Typical sound</th><th>Grid / stability</th><th>Tail reduction / half-life</th><th>Overtone weighting</th></tr></thead>
                   <tbody>
-                    <tr><th>General</th><td>One beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
-                    <tr><th>Clean Guitar / Arpeggios</th><td>One beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
-                    <tr><th>Piano / Sustained Keys</th><td>Half beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
-                    <tr><th>Reverb / FX</th><td>Half beat / Balanced</td><td>20% / 0.8 s</td><td>50%</td></tr>
-                    <tr><th>Fast Chord Changes</th><td>Half beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
+                    <tr><th>General / Mixed Instruments</th><td>Mixed band or unfamiliar recording</td><td>One beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
+                    <tr><th>Clean Guitar / Arpeggios</th><td>Clear plucks and ringing broken chords</td><td>One beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
+                    <tr><th>Piano &amp; Keys / Sustained</th><td>Held voicings, pedal or arpeggios; ballad accompaniment</td><td>Half beat / Sustained</td><td>20% / 0.5 s</td><td>0%</td></tr>
+                    <tr><th>Piano &amp; Keys / Rhythmic Chords</th><td>Chord attacks and melodic fills; neo-soul, R&amp;B or jazz keys</td><td>One beat / Balanced</td><td>20% / 0.5 s</td><td>50%</td></tr>
+                    <tr><th>Layered Instruments / Reverb</th><td>Strings, pads and overlapping reverb/delay tails</td><td>Half beat / Balanced</td><td>20% / 0.8 s</td><td>50%</td></tr>
+                    <tr><th>Short Notes / Fast Changes</th><td>Short articulated voicings with little ringing; tight funk comping</td><td>Half beat / Detailed</td><td>0% / 0.5 s</td><td>50%</td></tr>
                   </tbody>
                 </table>
                 <p>All presets use Auto changes and preserve your key, source stem, separation model, tempo settings and lyrics settings. Choosing a preset does not start analysis; use Reanalyse Chords to update existing results with cached stems. New Local Studies inherit the current tail and overtone settings. Existing saved studies keep their own settings.</p>
-                <p>The clean-guitar settings were checked on Ballad's opening. Piano and Reverb / FX are conservative starting points awaiting broader instrument-specific reference checks. FX differ: longer tail estimation addresses ringing, while overtone weighting targets supported harmonic peaks; it cannot remove every effect or separate an overtone from every played note.</p>
+                <p>All presets use the same chord vocabulary. Simplify Chords controls the display of extensions; complex harmony can occur with any instrument, playing style or preset.</p>
+                <p>Piano &amp; Keys / Rhythmic Chords was checked against selected passages in Jesús Molina's Promises performance. It reduces spurious changes from melodic runs, but can miss offbeat passing chords. Use Other + Bass evidence for this reference; the full mix performed worse. This is a starting point for a playing texture.</p>
+                <p>The clean-guitar settings were checked on Ballad's opening. The sustained-keys and layered-reverb settings await broader reference checks. Genre examples describe possible uses, not validated accuracy for an entire genre. Longer tail estimation addresses ringing, while overtone weighting targets supported harmonic peaks; neither removes every effect or identifies every played note.</p>
               </details>
               <details>
                 <summary>Detailed, Balanced, and Sustained stability</summary>
@@ -366,12 +369,18 @@ relative dB(f) = 10 × log10(power(f) / reference peak power)</pre>
               </details>
               <details>
                   <summary>Bass fretboard, TAB and score</summary>
+                  <p>In Charts, Bass Notes / TAB offers Notation + TAB, TAB only and Notation only. This display preference is saved with the session. All chart views share the same bars, chords and playback clock.</p>
                   <p>Bass Notes shows the measured bass line for the selected bar. Amber positions belong to that bar; teal marks the note at the playback cursor. Each measured pitch gets one suggested position, preferring a low fret. Four strings use E–A–D–G; five strings add low B. The selected instrument is saved with the session.</p>
                   <p>Bass fundamentals are tracked independently of the chord grid using a YIN-style repeating-waveform estimate: 120 ms frames every 20 ms, with an 80 ms rescue window for brief notes. This can recover a weak fundamental beneath stronger overtones. A longer integral period is accepted only when it explains the waveform substantially better; a pure upper note is not automatically lowered an octave. The same fundamentals supply bass/root evidence to chord analysis and Local Study.</p>
                   <p>A continuous bass slide can pass through several semitones without playing separate notes. For fragments shorter than 160 ms, the tracker checks continuing pitch movement above 500 cents per second between neighbouring pitches, confirms it with central 60 ms windows, and requires no renewed attack (less than a 1.4× level rise). Stable short chromatic notes are preserved. Rejected one-frame pitch glitches do not become the reference for filtering the next note.</p>
                   <p>Frames need at least 80% periodicity and tuning within 40 cents. Isolated 20 ms detections are discarded. Brief notes need a stable pitch core; low-confidence short notes also require a measured fundamental or a stable pair of second and third harmonics. Neighboring pitches under 160 ms are checked for a decaying release, while stable passing notes between longer notes can remain. A return below 10% of a recent note's RMS within 0.6 s is treated as ringing: the same pitch continues the previous held note, and a different pitch is omitted. Quiet legato notes, slides and very fast fills can still be missed. The score uses a finer grid when a confirmed short note would disappear on 1/16, and phrase-based fingering favours small hand shifts and nearby strings.</p>
                   <p>The bass-clef score is written one octave above the sounding pitch, as for electric bass. Score and TAB share rhythmic spacing, stems, beams, dotted values, rests and ties, including holds across bar lines. The chart's time signature and measured beat positions map detected starts and ends to the nearest sixteenth note; when a complete beat map is unavailable, spacing follows the bar's duration. Gaps without a detected pitch appear as rests. This is estimated rhythm: very short notes can disappear, triplets and swing are approximated, and an incorrect beat grid or meter produces incorrect notation. Hover a note for its original times; playback highlighting follows those original times.</p>
                   <p>Chord and bar-boundary edits preserve measured note times and refresh the notation. Older sessions can show rhythmic values from their coarse cell timings; Reanalyse Chords with existing stems for independent bass-note timing. Actual string/fret choices remain suggestions. Notes outside the selected tuning or 24 frets show × in TAB.</p>
+              </details>
+              <details>
+                  <summary>Reviewing a transcription</summary>
+                  <p>Open Review transcription above the chart and select Chords, Bass notes or Drum hits. Listen to the original bar or isolated stem, inspect the original detection evidence and edit event times, pitches or drum classes. Bass pitches accept names such as C2, Db2 or MIDI numbers. Apply edits changes the chart interpretation; original predictions remain saved for comparison. Reset edits restores them. Reference candidates and review notes are manual annotations and are never inputs to recognition.</p>
+                  <p>Mark verified records your review of this bar and instrument. New or changed evidence returns to Needs review. Corrections tied to obsolete evidence are ignored until reset or reapplied. Near-barline drum hits can appear on the neighbouring downbeat; the boundary-hit button opens their original-time bar for editing. Model activations and bass periodicity describe signal evidence, not calibrated accuracy. A kit label does not establish that an environmental sound was a drum, and suggested TAB does not establish an electric bass performance.</p>
                 </details>
                 <details>
                 <summary>Relative dB, key shading, and note volume</summary>
@@ -515,7 +524,7 @@ fresh power(f, t) = max(0, current power(f, t)
         <div id="sourceInfoPanel" class="collapsible-content source-info-panel"></div>
       </section>
 
-      <section class="transport editor-section arrange-section">
+      <section class="transport editor-section arrange-section table-section">
         <div class="section-title">
           <button class="collapse-toggle" type="button" title="Collapse section">v</button>
           <strong>Source Playback</strong>
@@ -545,6 +554,10 @@ fresh power(f, t) = max(0, current power(f, t)
             <span id="playbackRateText">1x</span>
           </label>
           <div class="transport-info">
+            <label class="chart-follow-control" title="Keep the current chart system visible. Manual scrolling pauses following for 8 seconds; use Resume following to return sooner.">
+              Auto-follow <input id="chartAutoFollowInput" type="checkbox" />
+            </label>
+            <button id="chartResumeFollowBtn" type="button" hidden>Resume following</button>
             <div id="activeBarText" class="active-bar">Bar -</div>
             <div id="statusText" class="status">Ready</div>
           </div>
@@ -613,15 +626,16 @@ fresh power(f, t) = max(0, current power(f, t)
           <div class="analysis-preset-row">
             <label>Preset
               <select id="analysisPresetInput" aria-describedby="analysisPresetHint">
-                <option value="general" selected>General</option>
+                <option value="general" selected>General / Mixed Instruments</option>
                 <option value="clean_guitar">Clean Guitar / Arpeggios</option>
-                <option value="piano">Piano / Sustained Keys</option>
-                <option value="reverb_fx">Reverb / FX</option>
-                <option value="fast_changes">Fast Chord Changes</option>
+                <option value="piano">Piano &amp; Keys / Sustained</option>
+                <option value="rhythmic_keys">Piano &amp; Keys / Rhythmic Chords</option>
+                <option value="reverb_fx">Layered Instruments / Reverb</option>
+                <option value="fast_changes">Short Notes / Fast Changes</option>
                 <option value="custom" disabled>Custom</option>
               </select>
             </label>
-            <span id="analysisPresetHint">General starting point. Keeps brief changes; no sustain-tail subtraction.</span>
+            <span id="analysisPresetHint">Mixed instruments or an unfamiliar recording: keeps brief changes with no sustain-tail subtraction. Choose a more specific texture when useful.</span>
           </div>
           <fieldset class="option-group">
             <legend>Timing + Key</legend>
@@ -701,8 +715,17 @@ fresh power(f, t) = max(0, current power(f, t)
             <input id="maxBpmInput" type="number" min="60" max="300" value="190" />
           </label>
           <label>
-            Beat Offset
+            Beat Offset (seconds)
             <input id="beatOffsetInput" type="number" min="-2" max="2" step="0.01" value="0" />
+          </label>
+          <label title="Choose which tracked beat starts the first full bar, then reanalyse. Earlier beats form a short pickup bar.">
+            First Downbeat
+            <select id="barPhaseInput">
+              <option value="0">1st tracked beat</option>
+              <option value="1">2nd tracked beat</option>
+              <option value="2">3rd tracked beat</option>
+              <option value="3">4th tracked beat</option>
+            </select>
           </label>
           <label>
             Onset Frame
@@ -815,6 +838,7 @@ fresh power(f, t) = max(0, current power(f, t)
           <button id="reanalyzeChordsBtn" type="button" disabled>Reanalyse Chords</button>
           <button id="reanalyzeLyricsBtn" type="button" disabled>Reanalyse Lyrics</button>
           <button id="reanalyzeAllBtn" type="button" title="Reanalyse everything and require vocals, drums, bass, and other stems" disabled>Reanalyse All + Stems</button>
+          <button id="analyzeDrumsBtn" type="button" title="Optional drum transcription using the prepared drum stem" disabled>Analyse Drums</button>
         </div>
       </section>
 
@@ -985,6 +1009,7 @@ fresh power(f, t) = max(0, current power(f, t)
             </div>
             <div id="detailKeyboard" aria-label="Beat detected notes"></div>
             <section id="detailBass" class="bass-view" aria-label="Bar bass notes"></section>
+            <section id="detailDrums" class="drum-view" aria-label="Bar drum sheet"></section>
             <section id="detailGuitar" class="bass-view guitar-view" aria-label="Bar guitar notes"></section>
             <section id="detailSpectrum" class="detail-spectrum" aria-label="Beat frequency spectrum"></section>
             <label>
@@ -1022,20 +1047,37 @@ fresh power(f, t) = max(0, current power(f, t)
           <div class="section-title table-title">
             <div class="section-title-main">
               <button class="collapse-toggle" type="button" title="Collapse section">v</button>
-              <strong>Chord Chart</strong>
+              <strong>Charts</strong>
             </div>
-            <label class="renderer-picker" title="Switch chord chart renderer">
-              Renderer
+            <label class="renderer-picker" title="Views share chords, bars and playback; bass and drums add estimated instrument parts.">
+              View
               <select id="chartRendererInput">
                 <option value="ireal" selected>Chord Chart</option>
                 <option value="table">Editable Table</option>
                 <option value="grid">Measure Grid</option>
-                <option value="bass">Bass Tab + Score</option>
+                <option value="bass">Bass Notes / TAB</option>
+                <option value="drums">Drum Sheet</option>
                 <option value="chordpro">ChordPro Text</option>
               </select>
             </label>
+            <label id="chartNotationRendererControl" class="renderer-picker" title="Compare the current notation renderer with alphaTab" hidden>
+              Notation
+              <select id="chartNotationRendererInput">
+                <option value="alphatab" selected>alphaTab</option>
+                <option value="current">Current</option>
+                <option value="compare">Compare side by side</option>
+              </select>
+            </label>
+            <label class="renderer-picker">Bars per line:
+              <select id="barsPerLineInput"><option value="2">2</option><option value="4" selected>4</option></select>
+            </label>
+            <button data-export="pdf" type="button" title="Export the current chart layout as PDF" disabled>PDF</button>
           </div>
           <div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div>
+          <details id="transcriptionReview" class="transcription-review-panel" hidden>
+            <summary>Review transcription</summary>
+            <div class="transcription-review-body"></div>
+          </details>
           <div id="chartPreview" class="chart-preview collapsible-content"></div>
           <table id="barsTable" class="collapsible-content hidden">
             <thead>
@@ -1047,6 +1089,7 @@ fresh power(f, t) = max(0, current power(f, t)
                 <th>Repeat</th>
                 <th>Start</th>
                 <th>Lyrics</th>
+                <th title="K kick · S snare · T toms · H hi-hat · C cymbals/ride">Drums</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -1180,11 +1223,19 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./chord-events.js"></script>
     <script src="./chord-display.js"></script>
     <script src="./bars.js"></script>
+    <script src="./chart-layout.js"></script>
+    <script src="./transcription-review.js"></script>
     <script src="./vendor/vexflow-bravura-4.2.5.js"></script>
     <script src="./chord-notation.js"></script>
     <script src="./chord-voicing.js"></script>
+    <script src="./bass-tuning.js"></script>
     <script src="./bass-view.js"></script>
     <script src="./guitar-view.js"></script>
+    <script src="./drum-actions.js"></script>
+    <script src="./drum-view.js"></script>
+    <script src="./vendor/alphatab/alphaTab.min.js"></script>
+    <script src="./alphatab-score.js"></script>
+    <script src="./alphatab-renderer.js"></script>
     <script src="./detail-sections.js"></script>
     <script src="./waveform.js"></script>
     <script src="./arrangement-waveforms.js"></script>

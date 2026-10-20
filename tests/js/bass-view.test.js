@@ -1,14 +1,44 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {loadScript, plain} = require('./helpers/load-script');
+const BassTuning=require('../../src/renderer/bass-tuning.js');
 
 function bass() {
   const {measuredBassMidi} = loadScript('src/renderer/bars.js',['measuredBassMidi'],{
     pitchIndex:note=>['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'].indexOf(note)
   });
-  return loadScript('src/renderer/bass-view.js',['bassPositions','bassBarNotes','bassChartNotes','activeBassNote'],{measuredBassMidi});
+  return loadScript('src/renderer/bass-view.js',['bassPositions','bassBarNotes','bassChartNotes','activeBassNote'],{measuredBassMidi,BassTuning});
 }
 const cell=(start,end,midi)=>({start,end,bass_reference:{pitch_class:midi%12,detected_pitches:[{midi,strength:1}]}});
+
+test('bass chart groups consecutive identical display labels without changing chord data or selection indices',()=>{
+  const {displayChordSymbol}=loadScript('src/renderer/bars.js',['displayChordSymbol'],{elements:{simplifyChordsInput:{checked:true}},state:{}});
+  const {bassChartChordLabels}=loadScript('src/renderer/bass-view.js',['bassChartChordLabels'],{displayChordSymbol});
+  assert.equal(typeof bassChartChordLabels,'function');
+  const chords=[['Fmaj7',0,.5],['Fmaj9',.5,1],['Fmaj7/C',1,1.5],['Fmaj13/C',1.5,2],
+    ['Dm9',2,2.5],['Fmaj7/C',2.5,3],['Fmaj7/C',3.2,3.5]].map(([chord,start,end])=>({chord,start,end}));
+  const before=JSON.stringify(chords);
+  const labels=bassChartChordLabels(chords);
+  assert.deepEqual(plain(labels).map(item=>[item.eventIndex,item.label,item.event.start,item.event.end]),
+    [[0,'Fmaj7',0,1],[2,'Fmaj7/C',1,2],[4,'Dm7',2,2.5],[5,'Fmaj7/C',2.5,3],[6,'Fmaj7/C',3.2,3.5]]);
+  assert.equal(JSON.stringify(chords),before);
+});
+
+test('measured reattacks stay separate while clipped pieces of one attack stay tied',()=>{
+  const {bassChartNotes}=bass();
+  const chart={duration:2,bars:[
+    {start:0,bass_events:[{start:0,end:.6,midi:37,attack_start:0},{start:.6,end:1,midi:37,attack_start:.6}]},
+    {start:1,bass_events:[{start:1,end:1.4,midi:37,attack_start:.6},{start:1.4,end:2,midi:37,attack_start:1.4}]}]};
+  const snapshot=JSON.stringify(chart);
+  const notes=bassChartNotes(chart,4);
+  assert.deepEqual(plain(notes[0]).map(n=>[n.start,n.end]),[[0,.6],[.6,1]]);
+  assert.deepEqual(plain(notes[1]).map(n=>[n.start,n.end]),[[1,1.4],[1.4,2]]);
+  assert.equal(notes[0][0].continuesToNext,false);
+  assert.equal(notes[0][1].continuesToNext,true);
+  assert.equal(notes[1][0].continuesFromPrevious,true);
+  assert.equal(notes[1][1].continuesFromPrevious,false);
+  assert.equal(JSON.stringify(chart),snapshot);
+});
 
 test('bass chart keeps measured notes, cross-bar fingering and ties when transposed',()=>{
   const {bassChartNotes}=bass();
@@ -68,12 +98,15 @@ test('independent bass timings survive edited bar starts by reading the complete
   assert.deepEqual(plain(bassBarNotes(bar,1.2,4,track)).map(n=>[n.start,n.end,n.midi]),[[0,1,31],[1,1.2,36]]);
 });
 
-test('bass positions use sounding octaves, standard 4/5-string tuning and 24 frets',()=>{
+test('bass positions use sounding octaves, standard 4/5/6-string tuning and 24 frets',()=>{
   const {bassPositions}=bass();
   assert.deepEqual(plain(bassPositions(28,4)),[{string:4,fret:0}]);
   assert.deepEqual(plain(bassPositions(23,4)),[]);
   assert.deepEqual(plain(bassPositions(23,5)),[{string:5,fret:0}]);
   assert.deepEqual(plain(bassPositions(24,5)),[{string:5,fret:1}]);
+  assert.deepEqual(plain(bassPositions(23,6)),[{string:6,fret:0}]);
+  assert.deepEqual(plain(bassPositions(48,6)[0]),{string:1,fret:0});
+  assert.deepEqual(plain(bassPositions(72,6)),[{string:1,fret:24}]);
   assert.equal(bassPositions(44,4)[0].fret,1);
   assert.deepEqual(plain(bassPositions(68,5)),[]);
 });

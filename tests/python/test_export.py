@@ -26,6 +26,19 @@ CHART = {
 
 
 class ExportTests(unittest.TestCase):
+    def test_pickup_keeps_short_duration_before_full_measure(self):
+        chart={'time_signature':'4/4','duration':3,'beat_times':[0,.5,1,1.5,2,2.5],
+               'bars':[{'start':0,'pickup_beats':2,'chord':'C'},{'start':1,'chord':'G'}]}
+        measures=ET.fromstring(render_musicxml(chart)).findall('./part/measure')
+        self.assertEqual(measures[0].get('implicit'),'yes')
+        self.assertEqual(measures[0].findtext('note/duration'),'192')
+        self.assertEqual(measures[1].findtext('note/duration'),'384')
+        chart['bars'][0]['pickup_beats']=3
+        pickup=ET.fromstring(render_musicxml(chart)).find('./part/measure')
+        self.assertEqual(pickup.findtext('note/duration'),'288')
+        self.assertEqual(pickup.findtext('note/type'),'half')
+        self.assertIsNotNone(pickup.find('note/dot'))
+
     def test_timed_events_are_preserved_in_text_csv_and_musicxml_with_irregular_beats(self):
         chart = {
             "title": "Timed", "tempo": 120, "time_signature": "7/8",

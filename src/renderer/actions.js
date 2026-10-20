@@ -1,4 +1,5 @@
 function startProjectWithAudio(audio, statusText = "Audio loaded") {
+  if(typeof stopTranscriptionListen==='function') stopTranscriptionListen();
   state.sessionPath = null;
   if (typeof resetStudyState === "function") resetStudyState();
   state.audio = audio;
@@ -296,7 +297,7 @@ async function lookupSourceMetadata() {
 }
 
 async function analyzeAudio(settings = {}) {
-  if (!state.audio) {
+  if (!state.audio || state.drumBusy) {
     return;
   }
 
@@ -306,6 +307,7 @@ async function analyzeAudio(settings = {}) {
   }
 
   const mode = elements.analysisModeInput.value;
+  const previousChart = state.chart, sourceAudio = state.audio;
 
   setStatus("Analyzing...");
   clearLog();
@@ -318,7 +320,10 @@ async function analyzeAudio(settings = {}) {
     const options = collectAnalysisOptions();
     options.require_stems = requireStems;
     appendLog(`options: key ${options.known_key || "auto"}, bpm ${options.min_bpm}-${options.max_bpm}, beat offset ${options.beat_offset}s, chroma ${options.chroma_low_hz}-${options.chroma_high_hz}Hz, alternatives ${options.chord_alternatives}, chord source ${options.chord_source}, simplify ${options.simplify_chords ? "on" : "off"}, lyrics ${options.lyrics_enabled ? `${options.lyrics_model}/${options.lyrics_language || "auto"}` : "off"}`);
-    state.chart = await window.chordPilot.analyze(state.audio.path, mode, options);
+    const result = await window.chordPilot.analyze(sourceAudio.path, mode, options);
+    if (state.audio !== sourceAudio || state.chart !== previousChart) return;
+    preserveDrumAnalysis(result, previousChart);
+    state.chart = result;
     ensureChartKeyState(state.chart);
     ensureChartTempoState(state.chart);
     state.audioPreview = null;
@@ -354,6 +359,16 @@ async function analyzeAudio(settings = {}) {
   }
 }
 
+function preserveDrumAnalysis(chart, previousChart) {
+  if (!previousChart?.drums?.ok) return;
+  const stemIdentity = value => {
+    const stem = value?.stems?.stems?.find(item => item.name === 'drums');
+    return stem?.id || stem?.path;
+  };
+  const before = stemIdentity(previousChart), after = stemIdentity(chart);
+  chart.drums = {...previousChart.drums, stale: Boolean(previousChart.drums.stale || !before || before !== after)};
+}
+
 function applyAnalyzedChart(chart, options = {}) {
   state.chart = chart;
   ensureChartKeyState(state.chart);
@@ -376,12 +391,14 @@ function applyAnalyzedChart(chart, options = {}) {
 
 async function runAnalysisWithOptions(options, loadingText, jobText) {
   const mode = elements.analysisModeInput.value;
+  const sourceAudio = state.audio, sourceChart = state.chart;
   openEditorPanel("log");
   appendLog(`app: ${jobText} (${mode})`);
   addJob(jobText, "running");
   setAnalysisActive(true, loadingText || jobText || "Analyzing...");
   try {
-    const result = await window.chordPilot.analyze(state.audio.path, mode, options);
+    const result = await window.chordPilot.analyze(sourceAudio.path, mode, options);
+    if (state.audio !== sourceAudio || state.chart !== sourceChart) return null;
     addJob(`${jobText} ready`, "done");
     return result;
   } catch (error) {
@@ -442,6 +459,7 @@ function applyLyricsReferenceToCurrentChart(lyricsResult) {
 }
 
 async function reanalyzeSection(section) {
+  if (state.drumBusy) return;
   if (!state.audio?.path) {
     setStatus("Open a session with audio before reanalysis");
     return;
@@ -487,6 +505,7 @@ async function reanalyzeSection(section) {
     }
     result.title = previousChart?.title || result.title;
     result.lyrics = previousChart?.lyrics;
+    preserveDrumAnalysis(result, previousChart);
     copyExistingLyricsToBars(result.bars, previousChart?.bars || []);
     applyAnalyzedChart(result, { resetSelection: false });
     setStatus(`Chords refreshed: ${result.bars.length} bars`);
@@ -651,6 +670,10 @@ async function exportChart(format) {
   const finishLoading = beginLoading(`Exporting ${format.toUpperCase()}...`);
   setStatus(`Exporting ${format.toUpperCase()}...`);
   try {
+    if (format === 'pdf') {
+      await prepareChartPrint();
+      if (window.chordPilot.isWebRuntime) { window.print(); setStatus('Print dialog closed'); return; }
+    }
     const result = await window.chordPilot.exportChart(state.chart, format);
     setStatus(result ? `Exported ${format.toUpperCase()}` : "Export cancelled");
   } catch (error) {
@@ -706,9 +729,12 @@ function buildSessionPayload() {
       timelineZoom: state.timelineZoom,
       waveformView: state.waveformView,
       followTimeCursor: state.followTimeCursor !== false,
+      barsPerLine: chartBarsPerLine(),
+      chartAutoFollow: Boolean(state.chartAutoFollow),
       detailPaneWidth: state.detailPaneWidth,
       notationUseKeySignature: state.notationUseKeySignature !== false,
-      bassStrings: state.bassStrings === 5 ? 5 : 4,
+      bassStrings: typeof BassTuning==='undefined' ? (state.bassStrings === 5 ? 5 : 4) : BassTuning.normalizeStringCount(state.bassStrings),
+      bassNotationMode: ['tab','notation'].includes(state.bassNotationMode) ? state.bassNotationMode : 'both',
       detailSectionLayout: state.detailSectionLayout,
       currentTime: elements.audioPlayer.currentTime || 0
     }
@@ -750,6 +776,7 @@ async function saveSession(options = {}) {
 }
 
 function restoreSessionPayload(session) {
+  if(typeof stopTranscriptionListen==='function') stopTranscriptionListen();
   if (typeof resetStudyState === "function") resetStudyState();
   state.studies = normalizeStudies(session.studies);
   state.audio = session.audio || null;
@@ -769,9 +796,14 @@ function restoreSessionPayload(session) {
   state.timelineZoom = Number(session.ui?.timelineZoom) || 1;
   if (typeof normalizeWaveformView === 'function') state.waveformView = normalizeWaveformView(session.ui?.waveformView);
   state.followTimeCursor = session.ui?.followTimeCursor !== false;
+  state.barsPerLine = Number(session.ui?.barsPerLine) === 2 ? 2 : 4;
+  state.chartAutoFollow = Boolean(session.ui?.chartAutoFollow);
+  if (elements.barsPerLineInput) elements.barsPerLineInput.value = String(state.barsPerLine);
+  if (elements.chartAutoFollowInput) elements.chartAutoFollowInput.checked = state.chartAutoFollow;
   state.detailPaneWidth = Number(session.ui?.detailPaneWidth) || state.detailPaneWidth;
   state.notationUseKeySignature = session.ui?.notationUseKeySignature !== false;
-  state.bassStrings = session.ui?.bassStrings === 5 ? 5 : 4;
+  state.bassStrings = typeof BassTuning==='undefined' ? (session.ui?.bassStrings === 5 ? 5 : 4) : BassTuning.normalizeStringCount(session.ui?.bassStrings);
+  state.bassNotationMode = ['tab','notation'].includes(session.ui?.bassNotationMode) ? session.ui.bassNotationMode : 'both';
   if (typeof normalizeDetailSectionLayout === 'function') {
     state.detailSectionLayout = normalizeDetailSectionLayout(session.ui?.detailSectionLayout);
     applyDetailSectionLayout();

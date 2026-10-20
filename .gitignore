@@ -5,6 +5,8 @@ build/
 .env
 .tool-cache/
 .chordpilot-data/benchmarks/
+.chordpilot-data/sd-cache/
+outputs/sir-duke-validation/
 __pycache__/
 *.pyc
 Tools/

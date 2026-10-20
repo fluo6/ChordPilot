@@ -14,6 +14,7 @@ function applyStudyPlaybackSettings() {
   });
 }
 async function playStudySelection({ loop = false } = {}) {
+  if(typeof stopTranscriptionListen==='function')stopTranscriptionListen();
   const draft = state.study.draft;
   const error = studyRangeError(draft.start, draft.end, studyDuration());
   if (error) { setStudyMessage(error); return false; }

@@ -63,6 +63,7 @@ elements.audioPlayer.addEventListener("seeked", () => {
   resetMetronomeSchedule();
 });
 elements.audioPlayer.addEventListener("play", () => {
+  if(typeof stopTranscriptionListen==='function') stopTranscriptionListen();
   updateActiveBarFromPlayback();
   updatePlayhead();
   startMetronome();
@@ -106,6 +107,7 @@ elements.deleteBarBtn.addEventListener("click", deleteBar);
 elements.reanalyzeChordsBtn.addEventListener("click", () => reanalyzeSection("chords"));
 elements.reanalyzeLyricsBtn.addEventListener("click", () => reanalyzeSection("lyrics"));
 elements.reanalyzeAllBtn.addEventListener("click", () => reanalyzeSection("all"));
+elements.analyzeDrumsBtn.addEventListener('click', () => hasDrumStem() ? analyzeDrums() : prepareDrumStems());
 elements.keyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
 elements.arrangementKeyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
 elements.applyAudioPreviewBtn.addEventListener("click", applyAudioPreview);
@@ -142,8 +144,23 @@ elements.chordTimingInput.addEventListener("change", () => {
 updateAnalysisPresetState();
 elements.chartRendererInput.addEventListener("change", () => {
   state.chartRenderer = elements.chartRendererInput.value || "ireal";
+  state.reviewKind=null;
   renderChartPreview();
 });
+elements.chartNotationRendererInput.addEventListener('change',()=>{
+  const choice=elements.chartNotationRendererInput.value;
+  state.notationRenderer=['alphatab','compare'].includes(choice)?choice:'current';
+  renderChartPreview();
+});
+elements.barsPerLineInput.addEventListener('change', () => {
+  state.barsPerLine = Number(elements.barsPerLineInput.value) === 2 ? 2 : 4;
+  renderChartPreview();
+});
+elements.chartAutoFollowInput.addEventListener('change', () => {
+  state.chartAutoFollow = elements.chartAutoFollowInput.checked;
+  resumeChartFollow();
+});
+elements.chartResumeFollowBtn.addEventListener('click', resumeChartFollow);
 
 elements.detailSectionInput.addEventListener("input", () => updateSelectedBarFromDetail("section", elements.detailSectionInput.value));
 elements.detailChordInput.addEventListener("input", () => updateSelectedBarFromDetail("chord", elements.detailChordInput.value));

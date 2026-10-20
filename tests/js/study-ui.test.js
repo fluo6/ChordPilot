@@ -112,17 +112,21 @@ test("saving and reopening restores history and corrections without mutating sug
 
 test("Save Session flushes pending runs and preserves dirty edits made during the save", async () => {
   const env = environment({ bridge: { async analyzeRange(payload) { return { chord: "C", range: [payload.start, payload.end], sources: payload.sources, settings: payload.options, evidence: { detected_notes: [] } }; } } });
+  env.state.barsPerLine=2;env.state.chartAutoFollow=true;
   env.setStudyRange(1, 2); await env.analyzeStudySelection();
   let resolve; let payload; let saveOptions;
   const { saveSession } = loadScript("src/renderer/actions.js", ["saveSession"], {
     state: env.state, studyCopy: (value) => plain(value), saveCurrentStudy: env.saveCurrentStudy, studySaveToken: env.studySaveToken,
     renderStudy() {}, syncMetaToState() {}, collectAnalysisOptions: () => ({}),
+    chartBarsPerLine: loadScript('src/renderer/chart-layout.js',['chartBarsPerLine'],{state:env.state}).chartBarsPerLine,
     elements: { audioPlayer: { currentTime: 0 }, analysisModeInput: { value: "draft" } },
     window: { chordPilot: { saveSession(value, options) { payload = value; saveOptions = options; return new Promise((done) => { resolve = done; }); } } },
     beginLoading: () => () => {}, setStatus() {}, rememberSession() {}, addJob() {}, showErrorDialog() {}
   });
   const saving = saveSession();
   assert.equal(payload.studies[0].runs[0].chord, "C");
+  assert.equal(payload.ui.barsPerLine,2);
+  assert.equal(payload.ui.chartAutoFollow,true);
   assert.equal(env.state.study.pendingRuns.length, 0);
   env.state.study.draft.notes = "edited while saving";
   resolve({ path: "session.json" }); await saving;

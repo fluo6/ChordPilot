@@ -191,6 +191,15 @@ function collectMetronomeTicks(startTime, endTime) {
   const secondsPerBeat = metronomeSecondsPerBeat();
   const beatsPerBar = metronomeBeatsPerBar();
   const bars = Array.isArray(state.chart?.bars) ? state.chart.bars : [];
+  const measured = [...new Set((state.chart?.beat_times || []).filter(Number.isFinite))].sort((a,b)=>a-b);
+  if (measured.length) {
+    const duration = Number(state.chart.duration) || Infinity;
+    return measured.filter(time=>time>=0 && time>=startTime && time<=endTime && time<duration).map(time=>({
+      time,
+      accented: bars.some(bar=>!bar.pickup_beats && Math.abs(Number(bar.start)-time)<.001),
+      key: `beat:${time.toFixed(3)}`
+    }));
+  }
   if (!bars.length) {
     return collectGridMetronomeTicks(startTime, endTime, secondsPerBeat, beatsPerBar);
   }

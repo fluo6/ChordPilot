@@ -169,6 +169,11 @@ function updateActiveBarFromPlayback() {
     if (nextIndex >= 0 && typeof renderDetailGuitar === "function") {
       renderDetailGuitar(state.chart.bars[nextIndex], barEndTime(nextIndex), originalTime);
     }
+    if (nextIndex >= 0 && typeof renderDetailDrums === 'function') {
+      renderDetailDrums(state.chart.bars[nextIndex],barEndTime(nextIndex),originalTime);
+      if (state.chartRenderer === 'drums') highlightDrumHits(elements.chartPreview,originalTime);
+    }
+    if (typeof updateChartPlayback === 'function') updateChartPlayback(originalTime,nextIndex);
     return;
   }
 
@@ -180,7 +185,8 @@ function updateActiveBarFromPlayback() {
     state.selectedIndex = nextIndex;
     state.selectedChordEventIndex = Math.max(0, nextEventIndex);
   }
-  updateRowState({ scroll: true });
+  if (typeof updateChartPlayback === 'function') updateChartPlayback(originalTime,nextIndex);
+  updateRowState({ playback: true });
 }
 
 function renderBars() {
@@ -189,6 +195,7 @@ function renderBars() {
     elements.chartPreview.innerHTML = "";
   }
   renderLyricsReferencePanel();
+  if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
   state.barRows = [];
 
   if (!hasChart()) {
@@ -222,11 +229,15 @@ function renderBars() {
 
     const chordCell = document.createElement("td");
     const chordInput = createInput(bar.chord, (value) => {
+      if(typeof captureDetectedChords==='function')captureDetectedChords(bar,barEndTime(index),Number(state.chart.key_offset) || 0);
+      const markManual=target=>{target.manual=true;target.evidence_stale=true;delete target.confidence;delete target.chord_confidence;};
       if (Array.isArray(bar.chord_events) && bar.chord_events.length) {
         const dominantIndex = bar.chord_events.reduce((best, event, eventIndex, all) => event.end - event.start > all[best].end - all[best].start ? eventIndex : best, 0);
         bar.chord_events[dominantIndex].chord = value;
+        markManual(bar.chord_events[dominantIndex]);
         syncBarChordSummary(bar);
       } else bar.chord = value;
+      markManual(bar);
       renderTimeline();
     }, "table-chord-input");
     chordInput.value = displayChordSymbol(bar.chord, false);
@@ -295,7 +306,10 @@ function renderBars() {
       updateDetailPane();
     }));
 
-    row.append(barCell, sectionCell, chordCell, confidenceCell, repeatCell, startCell, lyricsCell, notesCell);
+    const drumCell = document.createElement('td');drumCell.className='drum-table-cell';
+    drumCell.textContent = typeof drumSummary === 'function' ? drumSummary(state.chart,bar,barEndTime(index)) : 'Not analysed';
+    drumCell.title='K kick · S snare · T toms · H hi-hat · C cymbals/ride';
+    row.append(barCell, sectionCell, chordCell, confidenceCell, repeatCell, startCell, lyricsCell, drumCell, notesCell);
     elements.barsBody.appendChild(row);
     state.barRows.push(row);
   });
@@ -305,7 +319,7 @@ function renderBars() {
   updateRowState();
 }
 
-function chartRows(measuresPerRow = 4) {
+function chartRows(measuresPerRow = typeof chartBarsPerLine === 'function' ? chartBarsPerLine() : 4) {
   if (!hasChart()) {
     return [];
   }
@@ -610,16 +624,50 @@ function appendIrealChord(parent, symbol) {
   }
 }
 
+function appendChordBeatTrack(parent, index, ireal = false) {
+  const model = chordBeatLayout(state.chart.bars[index], barEndTime(index), state.chart, chordEventsForBar(index));
+  parent.className = 'chord-beat-track';
+  parent.setAttribute('aria-label', `${model.beats} beats; chord positions and lengths`);
+  model.labels.forEach((label, i) => {
+    const tick = document.createElement('span');
+    tick.className = 'chord-beat-tick'; tick.textContent = label;
+    tick.style.left = `${100*i/model.beats}%`;
+    parent.append(tick);
+  });
+  model.events.forEach(({event, eventIndex, offset, duration}) => {
+    const region = document.createElement('span');
+    region.className = 'chord-beat-event';
+    region.dataset.start = event.start; region.dataset.end = event.end;
+    region.style.left = `${100*offset/model.beats}%`;
+    region.style.width = `${100*duration/model.beats}%`;
+    const firstBeat = model.labels[0]+offset;
+    const text = `${displayChordSymbol(event.chord)} · beat ${+firstBeat.toFixed(3)} · ${+duration.toFixed(3)} beats`;
+    region.title = text; region.setAttribute('aria-label', text);
+    const symbol = document.createElement('span');
+    symbol.className = `chord-beat-symbol${ireal ? ' ireal-chord' : ''}`;
+    if (ireal) appendIrealChord(symbol, displayChordSymbol(event.chord));
+    else symbol.textContent = displayChordSymbol(event.chord);
+    region.append(symbol);
+    region.addEventListener('click', event => {event.stopPropagation(); selectBar(index, true, eventIndex);});
+    parent.append(region);
+  });
+}
+
 function renderMeasureGridPreview(container) {
   const grid = document.createElement("div");
   grid.className = "measure-grid-chart";
-  chartRows(4).forEach((row) => {
+  let lastSection='';
+  chartRows().forEach((row) => {
+    if(row[0].section && row[0].section!==lastSection) {
+      const section=document.createElement('h3');section.className='chart-section-label';section.textContent=row[0].section;grid.append(section);lastSection=row[0].section;
+    }
     const rowEl = document.createElement("div");
     rowEl.className = "measure-grid-row";
     row.forEach(({ bar, index, section }) => {
       const cell = document.createElement("button");
       cell.type = "button";
       cell.className = "measure-cell";
+      cell.dataset.index = String(index);
       cell.classList.toggle("selected", index === state.selectedIndex);
       cell.classList.toggle("active", index === state.activeIndex);
       cell.title = `Bar ${bar.number || index + 1} - ${formatSeconds(bar.start)}s`;
@@ -629,7 +677,7 @@ function renderMeasureGridPreview(container) {
       number.className = "measure-number";
       number.textContent = bar.number || index + 1;
       const chord = document.createElement("strong");
-      chord.textContent = chordEventsForBar(index).map((item) => displayChordSymbol(item.chord)).join(" · ");
+      appendChordBeatTrack(chord, index);
       const meta = document.createElement("em");
       meta.textContent = [section, barRepeatText(bar)].filter(Boolean).join(" / ");
       const lyrics = document.createElement("span");
@@ -649,19 +697,24 @@ function renderIrealPreview(container) {
   const header = document.createElement("div");
   header.className = "ireal-header";
   const title = document.createElement("strong");
-  title.textContent = state.chart?.title || "Untitled";
+  title.textContent = typeof chartDisplayTitle==='function'?chartDisplayTitle(state.chart,state.audio || {}):state.chart?.title || "Untitled";
   const metadata = document.createElement("span");
   metadata.textContent = `${chartKeyText(state.chart) || "?"} · ${state.chart?.tempo || "?"} BPM`;
   header.append(title, metadata);
   chart.appendChild(header);
 
-  chartRows(4).forEach((row) => {
+  let lastSection='';
+  chartRows().forEach((row) => {
+    if(row[0].section && row[0].section!==lastSection) {
+      const section=document.createElement('h3');section.className='chart-section-label';section.textContent=row[0].section;chart.append(section);lastSection=row[0].section;
+    }
     const rowEl = document.createElement("div");
     rowEl.className = "ireal-row";
     row.forEach(({ bar, index }) => {
       const measure = document.createElement("button");
       measure.type = "button";
       measure.className = "ireal-measure";
+      measure.dataset.index = String(index);
       measure.classList.toggle("selected", index === state.selectedIndex);
       measure.classList.toggle("active", index === state.activeIndex);
       measure.title = `Bar ${bar.number || index + 1} - ${formatSeconds(bar.start)}s`;
@@ -672,13 +725,7 @@ function renderIrealPreview(container) {
       leftBar.classList.toggle("repeat", Boolean(bar.repeat_start));
       leftBar.textContent = bar.repeat_start ? "|:" : "|";
       const chord = document.createElement("strong");
-      const chordEvents = chordEventsForBar(index);
-      chordEvents.forEach((item) => {
-        const symbol = document.createElement("span");
-        symbol.className = "ireal-chord";
-        appendIrealChord(symbol, displayChordSymbol(item.chord));
-        chord.appendChild(symbol);
-      });
+      appendChordBeatTrack(chord, index, true);
       const rightBar = document.createElement("span");
       rightBar.className = "ireal-barline right";
       rightBar.classList.toggle("repeat", Number(bar.repeat_end) > 0);
@@ -699,28 +746,59 @@ function renderChordProPreview(container) {
   const text = document.createElement("pre");
   text.className = "chordpro-chart";
   const lines = [
-    `{title: ${state.chart?.title || "Untitled"}}`,
+    `{title: ${typeof chartDisplayTitle==='function'?chartDisplayTitle(state.chart,state.audio || {}):state.chart?.title || "Untitled"}}`,
     `{key: ${chartKeyText(state.chart) || state.chart?.key || "C"}}`,
     `{tempo: ${state.chart?.tempo || ""}}`,
     ""
   ];
-  chartRows(4).forEach((row) => {
-    const section = row.find((item) => item.section)?.section;
-    if (section) {
-      lines.push(`[${section}]`);
-    }
-    lines.push(row.map(({ bar, index }) => {
-      const symbols = chordEventsForBar(index).map((item) => item.chord).join(" / ");
-      return `| [${symbols || barChordText(bar)}]`;
-    }).join(" ") + " |");
-    const lyricLine = row.map(({ bar }) => barLyricText(bar)).filter(Boolean).join(" / ");
-    if (lyricLine) {
-      lines.push(lyricLine);
-    }
-    lines.push("");
+  text.textContent=lines.join('\n')+'\n';
+  let lastSection='';
+  chartRows().forEach(row=>{
+    const system=document.createElement('span');system.className='chordpro-system';
+    const section=row.find(item=>item.section)?.section;
+    if(section && section!==lastSection) {system.append(document.createTextNode(`[${section}]\n`));lastSection=section;}
+    row.forEach(({bar,index})=>{
+      const timing=chordBeatLayout(bar,barEndTime(index),state.chart,chordEventsForBar(index));
+      const measure=document.createElement('span');measure.className='chordpro-measure';measure.dataset.index=String(index);
+      measure.append(document.createTextNode('| ['));
+      timing.events.forEach(({event,eventIndex,offset,duration},i)=>{
+        if(i) measure.append(document.createTextNode(' ; '));
+        const symbol=document.createElement('span');symbol.className='chordpro-event';symbol.tabIndex=0;symbol.setAttribute('role','button');
+        symbol.dataset.start=event.start;symbol.dataset.end=event.end;
+        symbol.textContent=`${displayChordSymbol(event.chord)} @${+(timing.labels[0]+offset).toFixed(3)} (${+duration.toFixed(3)}b)`;
+        const select=ev=>{ev.stopPropagation();selectBar(index,true,eventIndex)};
+        symbol.addEventListener('click',select);
+        symbol.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();select(ev)}});
+        measure.append(symbol);
+      });
+      measure.append(document.createTextNode('] '));
+      measure.addEventListener('click',()=>selectBar(index,true));
+      system.append(measure);
+    });
+    system.append(document.createTextNode('|\n'));
+    const lyrics=row.map(({bar})=>barLyricText(bar)).filter(Boolean).join(' / ');
+    if(lyrics) system.append(document.createTextNode(lyrics+'\n'));
+    system.append(document.createTextNode('\n'));text.append(system);
   });
-  text.textContent = lines.join("\n").trim();
   container.appendChild(text);
+}
+
+function renderRendererComparison(kind) {
+  const root=elements.chartPreview;
+  if(typeof destroyAlphaTabChart==='function')destroyAlphaTabChart();
+  const text=(tag,value,className='')=>{const node=document.createElement(tag);node.textContent=value;node.className=className;return node;};
+  const compare=text('div','','renderer-compare');
+  const makePanel=(title,className)=>{
+    const panel=text('section','',`renderer-compare-panel ${className}`),heading=text('h2',title,'renderer-compare-heading'),body=text('div','',`renderer-compare-body renderer-compare-${className}-body`);
+    panel.append(heading,body);compare.append(panel);return body;
+  };
+  const current=makePanel('Current ChordPilot','current');
+  const alpha=makePanel('alphaTab 1.8.4','alpha');
+  root.replaceChildren(compare);
+  if(kind==='bass')renderBassChartPreview(current);else renderDrumChartPreview(current);
+  finishChartLayout(current,false);
+  renderAlphaTabChartPreview(alpha);
+  registerChartPlayback();
 }
 
 function renderChartPreview() {
@@ -728,18 +806,37 @@ function renderChartPreview() {
     return;
   }
   renderLyricsReferencePanel();
+  if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
 
   const renderer = state.chartRenderer || "ireal";
+  if(elements.chartNotationRendererControl) elements.chartNotationRendererControl.hidden=!['bass','drums'].includes(renderer);
+  if(elements.barsPerLineInput) elements.barsPerLineInput.disabled=renderer==='table';
   const showTable = renderer === "table";
   elements.barsTable.classList.toggle("hidden", !showTable);
   elements.chartPreview.classList.toggle("hidden", showTable);
+  if(state.notationRenderer==='compare' && ['bass','drums'].includes(renderer) && hasChart()) {
+    renderRendererComparison(renderer);
+    return;
+  }
+  if(state.notationRenderer==='alphatab' && ['bass','drums'].includes(renderer) && hasChart()) {
+    renderAlphaTabChartPreview();
+    return;
+  }
+  if(typeof destroyAlphaTabChart==='function') destroyAlphaTabChart();
   if (renderer === "bass" && hasChart()) {
     renderBassChartPreview(elements.chartPreview);
+    if(typeof finishChartLayout==='function') finishChartLayout();
+    return;
+  }
+  if (renderer === 'drums' && hasChart()) {
+    renderDrumChartPreview(elements.chartPreview);
+    if(typeof finishChartLayout==='function') finishChartLayout();
     return;
   }
   elements.chartPreview.innerHTML = "";
 
   if (showTable) {
+    if(typeof registerChartPlayback==='function') registerChartPlayback();
     return;
   }
   if (!hasChart()) {
@@ -757,6 +854,7 @@ function renderChartPreview() {
   } else {
     renderMeasureGridPreview(elements.chartPreview);
   }
+  if(typeof finishChartLayout==='function') finishChartLayout();
 }
 
 function setDetailChordEditing(editing) {
@@ -770,6 +868,7 @@ function setDetailChordEditing(editing) {
 }
 
 function updateDetailPane() {
+  if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
   const bar = getSelectedBar();
   if (elements.detailChordEditBtn) {
     elements.detailChordEditBtn.disabled = !bar;
@@ -793,6 +892,7 @@ function updateDetailPane() {
   if (!bar) {
     if (typeof renderDetailBass === "function") renderDetailBass(null, 0, 0);
     if (typeof renderDetailGuitar === "function") renderDetailGuitar(null, 0, 0);
+    if (typeof renderDetailDrums === 'function') renderDetailDrums(null,0,0);
     if (typeof renderDetailSpectrum === "function") renderDetailSpectrum(null);
     if (elements.detailChordConfidence) elements.detailChordConfidence.hidden = true;
     elements.detailKeyboard?.replaceChildren();
@@ -826,6 +926,7 @@ function updateDetailPane() {
   const spectrumFrame = detailSpectrumFrame(display, detailTime);
   if (typeof renderDetailBass === "function") renderDetailBass(bar, barEndTime(state.selectedIndex), detailTime);
   if (typeof renderDetailGuitar === "function") renderDetailGuitar(bar, barEndTime(state.selectedIndex), detailTime);
+  if (typeof renderDetailDrums === 'function') renderDetailDrums(bar,barEndTime(state.selectedIndex),detailTime);
   const stabilizedFrame = stabilizedChordFrame(display);
   if (typeof renderDetailChordNotation === "function") renderDetailChordNotation(stabilizedFrame || display, display.chord);
   if (typeof renderDetailSpectrum === "function") renderDetailSpectrum(spectrumFrame, stabilizedFrame);
@@ -1423,7 +1524,12 @@ function applySelectedChordCorrection(field, value) {
   const bar = getSelectedBar();
   if (!bar) return;
   const target = selectedChordTarget();
-  if (field === "chord") target.chord = value;
+  if(field==='chord' && typeof captureDetectedChords==='function') captureDetectedChords(bar,barEndTime(state.selectedIndex),Number(state.chart.key_offset) || 0);
+  if (field === "chord") {
+    target.chord = value;target.manual=true;target.evidence_stale=true;
+    delete target.confidence;delete target.chord_confidence;
+    delete bar.confidence;delete bar.chord_confidence;
+  }
   else if (field === "notes" && target !== bar) target.notes = value;
   else if (field === "notes") bar.notes = value;
   if (target !== bar && field === "chord") syncBarChordSummary(bar);

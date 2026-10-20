@@ -42,6 +42,28 @@ function fakeChild({ stdout = "", stdoutChunks = [], stderr = "", code = 0, onSp
   return child;
 }
 
+test('optional drums resolve prepared stems and never invoke main analysis', async t => {
+  const calls=[];
+  const {root,services}=makeServices(t,{pythonCandidates:[{command:'python'}],spawnImpl(command,args){
+    calls.push(args);
+    return fakeChild({stdout:JSON.stringify(args.includes('prepare-stems')
+      ? {ok:true,stems:[{name:'drums',path:path.join(root,'drums.wav')}]}
+      : {ok:true,events:[{time:.25,instrument:'kick',score:.8}]})});
+  }});
+  const audioPath=path.join(root,'song.wav');
+  fs.writeFileSync(audioPath,'audio');fs.writeFileSync(path.join(root,'drums.wav'),'drums');
+  await assert.rejects(services.analyzeDrums({audioPath}),/unavailable/);
+  const stems=await services.prepareStems({audioPath});
+  assert.equal(stems.stems[0].name,'drums');
+  const result=await services.analyzeDrums({audioPath,force:true});
+  assert.equal(result.events[0].instrument,'kick');
+  assert.equal(calls.length,2);
+  assert.ok(calls[0].includes('prepare-stems'));
+  assert.ok(calls[1].includes('analyze-drums'));
+  assert.ok(calls[1].includes('--force'));
+  assert.ok(!calls.flat().includes('analyze'));
+});
+
 function makeServices(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chordpilot-services-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

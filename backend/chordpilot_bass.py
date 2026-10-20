@@ -79,6 +79,48 @@ def bass_noise_floor(audio: Any, sr: float, np: Any) -> float:
     return max(1e-4, float(np.percentile(levels, 95)) * .005) if levels else 1e-4
 
 
+def split_bass_reattacks(notes: list[dict[str, Any]], signal: Any, rate: float, start: float,
+                        noise_floor: float, np: Any) -> list[dict[str, Any]]:
+    """Split an already verified pitch only after a short mute and renewed attack."""
+    from scipy.signal import find_peaks
+    energy = np.r_[0., np.cumsum(signal * signal, dtype=np.float64)]
+    hop = max(1, round(rate * .005))
+    result = []
+    for note in notes:
+        cuts = []
+        if note['end'] - note['start'] >= .22:
+            centers = np.arange(round((note['start']-start)*rate), round((note['end']-start)*rate), hop)
+            half = round(rate * max(.015, min(.04, 1 / note['frequency_hz'])) / 2)
+            left, right = np.maximum(0, centers-half), np.minimum(len(signal), centers+half)
+            level = np.sqrt(np.maximum(0, energy[right]-energy[left]) / np.maximum(1, right-left))
+            dips, _ = find_peaks(-level, distance=max(1, round(.10*rate/hop)),
+                                prominence=max(noise_floor, float(level.max())*.12))
+            for index in dips:
+                time = start + centers[index]/rate
+                if time-note['start'] < .10 or note['end']-time < .08:
+                    continue
+                before = level[max(0,index-12):index]
+                after = level[index+1:index+5]
+                if not len(before) or not len(after):
+                    continue
+                high_before, high_after = float(before.max()), float(after.max())
+                if level[index] > min(high_before, high_after)*.55 or high_after < max(noise_floor*4, high_before*.35):
+                    continue
+                # A renewed pluck reaches most of its level within 20 ms. A
+                # smooth tremolo valley can be deep but keeps rising gradually.
+                if high_after < float(level[index+1:index+13].max())*.8:
+                    continue
+                center = centers[index]+round(rate*.045)
+                radius = round(rate*.04)
+                pitch = periodic_bass_pitch(signal[max(0,center-radius):min(len(signal),center+radius)],rate,np)
+                if pitch and pitch[0] == note['midi'] and pitch[1] >= .9:
+                    cuts.append(round(time+.005,6))
+        bounds = [note['start'], *cuts, note['end']]
+        for left, right in zip(bounds,bounds[1:]):
+            result.append({**note, 'start':left, 'end':right, 'attack_start':left})
+    return result
+
+
 def bass_note_events(audio: Any, sr: int, np: Any, start: float = 0, end: float | None = None,
                      noise_floor: float | None = None) -> list[dict[str, Any]]:
     """Track 120 ms frames with an 80 ms short-note rescue, every 20 ms."""
@@ -231,7 +273,7 @@ def bass_note_events(audio: Any, sr: int, np: Any, start: float = 0, end: float 
             retained.append(note)
             retained_levels.append(note_level)
             retained_core_ends.append(note['end'])
-    return retained
+    return split_bass_reattacks(retained, signal, rate, start, noise_floor, np)
 
 
 def bass_reference_from_events(events: list[dict[str, Any]], start: float, end: float) -> dict[str, Any] | None:

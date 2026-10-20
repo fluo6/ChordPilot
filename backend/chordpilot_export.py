@@ -196,6 +196,10 @@ def render_musicxml(chart: dict[str, Any]) -> str:
 
     for index, bar in enumerate(chart.get("bars", []), start=1):
         measure = ET.SubElement(part, "measure", number=str(bar.get("number", index)))
+        pickup = bar.get('pickup_beats')
+        measure_beats = pickup if isinstance(pickup, int) and 0 < pickup < beats else beats
+        if measure_beats < beats:
+            measure.set('implicit', 'yes')
         if index == 1:
             attributes = ET.SubElement(measure, "attributes")
             ET.SubElement(attributes, "divisions").text = "96"
@@ -223,9 +227,11 @@ def render_musicxml(chart: dict[str, Any]) -> str:
 
         note = ET.SubElement(measure, "note")
         ET.SubElement(note, "rest")
-        quarter_notes = beats * 4 / max(1, beat_type)
+        quarter_notes = measure_beats * 4 / max(1, beat_type)
         ET.SubElement(note, "duration").text = str(round(quarter_notes * 96))
-        ET.SubElement(note, "type").text = duration_type(round(quarter_notes))
+        ET.SubElement(note, "type").text = 'half' if measure_beats < beats and quarter_notes == 3 else duration_type(round(quarter_notes))
+        if measure_beats < beats and quarter_notes == 3:
+            ET.SubElement(note, 'dot')
 
         if bar.get("repeat_start") or bar.get("repeat_end"):
             barline = ET.SubElement(measure, "barline", location="right")

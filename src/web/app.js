@@ -353,6 +353,31 @@ function createWebApp({
     logBroker.publish("study: complete");
   }));
 
+  app.post('/api/prepare-stems', asyncRoute(async (req,res) => {
+    const media = await resolveMedia(req.body?.mediaId);
+    const stems = await queue.enqueue('Prepare stems', async () => {
+      const result = await services.prepareStems({audioPath:media.path});
+      const chart = await storage.normalizeChart({stems:result},{copy:true});
+      storage.associateStudyStems(media.id,chart.stems.stems);
+      return chart.stems;
+    });
+    res.json({stems});
+  }));
+
+  app.post('/api/analyze-drums', asyncRoute(async (req,res) => {
+    const media = await resolveMedia(req.body?.mediaId);
+    storage.resolveStudySources(media.id,['drums']);
+    const result = await queue.enqueue('Drum transcription', async () => {
+      const sourcePaths = storage.resolveStudySources(media.id,['drums']);
+      try {
+        return await services.analyzeDrums({audioPath:media.path,sourcePaths,force:req.body?.force === true});
+      } catch (error) {
+        throw new HttpError(422,'DRUM_ANALYSIS_FAILED',sanitizePublicLogText(error.message || 'Drum transcription failed.'));
+      }
+    });
+    res.json({result:redactLocationMetadata(result)});
+  }));
+
   app.post("/api/analyze", asyncRoute(async (req, res) => {
     const media = await resolveMedia(req.body?.mediaId);
     const queuedAt = Date.now();

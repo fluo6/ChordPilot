@@ -45,6 +45,14 @@ test("chart-aligned ticks respect bar boundaries and invalid bars", () => {
   assert.deepEqual(ticks.map((tick) => tick.accented), [false, true, false]);
 });
 
+test("metronome follows recorded nonuniform beats and stops at the song end", () => {
+  const chart={tempo:120,time_signature:'4/4',duration:4.2,
+    beat_times:[.3,.81,1.33,1.87,2.42,3,3.59,4.19,4.8],bars:[{start:.3},{start:2.42}]};
+  const ticks=plain(load(chart).collectMetronomeTicks(0,5));
+  assert.deepEqual(ticks.map(t=>t.time),[.3,.81,1.33,1.87,2.42,3,3.59,4.19]);
+  assert.deepEqual(ticks.filter(t=>t.accented).map(t=>t.time),[.3,2.42]);
+});
+
 test("click scheduling validates context and silent volume", () => {
   const m = load(null);
   m.playMetronomeClick(null, 1, true);
@@ -55,6 +63,13 @@ test("click scheduling validates context and silent volume", () => {
   m.context.state.metronomeVolume = 0;
   m.playMetronomeClick(context, 1, true);
   assert.equal(created, 0);
+});
+
+test('pickup clicks retain timing without a false downbeat accent',()=>{
+  const ticks=plain(load({time_signature:'4/4',tempo:120,duration:3,
+    beat_times:[0,.5,1,1.5,2,2.5],bars:[{start:0,pickup_beats:2},{start:1}]}).collectMetronomeTicks(0,3));
+  assert.equal(ticks.length,6);
+  assert.deepEqual(ticks.filter(t=>t.accented).map(t=>t.time),[1]);
 });
 
 test("sampled piano uses nearby recordings at the correct pitch, respects mute, and cleans up", async () => {

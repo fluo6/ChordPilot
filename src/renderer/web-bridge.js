@@ -140,6 +140,16 @@
   browserWindow.chordPilot = {
     isWebRuntime: true,
 
+    async analyzeDrums(payload = {}) {
+      const result = await postJson('/api/analyze-drums',{mediaId:mediaId(payload.audioPath),force:payload.force === true});
+      return result.result;
+    },
+
+    async prepareStems(audioPath) {
+      const result = await postJson('/api/prepare-stems',{mediaId:mediaId(audioPath)});
+      return browserChart({stems:result.stems}).stems;
+    },
+
     async analyzeRange(payload = {}) {
       const result = await postJson("/api/analyze-range", {
         mediaId: mediaId(payload.audioPath), sources: payload.sources,

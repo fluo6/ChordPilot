@@ -178,6 +178,7 @@ function updateAnalysisProgressMessage(message) {
   else if (clean.startsWith("pitch:") || clean.startsWith("key:") || clean.includes("chroma")) label = "Detecting pitch & key...";
   else if (clean.startsWith("chords:") || clean.includes("candidates")) label = "Ranking chord candidates...";
   else if (clean.startsWith("lyrics:")) label = "Transcribing lyrics...";
+  else if (clean.startsWith("drums:")) label = `Drums: ${clean.slice(6).trim()}`;
   else if (clean.startsWith("analysis: still running")) {
     const match = clean.match(/still running \(([^)]+)\)/);
     label = match ? `Analyzing (${match[1]})...` : "Still analyzing...";
@@ -322,6 +323,7 @@ function setEditorPanel(name) {
     applyStemMix();
   }
   requestAnimationFrame(() => {
+    if (state.editorPanel === 'table' && typeof refreshChartFollow === 'function') refreshChartFollow();
     if (state.editorPanel === "arrange" || state.editorPanel === "analysis") {
       applyTimelineZoom({ render: true });
     }
@@ -667,23 +669,27 @@ function syncMetaToState() {
 
 const ANALYSIS_PRESETS = {
   general: {
-    description: "General starting point. Keeps brief changes; no sustain-tail subtraction.",
+    description: "Mixed instruments or an unfamiliar recording: keeps brief changes with no sustain-tail subtraction. Choose a more specific texture when useful.",
     options: { chord_timing: "auto", chord_grid: "beat", chord_stability: "detailed", tail_reduction: 0, tail_half_life: .5, overtone_weighting: .5 }
   },
   clean_guitar: {
-    description: "Clean guitar and arpeggios: consolidates plucked voicings with gentle tail reduction. Best with the Other stem.",
+    description: "Clean plucked guitar with ringing arpeggios: consolidates notes across a voicing with gentle tail reduction. Useful in acoustic pop, folk and R&B when the guitar has this texture.",
     options: { chord_timing: "auto", chord_grid: "beat", chord_stability: "sustained", tail_reduction: .2, tail_half_life: .5, overtone_weighting: 0 }
   },
   piano: {
-    description: "Sustained piano and keys: a finer grid with gentle tail reduction. Adjust if pedal notes are part of the harmony.",
+    description: "Piano or electric keys with held chords, pedal or arpeggios, such as ballad accompaniment. Gentle tail reduction; reduce it when the ringing notes belong to the harmony.",
     options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "sustained", tail_reduction: .2, tail_half_life: .5, overtone_weighting: 0 }
   },
+  rhythmic_keys: {
+    description: "Piano or electric keys with rhythmic chord attacks and melodic fills, common in neo-soul, R&B and jazz. One-beat evidence with balanced consolidation; very short passing chords can be missed.",
+    options: { chord_timing: "auto", chord_grid: "beat", chord_stability: "balanced", tail_reduction: .2, tail_half_life: .5, overtone_weighting: .5 }
+  },
   reverb_fx: {
-    description: "Reverb and FX: longer estimated tails, moderate consolidation and overtone weighting. An experimental starting point.",
+    description: "Layered instruments, strings or pads with long reverb or delay, such as a dense pop/R&B ballad. Longer estimated tails and moderate consolidation; filtering remains experimental.",
     options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "balanced", tail_reduction: .2, tail_half_life: .8, overtone_weighting: .5 }
   },
   fast_changes: {
-    description: "Fast chord changes: a finer grid without consolidation or sustain-tail subtraction.",
+    description: "Short, articulated chords with little ringing and frequent changes, such as tight funk comping. A finer grid retains brief events and may also label passing melody notes.",
     options: { chord_timing: "auto", chord_grid: "half_beat", chord_stability: "detailed", tail_reduction: 0, tail_half_life: .5, overtone_weighting: .5 }
   }
 };
@@ -715,6 +721,7 @@ function collectAnalysisOptions() {
     min_bpm: Number(elements.minBpmInput.value) || 60,
     max_bpm: Number(elements.maxBpmInput.value) || 190,
     beat_offset: Number(elements.beatOffsetInput.value) || 0,
+    bar_phase: Number(elements.barPhaseInput?.value) || 0,
     onset_frame: Number(elements.onsetFrameInput.value) || 2048,
     onset_hop: Number(elements.onsetHopInput.value) || 512,
     chroma_low_hz: Number(elements.chromaLowInput.value) || 65,
@@ -743,6 +750,7 @@ function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
   elements.minBpmInput.value = options.min_bpm ?? 60;
   elements.maxBpmInput.value = options.max_bpm ?? 190;
   elements.beatOffsetInput.value = options.beat_offset ?? 0;
+  if (elements.barPhaseInput) elements.barPhaseInput.value = String(options.bar_phase ?? 0);
   elements.onsetFrameInput.value = String(options.onset_frame ?? 2048);
   elements.onsetHopInput.value = String(options.onset_hop ?? 512);
   elements.chromaLowInput.value = options.chroma_low_hz ?? 65;
@@ -826,10 +834,14 @@ function updateButtons() {
     elements.mergeChordEventsBtn.disabled = !chartReady || selectedEventIndex >= selectedEvents.length - 1;
   }
   elements.deleteBarBtn.disabled = !chartReady || state.selectedIndex < 0;
-  const canReanalyze = Boolean(state.audio?.path);
+  const canReanalyze = Boolean(state.audio?.path) && !state.isAnalyzing && !state.drumBusy;
   elements.reanalyzeChordsBtn.disabled = !canReanalyze;
   elements.reanalyzeLyricsBtn.disabled = !canReanalyze || !chartReady;
   elements.reanalyzeAllBtn.disabled = !canReanalyze;
+  if (elements.analyzeDrumsBtn) {
+    elements.analyzeDrumsBtn.disabled = !canReanalyze || !chartReady || Boolean(state.study?.busy);
+    elements.analyzeDrumsBtn.textContent = state.drumBusy ? 'Analysing Drums…' : typeof hasDrumStem === 'function' && hasDrumStem() ? 'Analyse Drums' : 'Prepare Drum Stem';
+  }
   updateKeyControlState();
   updateAudioPreviewState();
   elements.exportButtons.forEach((button) => {
@@ -862,7 +874,7 @@ function updateRowState(options = {}) {
     row.classList.toggle("selected", index === state.selectedIndex);
     row.classList.toggle("active", index === state.activeIndex);
   });
-  renderChartPreview();
+  if (!options.playback) renderChartPreview();
 
   elements.activeBarText.textContent = getBarLabel(state.activeIndex);
   updateDetailPane();
@@ -870,7 +882,7 @@ function updateRowState(options = {}) {
   updateTimelineTransportInfo();
   updateButtons();
 
-  if (options.scroll && state.activeIndex >= 0) {
+  if (options.scroll && state.chartRenderer === 'table' && state.activeIndex >= 0) {
     const row = state.barRows[state.activeIndex];
     if (row) {
       row.scrollIntoView({ block: "nearest", behavior: "smooth" });

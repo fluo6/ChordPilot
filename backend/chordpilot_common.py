@@ -111,6 +111,7 @@ DEFAULT_ANALYSIS_OPTIONS = {
     "min_bpm": 60,
     "max_bpm": 190,
     "beat_offset": 0.0,
+    "bar_phase": 0,
     "onset_frame": 2048,
     "onset_hop": 512,
     "chroma_low_hz": 65.0,
@@ -191,6 +192,7 @@ def normalize_analysis_options(raw: dict[str, Any] | None = None) -> dict[str, A
     if options["max_bpm"] <= options["min_bpm"]:
         options["max_bpm"] = min(300, options["min_bpm"] + 40)
     options["beat_offset"] = round(clamp_number(raw.get("beat_offset"), options["beat_offset"], -2.0, 2.0), 3)
+    options['bar_phase'] = int(clamp_number(raw.get('bar_phase'), 0, 0, 3))
     options["onset_frame"] = int(clamp_number(raw.get("onset_frame"), options["onset_frame"], 512, 8192))
     options["onset_hop"] = int(clamp_number(raw.get("onset_hop"), options["onset_hop"], 128, 4096))
     options["chroma_low_hz"] = round(clamp_number(raw.get("chroma_low_hz"), options["chroma_low_hz"], 20, 500), 2)

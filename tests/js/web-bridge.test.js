@@ -160,6 +160,7 @@ test("web bridge exposes the complete preload method surface", () => {
   const { bridge } = bridgeEnvironment();
   assert.deepEqual(Object.keys(bridge).sort(), [
     "analyze",
+    "analyzeDrums",
     "analyzeRange",
     "chooseAudio",
     "clearCache",
@@ -172,6 +173,7 @@ test("web bridge exposes the complete preload method surface", () => {
     "onBackendLog",
     "openSession",
     "openSessionPath",
+    "prepareStems",
     "processAudio",
     "saveSession",
     "showMessage",

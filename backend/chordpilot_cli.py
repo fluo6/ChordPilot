@@ -35,6 +35,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     export_parser.add_argument("format")
     export_parser.add_argument("output_path")
 
+    drums_parser = subparsers.add_parser("analyze-drums")
+    drums_parser.add_argument("stem_path")
+    drums_parser.add_argument("--force", action="store_true")
+    stems_parser = subparsers.add_parser("prepare-stems")
+    stems_parser.add_argument("audio_path")
+
     args = parser.parse_args(argv)
 
     try:
@@ -46,6 +52,12 @@ def main(argv: Iterable[str] | None = None) -> int:
             respond(analyze_range(args.audio_path, json.loads(args.sources), args.start, args.end, json.loads(args.options)))
         elif args.command == "export":
             respond(export_chart(args.chart_path, args.format, args.output_path))
+        elif args.command == "analyze-drums":
+            from chordpilot_drums import analyze_drums
+            respond(analyze_drums(args.stem_path, args.force))
+        elif args.command == "prepare-stems":
+            from chordpilot_stems import run_demucs
+            respond(run_demucs(Path(args.audio_path)))
         else:
             parser.print_help(sys.stderr)
             return 2

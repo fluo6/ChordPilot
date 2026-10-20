@@ -122,6 +122,27 @@ class BassFundamentalsTests(unittest.TestCase):
         audio=np.concatenate([self.tone(31,.4),self.tone(38,.1,(0,1,.7,.3)),self.tone(43,.4)])
         self.assertEqual([note['midi'] for note in bass_note_events(audio,self.sr,np)],[31,38,43])
 
+    def test_repeated_same_pitch_plucks_with_a_short_mute_have_separate_attacks(self):
+        from chordpilot_bass import bass_note_events
+        t=np.arange(round(self.sr*.7))/self.sr
+        frequency=440*2**((37-69)/12)
+        carrier=np.sin(2*np.pi*frequency*t)+.5*np.sin(4*np.pi*frequency*t)
+        envelope=np.exp(-(t%.3)*2)
+        envelope[(t>=.28)&(t<.3)]*=.1
+        envelope[t>=.6]=np.exp(-(t[t>=.6]-.3)*2)
+        notes=bass_note_events(.15*carrier*envelope,self.sr,np)
+        self.assertEqual([note['midi']for note in notes],[37,37])
+        self.assertAlmostEqual(notes[1]['start'],.3,delta=.025)
+        self.assertEqual(notes[1]['attack_start'],notes[1]['start'])
+
+    def test_sustained_note_with_slow_level_modulation_is_not_rearticulated(self):
+        from chordpilot_bass import bass_note_events
+        t=np.arange(round(self.sr*2))/self.sr
+        for speed, depth in ((5,.25),(6,.4)):
+            with self.subTest(speed=speed, depth=depth):
+                audio=self.tone(37,2)*((1-depth)+depth*np.cos(2*np.pi*speed*t))*np.exp(-t*.2)
+                self.assertEqual(len(bass_note_events(audio,self.sr,np)),1)
+
     def test_quiet_reappearing_release_is_not_engraved_as_a_new_note(self):
         from chordpilot_bass import bass_note_events
         audio = np.concatenate([self.tone(31, .5), np.zeros(round(.1*self.sr)),

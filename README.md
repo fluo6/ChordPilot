@@ -10,6 +10,10 @@ See [TODO.md](TODO.md) for open work, deferred features, known limitations and t
 - Run a Python analysis backend to estimate key, BPM, time signature, bars, chords, and rough sections.
 - Detect and edit supported chord changes inside a measure, with Auto changes, Fixed grid, and Legacy one-chord-per-bar timing modes.
 - Choose fast full-mix analysis or high-quality Demucs stem separation, using accompaniment for chord tones and Bass for root/inversion evidence.
+- View estimated bass rhythm in score/TAB, preserving separately measured same-pitch reattacks after a short mute. Fast notes, effects and suggested fingerings still need listening checks; see the [paired Sir Duke benchmark](docs/superpowers/validation/2026-10-19-sir-duke-bass-benchmark.md).
+- Optionally run pretrained drum transcription and view a Drum Sheet in the Analysis sidebar, continuous chart, and table summary. See [drum analysis setup](docs/drum-analysis.md).
+- Bass Notes / TAB and Drum Sheet use alphaTab by default, with Current and side-by-side comparison available in the Notation selector. Both support 2/4 bars per line, playback highlighting and PDF export. Unplayable TAB pitches remain in complete standard notation, with diagnostics and the existing renderer available as a fallback.
+- Review chords, bass notes and drum hits by bar: listen, inspect original evidence, edit events and mark verified. Reviews and bass notation/TAB display preferences save with the session. See [review validation and limitations](docs/superpowers/validation/2026-10-19-overjoyed-transcription-review.md).
 - Edit key, tempo, time signature, section names, bar numbers, chord symbols, repeats, and notes.
 - Split, merge, add, duplicate, and delete bars while listening to the audio.
 - Export cleaned charts to TXT, CSV, JSON, and MusicXML.
@@ -278,8 +282,29 @@ The analysis pipeline is intentionally layered:
 - Chordino/NNLS Chroma can be added later as an external command stage.
 - A fallback generator returns a useful editable chart when analysis dependencies are absent or audio decoding fails.
 
+## Chart layout and playback
+
+The chart header has a shared **Bars per line: 2 | 4** selector (default **4**)
+for chord charts, measure grids, bass score/TAB, drum sheets and ChordPro text.
+Section boundaries start a new system. Layout preferences are saved with the
+session. The editable table retains its normal row layout.
+
+Use **Auto-follow** beside Source Playback to keep the active system visible.
+Manual scrolling pauses following for eight seconds; **Resume following** returns
+sooner. The current measure stays highlighted when following is off. Measures
+remain clickable for seeking.
+
+The chart header's **PDF** button exports the current renderer and density.
+In the web app it opens the browser print dialog; choose Save as PDF. Paper size
+adapts between A4 portrait/landscape and A3 for dense notation so notes remain
+readable. See [notation layout](docs/notation-layout.md) for details and validation.
+
 ## How analysis works
 
 **Fast** analyzes the decoded mix. **High Quality Stems** separates vocals, drums, bass and accompaniment with Demucs, then estimates chord tones primarily from accompaniment and uses Bass as separate root/inversion evidence. The selected chord source, instrument/FX preset, timing grid, stability and spectral controls are available under Analysis Options. The result is an editable estimate; percentages are heuristic ranking scores, not calibrated probabilities.
+
+Choose presets by instrument, arrangement, playing style and effects: mixed instruments, clean guitar arpeggios, sustained keys, rhythmic piano/keys, layered reverb or short articulated changes. Genre examples in the descriptions help identify the sound. Every preset shares the same chord vocabulary, and saved sessions retain the actual analysis values. [Current preset calibration and audio-only session audit](docs/superpowers/validation/2026-10-19-promises-molina-benchmark.md).
+
+Beat timing now follows detected attacks throughout the recording; rounded display BPM does not rebuild the grid. **Reanalyse Chords** updates an older session with the new timing and can reuse existing stems. **Beat Offset (seconds)** shifts timing, while **First Downbeat** selects which tracked beat begins the first full bar and retains earlier beats in a pickup bar. Automatic analysis still assumes 4/4 and does not confidently identify musical downbeats. See the [timing validation](docs/superpowers/validation/2026-10-19-tempo-bar-validation.md) for measured results and remaining limitations.
 
 Reanalyse Chords uses the available decoded audio and stems without rerunning Demucs; Reanalyse All + Stems repeats separation. Local Study analyzes an exact selected interval and saves its input settings and evidence alongside later reruns. Its full-range result may differ from a grouped timeline event at a chord change. See [TODO.md](TODO.md) for current algorithm limitations and [reference run instructions](docs/superpowers/validation/reference-runs.md) for reproducible checks.

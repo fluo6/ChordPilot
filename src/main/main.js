@@ -195,6 +195,9 @@ ipcMain.handle("study:analyzeRange", async (_event, payload) => {
   return services.analyzeRange({ audioPath, sourcePaths, start, end, options });
 });
 
+ipcMain.handle('drums:analyze', async (_event, payload) => services.analyzeDrums({audioPath:payload?.audioPath,force:payload?.force === true}));
+ipcMain.handle('audio:prepareStems', async (_event, audioPath) => services.prepareStems({audioPath}));
+
 ipcMain.handle("chart:export", async (_event, payload) => {
   const { chart, format } = payload;
   const extensions = { txt: "txt", csv: "csv", json: "json", musicxml: "musicxml" };
@@ -205,6 +208,11 @@ ipcMain.handle("chart:export", async (_event, payload) => {
     filters: [{ name: format.toUpperCase(), extensions: [extension] }]
   });
   if (result.canceled || !result.filePath) return null;
+  if (format === 'pdf') {
+    const pdf = await mainWindow.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true });
+    await fs.promises.writeFile(result.filePath, pdf);
+    return { ok: true, path: result.filePath, format };
+  }
   return services.exportChart({ chart, format, outputPath: result.filePath });
 });
 

@@ -1,13 +1,60 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {loadScript, plain} = require('./helpers/load-script');
+const BassTuning=require('../../src/renderer/bass-tuning.js');
 
 function rhythm() {
   const Vex = require('../../src/renderer/vendor/vexflow-bravura-4.2.5.js');
   const {spellNotationPitch} = loadScript('src/renderer/chord-notation.js', ['spellNotationPitch']);
-  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'bassNotationTimeX', 'layoutBassSystem'], {Vex, spellNotationPitch}), Vex};
+  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'bassNotationTimeX', 'layoutBassSystem', 'layoutBassRows', 'notationMeasureWidths'], {Vex, spellNotationPitch,BassTuning}), Vex};
 }
 const note = (start, end, midi = 31) => ({start, end, midi, position:{string:4,fret:midi-28}});
+
+test('small beat-tracking offsets do not engrave a held note as a chain of ties',()=>{
+  const {bassRhythm}=rhythm();
+  const notes=[{...note(.07,1.75),confidence:.99}];
+  const saved=JSON.stringify(notes);
+  const model=bassRhythm(notes,{start:0},2,{time_signature:'4/4'});
+  const pitched=model.events.filter(event=>event.sourceIndex!==null);
+  assert.equal(pitched[0].offset,0);
+  assert.ok(pitched.length<=2);
+  assert.equal(model.events.reduce((sum,event)=>sum+event.units,0),model.totalUnits);
+  assert.equal(JSON.stringify(notes),saved);
+});
+
+test('tiny articulation gaps do not create micro-rests while fast measured attacks remain distinct',()=>{
+  const {bassRhythm}=rhythm();
+  const notes=[note(0,.843),note(.883,1.5,33),note(1.77,1.81,38)].map(n=>({...n,confidence:.99}));
+  const model=bassRhythm(notes,{start:0},2,{time_signature:'4/4'});
+  const first=model.events.filter(event=>event.sourceIndex===0).at(-1);
+  const next=model.events.find(event=>event.sourceIndex===1);
+  assert.equal(first.offset+first.units,next.offset);
+  assert.ok(model.events.some(event=>event.sourceIndex===2));
+  assert.ok(model.events.some(event=>event.sourceIndex===null && event.offset>next.offset));
+});
+
+test('later bass systems repeat the clef and key but omit an unchanged time signature',()=>{
+  const {layoutBassSystem,Vex}=rhythm();
+  const source={bar:{start:2},index:1,barEnd:4,notes:[note(2,4)]};
+  const result=layoutBassSystem([source],4,{time_signature:'4/4'},'Bb',500,true);
+  for(const stave of [result.measures[0].stave,result.measures[0].tab]) {
+    assert.equal(stave.getModifiers().filter(m=>m.getCategory()===Vex.Flow.TimeSignature.CATEGORY).length,0);
+  }
+  assert.ok(result.measures[0].stave.getModifiers().some(m=>m.getCategory()===Vex.Flow.Clef.CATEGORY));
+});
+
+test('a pickup has a short voice but keeps the full meter on score and TAB',()=>{
+  const {layoutBassSystem,Vex}=rhythm();
+  const result=layoutBassSystem([
+    {bar:{start:0,pickup_beats:2},barEnd:1,notes:[note(0,1)]},
+    {bar:{start:1},barEnd:3,notes:[note(1,3)]}
+  ],4,{time_signature:'4/4',beat_times:[0,.5,1,1.5,2,2.5]},'C',800);
+  assert.equal(result.measures[0].model.beats,2);
+  assert.equal(result.measures[1].model.beats,4);
+  for(const stave of [result.measures[0].stave,result.measures[0].tab]) {
+    assert.equal(stave.getModifiers().find(m=>m.getCategory()===Vex.Flow.TimeSignature.CATEGORY).getTimeSpec(),'4/4');
+  }
+});
 
 test('continuous bass systems join barlines with shared staff and TAB baselines',()=>{
   const {layoutBassSystem,Vex}=rhythm();
@@ -42,6 +89,83 @@ test('continuous bass systems draw a single tie across a shared barline',()=>{
   assert.deepEqual(plain(result.ties).map(tie=>[tie.first,tie.last]),[
     [[0,0],[1,0]],[[1,0],null]
   ]);
+});
+
+test('compact bass systems justify to the shared width while score and TAB stay aligned',()=>{
+  const {layoutBassSystem}=rhythm();
+  const sources=Array.from({length:4},(_,i)=>({bar:{start:i*2},barEnd:i*2+2,
+    notes:Array.from({length:i===3?16:4},(_,j)=>note(i*2+j*(i===3?.125:.5),i*2+(j+1)*(i===3?.125:.5)))}));
+  const original=JSON.stringify(sources);
+  const system=layoutBassSystem(sources,4,{time_signature:'4/4'},'C',2400,true);
+  assert.ok(Math.abs(system.width-2400)<.01);
+  const widths=system.measures.map(measure=>measure.stave.getWidth());
+  assert.ok(Math.max(...widths)-Math.min(...widths)<1,'Use equal measures whenever their engraving minimums fit');
+  assert.ok(Math.min(...widths)>=2000/4*.65,'Sparse neighbours must remain readable');
+  for(const measure of system.measures) measure.voices.scoreNotes.forEach((score,i)=>{
+    assert.ok(Math.abs(score.getCenterGlyphX()-measure.voices.tabNotes[i].getCenterGlyphX())<1e-6);
+    assert.ok(score.getCenterGlyphX()>measure.stave.getX());
+    assert.ok(score.getCenterGlyphX()<measure.stave.getX()+measure.stave.getWidth());
+  });
+  assert.equal(JSON.stringify(sources),original);
+});
+
+test('bass score and TAB stay compact with clearance for stems and legible string spacing',()=>{
+  const {layoutBassSystem}=rhythm();
+  const source={bar:{start:0},barEnd:2,notes:[note(0,.5),note(.5,1),note(1,1.5),note(1.5,2)]};
+  const system=layoutBassSystem([source],4,{time_signature:'4/4'},'C',700,true);
+  const {stave,tab}=system.measures[0];
+  const gap=tab.getYForLine(0)-system.scoreBottom;
+  assert.ok(gap>=50 && gap<=65,`Stem clearance should determine the staff-to-TAB gap: ${gap}`);
+  assert.equal(tab.getSpacingBetweenLines(),14);
+  for(const n of system.measures[0].voices.tabNotes.filter(n=>n.hasStem()))assert.ok(n.getStem().getHeight()>=35);
+});
+
+test('TAB rhythm uses a clear upper lane for rests, flags and grouped stems',()=>{
+  const {layoutBassSystem}=rhythm();
+  for(const strings of [4,5]) {
+    const system=layoutBassSystem([{bar:{start:0},barEnd:2,notes:[note(0,.125),note(.125,.25),note(.5,.75),note(1,1.5)]}],strings,{time_signature:'4/4'},'C',1000,true);
+    const m=system.measures[0],top=m.tab.getYForLine(0);
+    m.voices.tabNotes.forEach((n,i)=>{
+      if(m.model.events[i].sourceIndex===null)assert.ok(n.getYs()[0]<top-20,'Rests belong above the fret numbers');
+      else if(n.hasStem()) {
+        assert.ok(n.getStem().getHeight()>=35);
+        assert.ok(n.getStemExtents().topY>system.scoreBottom+8,'TAB flags and beams must clear the score');
+      }
+    });
+    assert.ok(m.tabBeams.every(beam=>beam.render_options.flat_beams));
+  }
+});
+
+test('larger TAB digits reserve their real font width, including two-digit frets',()=>{
+  const {bassRhythm,bassNotationVoices}=rhythm();
+  const model=bassRhythm([{...note(0,1),position:{string:4,fret:3}},
+    {...note(1,2),position:{string:4,fret:12}}],{start:0},2,{time_signature:'4/4'});
+  const {tabNotes}=bassNotationVoices(model,'C',4);
+  assert.ok(tabNotes[0].getGlyphWidth()>11 && tabNotes[0].getGlyphWidth()<11.3);
+  assert.ok(tabNotes[1].getGlyphWidth()>22 && tabNotes[1].getGlyphWidth()<22.6);
+});
+
+test('balanced measure allocation honours dense minimums without starving sparse neighbours',()=>{
+  const {notationMeasureWidths}=rhythm();
+  assert.deepEqual(plain(notationMeasureWidths([150,250,300,200],1600)),[400,400,400,400]);
+  const widths=notationMeasureWidths([150,250,500,200],1600);
+  assert.ok(Math.abs(widths[2]-500)<.001);
+  assert.ok(Math.abs(widths[0]-1100/3)<.001);
+  assert.ok(Math.abs(widths.reduce((a,b)=>a+b,0)-1600)<.001);
+});
+
+test('dense bass rows reflow at native scale and retain every source and cross-system tie',()=>{
+  const {layoutBassRows}=rhythm();
+  const sources=Array.from({length:4},(_,i)=>({bar:{start:i*2},index:i,barEnd:i*2+2,
+    notes:Array.from({length:8},(_,j)=>({...note(i*2+j*.25,i*2+(j+1)*.25),
+      continuesFromPrevious:j===0,continuesToNext:j===7}))}));
+  const saved=JSON.stringify(sources);
+  const rows=layoutBassRows([sources],4,{time_signature:'4/4'},'C',950,4);
+  assert.ok(rows.length>1);
+  assert.deepEqual(plain(rows.flatMap(row=>row.sources.map(s=>s.index))),[0,1,2,3]);
+  assert.ok(rows.every(row=>row.engraving.width<=950));
+  assert.ok(rows[1].engraving.ties.some(tie=>tie.first===null));
+  assert.equal(JSON.stringify(sources),saved);
 });
 
 test('chord labels align with score and TAB on uneven measured beats',()=>{
@@ -147,7 +271,7 @@ test('dense confirmed notes increase grid capacity instead of replacing the open
 });
 
 test('cross-bar sustains keep incoming and outgoing ties after clipping the saved track',()=>{
-  const {bassBarNotes,bassRhythm}=loadScript('src/renderer/bass-view.js',['bassBarNotes','bassRhythm']);
+  const {bassBarNotes,bassRhythm}=loadScript('src/renderer/bass-view.js',['bassBarNotes','bassRhythm'],{BassTuning});
   const track=[note(1.5,2),note(2,2.5)];
   const first=bassBarNotes({start:0,bass_events:[track[0]]},2,4,track);
   const second=bassBarNotes({start:2,bass_events:[track[1]]},4,4,track);

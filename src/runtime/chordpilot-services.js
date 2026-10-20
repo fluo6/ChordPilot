@@ -682,7 +682,9 @@ function createChordPilotServices({
   }
 
   function runBackend(args, input) {
-    const candidates = Array.isArray(pythonCandidates) ? pythonCandidates : [];
+    const candidates = args[0] === 'analyze-drums' && configuredEnv.CHORDPILOT_DRUM_PYTHON
+      ? [{command:configuredEnv.CHORDPILOT_DRUM_PYTHON, prefix:[backendScript], env:{PYTHONHOME:'',PYTHONPATH:''}}]
+      : Array.isArray(pythonCandidates) ? pythonCandidates : [];
     const errors = [];
 
     function attempt(index) {
@@ -744,6 +746,12 @@ function createChordPilotServices({
           if (settled) return;
           settled = true;
           if (code !== 0) {
+            // Structured backend errors are actionable (e.g. optional model missing).
+            // Retrying another interpreter would hide the error and repeat expensive work.
+            try {
+              const failure = JSON.parse(stdout);
+              if (['analyze-drums','prepare-stems'].includes(args[0]) && failure?.ok === false && failure.error) { reject(new Error(failure.error)); return; }
+            } catch (_) { /* Interpreter startup failures still try the next candidate. */ }
             const message = `${candidate.command}: ${stderr || `exited with code ${code}`}`;
             errors.push(message);
             log(`backend: ${candidate.command} failed, trying next option`);
@@ -808,6 +816,22 @@ function createChordPilotServices({
     return runBackend(["analyze-range", audioPath, "--sources", JSON.stringify(sourcePaths), "--start", String(start), "--end", String(end), "--options", JSON.stringify(options)]);
   }
 
+  async function prepareStems({audioPath} = {}) {
+    if (typeof audioPath !== 'string' || !fs.existsSync(audioPath)) throw new Error('Original audio is unavailable.');
+    const stems = enrichChartPayload({stems:await runBackend(['prepare-stems',audioPath])}).stems;
+    if (!stems?.ok) throw new Error(stems?.error || 'Stem preparation failed.');
+    rememberStudySources(audioPath,{stems});
+    return stems;
+  }
+
+  async function analyzeDrums({audioPath,sourcePaths,force=false} = {}) {
+    const sources = sourcePaths || resolveStudySourcePaths(audioPath,['drums']);
+    if (!sources.drums || !fs.existsSync(sources.drums)) throw new Error('Drum stem is unavailable. Prepare stems first.');
+    const result = await runBackend(['analyze-drums',sources.drums,...(force ? ['--force'] : [])]);
+    if (!result?.ok) throw new Error(result?.error || 'Drum transcription failed.');
+    return result;
+  }
+
   async function exportChart({ chart, format, outputPath } = {}) {
     const inputPath = path.join(
       tempDir,
@@ -866,6 +890,8 @@ function createChordPilotServices({
     exportAudioTrack,
     analyze,
     analyzeRange,
+    analyzeDrums,
+    prepareStems,
     resolveStudySourcePaths,
     exportChart,
     readSessionFile,

@@ -1,4 +1,4 @@
-const DETAIL_SECTION_KEYS = ['chord', 'keyboard', 'bass', 'guitar', 'spectrum', 'bar', 'lyrics', 'notes'];
+const DETAIL_SECTION_KEYS = ['chord', 'keyboard', 'bass', 'guitar', 'drums', 'spectrum', 'bar', 'lyrics', 'notes'];
 
 function normalizeDetailSectionLayout(layout = {}) {
   const valid = values => Array.isArray(values) ? [...new Set(values.filter(key => DETAIL_SECTION_KEYS.includes(key)))] : [];
@@ -35,6 +35,7 @@ function setupDetailSections() {
     ['keyboard', 'Piano', [elements.detailKeyboard]],
     ['bass', 'Bass Notes', [elements.detailBass]],
     ['guitar', 'Guitar Notes', [elements.detailGuitar]],
+    ['drums', 'Drum Sheet', [elements.detailDrums]],
     ['spectrum', 'Frequency Spectrum', [elements.detailSpectrum]],
     ['bar', 'Bar Settings', [elements.detailSectionInput, elements.detailStartInput,
       elements.detailRepeatStartInput, elements.detailRepeatEndInput].map(label)],

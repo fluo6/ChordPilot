@@ -9,7 +9,7 @@ test("analysis timing options default to Auto/beat and round-trip through contro
     analysisPresetInput: control("general"), analysisPresetHint: {},
     chordTimingInput: control("auto"), chordGridInput: control("beat"), chordStabilityInput: control("detailed"),
     tailReductionInput: control("0"), tailHalfLifeInput: control("0.5"), overtoneWeightingInput: control("50"),
-    analysisKeyInput: control(), minBpmInput: control("60"), maxBpmInput: control("190"), beatOffsetInput: control("0"),
+    analysisKeyInput: control(), minBpmInput: control("60"), maxBpmInput: control("190"), beatOffsetInput: control("0"), barPhaseInput: control("0"),
     onsetFrameInput: control("2048"), onsetHopInput: control("512"), chromaLowInput: control("65"), chromaHighInput: control("1800"),
     alternativesInput: control("6"), chordSourceInput: control("auto"), demucsModelInput: control("htdemucs"), useCacheInput: control(),
     simplifyChordsInput: control(), lyricsEnabledInput: control(), lyricsSourceInput: control("auto"), lyricsModelInput: control("tiny"), lyricsLanguageInput: control()
@@ -17,6 +17,9 @@ test("analysis timing options default to Auto/beat and round-trip through contro
   const { collectAnalysisOptions, applyAnalysisOptions, applyAnalysisPreset, updateAnalysisPresetState } = loadScript("src/renderer/shell.js", ["collectAnalysisOptions", "applyAnalysisOptions", "applyAnalysisPreset", "updateAnalysisPresetState"], { elements });
   assert.equal(collectAnalysisOptions().chord_timing, "auto");
   assert.equal(collectAnalysisOptions().chord_grid, "beat");
+  applyAnalysisOptions({bar_phase:2,beat_offset:.5});
+  assert.equal(collectAnalysisOptions().bar_phase,2);
+  assert.equal(collectAnalysisOptions().beat_offset,.5);
   assert.equal(collectAnalysisOptions().chord_stability, "detailed");
   assert.equal(collectAnalysisOptions().overtone_weighting, .5);
   applyAnalysisOptions({ overtone_weighting: .8 });
@@ -56,6 +59,14 @@ test("analysis timing options default to Auto/beat and round-trip through contro
   assert.equal(collectAnalysisOptions().chord_grid, "half_beat");
   assert.equal(collectAnalysisOptions().chord_stability, "sustained");
   assert.equal(elements.analysisPresetInput.value, "piano");
+  applyAnalysisPreset("rhythmic_keys");
+  assert.equal(collectAnalysisOptions().chord_grid, "beat");
+  assert.equal(collectAnalysisOptions().chord_stability, "balanced");
+  assert.equal(collectAnalysisOptions().tail_reduction, .2);
+  assert.equal(collectAnalysisOptions().overtone_weighting, .5);
+  assert.equal(collectAnalysisOptions().known_key, "F");
+  assert.equal(collectAnalysisOptions().chord_source, "other");
+  assert.equal(elements.analysisPresetInput.value, "rhythmic_keys");
   applyAnalysisPreset("reverb_fx");
   assert.equal(collectAnalysisOptions().tail_half_life, .8);
   assert.equal(collectAnalysisOptions().chord_stability, "balanced");
