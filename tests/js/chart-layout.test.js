@@ -2,16 +2,6 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {loadScript,plain}=require('./helpers/load-script');
 
-test('native systems share the available width and expand for dense music without scaling glyphs',()=>{
-  const sheet={};
-  const container={clientWidth:1000,querySelector:()=>sheet};
-  const {chartNotationWidth}=loadScript('src/renderer/chart-layout.js',['chartNotationWidth'],{
-    getComputedStyle:node=>node===container ? {paddingLeft:'10px',paddingRight:'10px'} : {paddingLeft:'24px',paddingRight:'24px',borderLeftWidth:'1px',borderRightWidth:'1px'}
-  });
-  assert.equal(chartNotationWidth([{width:600},{width:900}],container),930/.65);
-  assert.equal(chartNotationWidth([{width:1600},{width:900}],container),1600);
-});
-
 test('one density setting groups measures consistently without changing chart data',()=>{
   const state={barsPerLine:2,chart:{bars:Array.from({length:11},(_,i)=>({number:i+1,start:i*2,section:i<5?'Intro':'Verse',chord:'C'}))}};
   const original=JSON.stringify(state.chart);

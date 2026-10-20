@@ -6,7 +6,7 @@ const BassTuning=require('../../src/renderer/bass-tuning.js');
 function rhythm() {
   const Vex = require('../../src/renderer/vendor/vexflow-bravura-4.2.5.js');
   const {spellNotationPitch} = loadScript('src/renderer/chord-notation.js', ['spellNotationPitch']);
-  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'bassNotationTimeX', 'layoutBassSystem', 'layoutBassRows', 'notationMeasureWidths'], {Vex, spellNotationPitch,BassTuning}), Vex};
+  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'bassNotationTimeX', 'layoutBassSystem', 'notationMeasureWidths'], {Vex, spellNotationPitch,BassTuning}), Vex};
 }
 const note = (start, end, midi = 31) => ({start, end, midi, position:{string:4,fret:midi-28}});
 
@@ -152,20 +152,6 @@ test('balanced measure allocation honours dense minimums without starving sparse
   assert.ok(Math.abs(widths[2]-500)<.001);
   assert.ok(Math.abs(widths[0]-1100/3)<.001);
   assert.ok(Math.abs(widths.reduce((a,b)=>a+b,0)-1600)<.001);
-});
-
-test('dense bass rows reflow at native scale and retain every source and cross-system tie',()=>{
-  const {layoutBassRows}=rhythm();
-  const sources=Array.from({length:4},(_,i)=>({bar:{start:i*2},index:i,barEnd:i*2+2,
-    notes:Array.from({length:8},(_,j)=>({...note(i*2+j*.25,i*2+(j+1)*.25),
-      continuesFromPrevious:j===0,continuesToNext:j===7}))}));
-  const saved=JSON.stringify(sources);
-  const rows=layoutBassRows([sources],4,{time_signature:'4/4'},'C',950,4);
-  assert.ok(rows.length>1);
-  assert.deepEqual(plain(rows.flatMap(row=>row.sources.map(s=>s.index))),[0,1,2,3]);
-  assert.ok(rows.every(row=>row.engraving.width<=950));
-  assert.ok(rows[1].engraving.ties.some(tie=>tie.first===null));
-  assert.equal(JSON.stringify(sources),saved);
 });
 
 test('chord labels align with score and TAB on uneven measured beats',()=>{

@@ -96,16 +96,6 @@ function bassChartNotes(chart, strings = 4) {
     : transpose(bassBarNotes(bar, end(index), strings)));
 }
 
-function autoBassChartData(chart) {
-  const bars=chart?.bars||[];
-  if(!bars.length)return {strings:4,notes:[]};
-  const end=Number.isFinite(chart.duration)?chart.duration:
-    typeof barEndTime==='function'?barEndTime(bars.length-1):NaN;
-  const sourceNotes=bassChartNotes({...chart,duration:end},4);
-  const strings=BassTuning.recommendedStringCount(sourceNotes.flat());
-  return {strings,notes:strings===4?sourceNotes:bassChartNotes({...chart,duration:end},strings)};
-}
-
 function bassPitchLabel(midi) {
   return `${PITCH_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
 }
@@ -450,35 +440,29 @@ function fitBassSystem(system,targetWidth) {
   return system;
 }
 
-function renderBassScore(container, notes, strings, bar, barEnd, options = {}) {
+function renderBassScore(container, notes, strings, bar, barEnd) {
   const {Renderer,StaveTie,TabTie,StaveConnector}=Vex.Flow;
-  const key=options.keySignature ?? notationKeySignature(state.chart,state.notationUseKeySignature !== false);
-  const system=options.engraving ? fitBassSystem(options.engraving,options.minimumWidth) : layoutBassSystem(options.measures || [{bar,barEnd,notes,chords:options.chords}],
-    strings,state.chart,key,options.measures ? (options.minimumWidth || 1000) : 400,Boolean(options.measures));
+  const key=notationKeySignature(state.chart,state.notationUseKeySignature !== false);
+  const system=layoutBassSystem([{bar,barEnd,notes}],strings,state.chart,key,400);
   if(!system.measures.length) return;
   const {measures,ties,width,scoreBottom}=system;
-  const showScore=options.mode!=='tab',showTab=options.mode!=='notation';
-  let {height,top}=system;
+  const {height,top}=system;
   const renderer=new Renderer(container,Renderer.Backends.SVG);
   renderer.resize(width,height-top);
   const context=renderer.getContext();
-  context.setFillStyle(options.paper ? '#171717' : '#d8e1ec');
-  context.setStrokeStyle(options.paper ? '#333' : '#8d9caf');
-  context.setBackgroundFillStyle(options.paper ? '#fff' : '#10151c');
+  context.setFillStyle('#d8e1ec');
+  context.setStrokeStyle('#8d9caf');
+  context.setBackgroundFillStyle('#10151c');
   measures.forEach((measure,m)=>{
     const {stave,tab,voices,model,layout,notes,scoreBeams,tabBeams}=measure;
-    const className=options.measures ? 'bass-chart-measure' : 'bass-system-measure';
+    const className='bass-system-measure';
     const group=context.openGroup(className);group.classList.add(className);
     group.setAttribute('data-index',String(measure.index ?? m));
-    if(options.measures) group.append(bassSvgNode('rect',{x:stave.getX(),y:top,
-      width:stave.getWidth(),height:height-top,class:'bass-chart-measure-highlight','vector-effect':'non-scaling-stroke'}));
-    if(showScore) stave.setContext(context).draw();
-    if(showTab) tab.setContext(context).draw();
-    if(showScore && showTab) {
-      if(m===0) new StaveConnector(stave,tab).setType(StaveConnector.type.SINGLE_LEFT).setContext(context).draw();
-      new StaveConnector(stave,tab).setType(StaveConnector.type.SINGLE_RIGHT).setContext(context).draw();
-    }
-    const beatY=showTab && !showScore ? tab.getYForLine(strings-1)+18 : scoreBottom+12;
+    stave.setContext(context).draw();
+    tab.setContext(context).draw();
+    if(m===0) new StaveConnector(stave,tab).setType(StaveConnector.type.SINGLE_LEFT).setContext(context).draw();
+    new StaveConnector(stave,tab).setType(StaveConnector.type.SINGLE_RIGHT).setContext(context).draw();
+    const beatY=scoreBottom+12;
     layout.beats.forEach(beat=>group.append(bassSvgNode('text',{x:beat.x,y:beatY,
       'text-anchor':'middle',class:'bass-beat-number'},String(beat.number))));
     const draw=(note,index,className)=>{
@@ -490,9 +474,9 @@ function renderBassScore(container, notes, strings, bar, barEnd, options = {}) {
       }
       note.setContext(context).draw();context.closeGroup();
     };
-    if(showScore) voices.scoreNotes.forEach((note,index)=>draw(note,index,'bass-score-note'));
-    if(showTab) voices.tabNotes.forEach((note,index)=>draw(note,index,'bass-tab-note'));
-    [...(showScore?scoreBeams:[]),...(showTab?tabBeams:[])].forEach(beam=>{
+    voices.scoreNotes.forEach((note,index)=>draw(note,index,'bass-score-note'));
+    voices.tabNotes.forEach((note,index)=>draw(note,index,'bass-tab-note'));
+    [...scoreBeams,...tabBeams].forEach(beam=>{
       beam.render_options.min_slope=-.12;beam.render_options.max_slope=.12;
       beam.setContext(context).draw();
     });
@@ -503,7 +487,6 @@ function renderBassScore(container, notes, strings, bar, barEnd, options = {}) {
     const group=context.openGroup('bass-rhythm-tie');
     group.setAttribute('data-bass-segment',String(measures[origin[0]].model.events[origin[1]].sourceIndex));
     for(const [Tie,part] of [[StaveTie,'scoreNotes'],[TabTie,'tabNotes']]) {
-      if(part==='scoreNotes' && !showScore || part==='tabNotes' && !showTab) continue;
       new Tie({first_note:first ? measures[first[0]].voices[part][first[1]] : null,
         last_note:last ? measures[last[0]].voices[part][last[1]] : null,
         first_indices:[0],last_indices:[0]}).setContext(context).draw();
@@ -511,166 +494,11 @@ function renderBassScore(container, notes, strings, bar, barEnd, options = {}) {
     context.closeGroup();
   });
   const svg=container.querySelector('svg'),model=measures[0].model;
-  if(options.measures) {
-    // Crop reserved canvas space to actual ink, including flags, ties and low
-    // ledger notes. Selection hitboxes must not inflate the measured bounds.
-    const highlights=[...svg.querySelectorAll('.bass-chart-measure-highlight')];
-    highlights.forEach(node=>node.style.display='none');
-    const ink=svg.getBBox();
-    highlights.forEach(node=>node.style.display='');
-    if(ink.width>0 && ink.height>0) {
-      top=Math.floor(ink.y-6);height=Math.ceil(ink.y+ink.height+8);
-      highlights.forEach(node=>{node.setAttribute('y',String(top));node.setAttribute('height',String(height-top));});
-      renderer.resize(width,height-top);
-    }
-  }
   svg.setAttribute('viewBox',`0 ${top} ${width} ${height-top}`);
   svg.style.width=`${width*.65}px`;svg.style.height='auto';
   svg.setAttribute('role','img');
-  svg.setAttribute('aria-label',`Bass ${showScore?'rhythmic score ':''}${showTab?`${strings}-string TAB`:''} in ${model.beats}/${model.beatValue}; ${measures.length} measures; estimated rhythm; score sounds one octave below written pitch`);
+  svg.setAttribute('aria-label',`Bass rhythmic score and ${strings}-string TAB in ${model.beats}/${model.beatValue}; ${measures.length} measures; estimated rhythm; score sounds one octave below written pitch`);
   return {...system,height,top,model,layout:measures[0].layout};
-}
-
-function bassChartChordLabels(chords) {
-  const labels=[];
-  chords.forEach((event,eventIndex)=>{
-    const label=displayChordSymbol(event.chord),previous=labels.at(-1);
-    if(previous?.label===label && Math.abs(previous.event.end-event.start)<.002) {
-      previous.event.end=event.end;
-      previous.chords.push(event.chord);
-    } else labels.push({event:{...event},eventIndex,label,chords:[event.chord]});
-  });
-  return labels;
-}
-
-function layoutBassRows(rows,strings,chart,key,availableWidth,columns) {
-  const result=[];
-  const append=(sources,capacity)=>{
-    try {
-      const engraving=layoutBassSystem(sources,strings,chart,key,0,true);
-      // Keep the selected density as the maximum. Re-engrave the smaller systems
-      // with their own clef and incoming ties instead of scaling the music down.
-      if(engraving.width>availableWidth+1 && sources.length>1) {
-        const count=Math.ceil(sources.length/2);
-        append(sources.slice(0,count),count);append(sources.slice(count),count);
-      } else result.push({sources,engraving,capacity});
-    } catch(error) {result.push({sources,error,capacity});}
-  };
-  rows.forEach(sources=>append(sources,columns));
-  return result;
-}
-
-function renderBassChartPreview(container) {
-  const chart = state.chart;
-  const ends = chart.bars.map((_, index) => barEndTime(index));
-  const autoBass=autoBassChartData({...chart,duration:ends.at(-1)});
-  const strings = autoBass.strings;
-  const notesByBar=autoBass.notes;
-  state.bassStrings=strings;
-  const key = notationKeySignature({key:chart.key || chart.detected_key || chart.native_key}, state.notationUseKeySignature !== false);
-  const signature = JSON.stringify([container.clientWidth,state.barsPerLine,state.bassNotationMode,state.audio?.title,state.audio?.artist,chart.title, chartKeyText(chart), chart.tempo, chart.time_signature,
-    chart.beat_times, chart.key_offset, key, strings, state.chordDisplayPreferences,
-    elements.simplifyChordsInput?.checked ?? chart.analysis_engine?.options?.simplify_chords,
-      chart.bars.map((bar, index) => [bar.number, bar.section, bar.start, ends[index], bar.chord,
-      (bar.chord_events || []).map(event => [event.start, event.end, event.chord]), bar.bass_events,bar.transcription_review?.bass,notesByBar[index]])]);
-  let sheet = container.querySelector('.bass-chart');
-  if (!sheet || sheet._bassChartSignature !== signature) {
-    const text = (tag, content, className) => {
-      const node = document.createElement(tag); node.textContent = content; node.className = className || ''; return node;
-    };
-    sheet = text('section', '', 'bass-chart');
-    sheet._bassChartSignature = signature;
-    const header = text('div', '', 'bass-chart-header');
-    const heading = text('div', '', 'bass-chart-heading');
-    heading.append(text('strong', typeof chartDisplayTitle==='function'?chartDisplayTitle(chart,state.audio || {}):chart.title || 'Untitled'),
-      text('span', `${chartKeyText(chart) || '?'} · ${chart.tempo || '?'} BPM · ${chart.time_signature || '4/4'}`),
-      text('span',typeof transcriptionSheetStatus==='function'?transcriptionSheetStatus(chart,'bass'):'Unverified estimate','transcription-sheet-status'));
-    const tuning = text('label', 'Bass strings (auto) ');
-    const select = document.createElement('select');
-    select.setAttribute('aria-label', 'Automatically detected bass chart strings');
-    select.title='Automatically selected from the lowest transcribed bass note';
-    [4, 5].forEach(count => { const option = text('option', `${count} strings`); option.value = String(count); select.append(option); });
-    select.value = String(strings);
-    select.disabled=true;
-    tuning.append(select);
-    const modeLabel=text('label','Display '),mode=document.createElement('select');mode.setAttribute('aria-label','Bass notation display');
-    [['both','Notation + TAB'],['tab','TAB only'],['notation','Notation only']].forEach(([value,label])=>{const option=text('option',label);option.value=value;mode.append(option);});
-    mode.value=state.bassNotationMode || 'both';mode.onchange=()=>{state.bassNotationMode=mode.value;renderChartPreview();};
-    modeLabel.append(mode);header.append(heading,tuning,modeLabel);
-    const systems = text('div', '', 'bass-chart-systems');
-    sheet.append(header, systems);
-    container.replaceChildren(sheet);
-    const availableWidth=chartNotationAvailableWidth(container)/.65;
-    const rows=layoutBassRows(chartRows().map(row=>row.map(({bar,index})=>({bar,index,barEnd:ends[index],notes:notesByBar[index],chords:chordEventsForBar(index)}))),
-      strings,chart,key,availableWidth,chartBarsPerLine());
-    const systemWidth=chartNotationWidth(rows.map(item=>item.engraving),container);
-    let lastSection = '';
-    rows.forEach(({sources,engraving:layout,error,capacity}) => {
-      const section = String(sources[0]?.bar.section || '').trim();
-      if (section && section !== lastSection) {
-        systems.append(text('h3', section, 'bass-chart-section'));
-        lastSection = section;
-      }
-      const system = text('div', '', 'bass-chart-system');
-      const flow = text('div', '', 'bass-chart-flow');
-      const buttons = text('div', '', 'bass-chart-bars');
-      const symbols = text('div', '', 'bass-chart-chords chord-beat-track');
-      const score = text('div', '', 'bass-chart-staff');
-      flow.append(buttons, symbols, score);system.append(flow);systems.append(system);
-      try {
-        if(error) throw error;
-        const engraving = renderBassScore(score, [], strings, null, null, {paper:true,mode:state.bassNotationMode,keySignature:key,measures:sources,minimumWidth:systemWidth*sources.length/capacity,engraving:layout});
-        if (!engraving) return;
-        flow.style.minWidth = `${Math.ceil(engraving.width * .8)}px`;
-        engraving.measures.forEach(({bar,index,chords,stave,model,layout}) => {
-          const button = text('button', `Bar ${bar.number || index + 1}`, 'bass-chart-bar-select');
-          button.type = 'button';button.dataset.index = String(index);
-          button.setAttribute('aria-label', `Select bar ${bar.number || index + 1}: ${chords.map(event => displayChordSymbol(event.chord)).join(', ')}`);
-          button.style.left = `${100 * stave.getX() / engraving.width}%`;
-          button.style.width = `${100 * stave.getWidth() / engraving.width}%`;
-          button.addEventListener('click', () => selectBar(index, true));buttons.append(button);
-          bassChartChordLabels(chords).forEach(({event,eventIndex,label,chords:raw}) => {
-            const symbol = text('span', '', 'bass-chart-chord chord-beat-event');
-            const glyph=text('span','','chord-beat-symbol');
-            appendIrealChord(glyph,label);symbol.append(glyph);
-            symbol.dataset.barIndex=String(index);symbol.dataset.eventIndex=String(eventIndex);
-            symbol.dataset.start=String(event.start);symbol.dataset.end=String(event.end);
-            symbol.dataset.minLeft=String(100*stave.getX()/engraving.width);
-            symbol.dataset.maxRight=String(100*(stave.getX()+stave.getWidth())/engraving.width);
-            symbol.title = `${[...new Set(raw)].join(' → ')} · ${formatSeconds(event.start)}–${formatSeconds(event.end)}s`;
-            symbol.style.left = `${100 * bassNotationTimeX(event.start, model, layout) / engraving.width}%`;
-            symbol.addEventListener('click', () => selectBar(index, true, eventIndex));symbols.append(symbol);
-          });
-        });
-        score.querySelectorAll('.bass-chart-measure').forEach(measure => {
-          measure.addEventListener('click', () => selectBar(Number(measure.dataset.index), true));
-        });
-      } catch (error) {
-        score.replaceChildren(text('p', 'Bass notation unavailable for this row.', 'bass-chart-empty'));
-        console.warn('Bass chart unavailable:', error.message);
-      }
-    });
-    if (!notesByBar.some(notes => notes.length)) {
-      sheet.insertBefore(text('p', 'No measured bass notes are available. Reanalyse Chords with an existing bass stem to populate the score.', 'bass-chart-empty'), systems);
-    }
-    const outside = notesByBar.some(notes => notes.some(note => !note.position));
-    sheet.append(text('p', `${BassTuning.configFor(strings).label} tuning · Bass sounds one octave below written notation. Rhythm and fingering are estimated.${outside ? ' X marks notes outside this tuning.' : ''}`, 'bass-chart-footer'));
-  }
-  sheet.querySelectorAll('.bass-chart-measure').forEach(measure => {
-    const index = Number(measure.dataset.index);
-    measure.classList.toggle('selected', index === state.selectedIndex);
-    measure.classList.toggle('active', index === state.activeIndex);
-  });
-  sheet.querySelectorAll('.bass-chart-bar-select').forEach(button => {
-    button.setAttribute('aria-pressed', String(Number(button.dataset.index) === state.selectedIndex));
-  });
-}
-
-function highlightBassChartNotes(container,time,index) {
-  container.querySelectorAll('.bass-current').forEach(node=>node.classList.remove('bass-current'));
-  const measure=container.querySelector(`.bass-chart-measure[data-index="${index}"]`);
-  measure?.querySelectorAll('[data-bass-start]').forEach(node=>node.classList.toggle('bass-current',
-    time>=Number(node.dataset.bassStart) && time<Number(node.dataset.bassEnd)));
 }
 
 function renderDetailBass(bar, barEnd, time) {

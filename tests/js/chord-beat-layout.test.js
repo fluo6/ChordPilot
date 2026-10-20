@@ -6,20 +6,6 @@ function layout() {
   return loadScript('src/renderer/chart-layout.js', ['chordBeatLayout', 'chartBeatAtTime']);
 }
 
-test('nearby bass chord labels share one baseline when the measure has room',()=>{
-  const {packChordLabels}=loadScript('src/renderer/chart-layout.js',['packChordLabels']);
-  assert.equal(typeof packChordLabels,'function');
-  const labels=[{onset:0,width:55},{onset:20,width:45},{onset:120,width:60}];
-  const saved=JSON.stringify(labels),positions=packChordLabels(labels,0,200);
-  assert.equal(positions.length,3);
-  positions.forEach((left,i)=>{
-    assert.ok(left>=0 && left+labels[i].width<=200);
-    if(i)assert.ok(left>=positions[i-1]+labels[i-1].width+8);
-  });
-  assert.equal(packChordLabels(labels,0,150),null,'Crowded labels need collision lanes');
-  assert.equal(JSON.stringify(labels),saved);
-});
-
 test('chord onsets and durations use measured beats, including offbeats and tempo changes', () => {
   const {chordBeatLayout, chartBeatAtTime} = layout();
   const chart = {time_signature:'4/4', beat_times:[10,10.4,11,11.5,12.2]};

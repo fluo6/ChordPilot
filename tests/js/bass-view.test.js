@@ -11,19 +11,6 @@ function bass() {
 }
 const cell=(start,end,midi)=>({start,end,bass_reference:{pitch_class:midi%12,detected_pitches:[{midi,strength:1}]}});
 
-test('bass chart groups consecutive identical display labels without changing chord data or selection indices',()=>{
-  const {displayChordSymbol}=loadScript('src/renderer/bars.js',['displayChordSymbol'],{elements:{simplifyChordsInput:{checked:true}},state:{}});
-  const {bassChartChordLabels}=loadScript('src/renderer/bass-view.js',['bassChartChordLabels'],{displayChordSymbol});
-  assert.equal(typeof bassChartChordLabels,'function');
-  const chords=[['Fmaj7',0,.5],['Fmaj9',.5,1],['Fmaj7/C',1,1.5],['Fmaj13/C',1.5,2],
-    ['Dm9',2,2.5],['Fmaj7/C',2.5,3],['Fmaj7/C',3.2,3.5]].map(([chord,start,end])=>({chord,start,end}));
-  const before=JSON.stringify(chords);
-  const labels=bassChartChordLabels(chords);
-  assert.deepEqual(plain(labels).map(item=>[item.eventIndex,item.label,item.event.start,item.event.end]),
-    [[0,'Fmaj7',0,1],[2,'Fmaj7/C',1,2],[4,'Dm7',2,2.5],[5,'Fmaj7/C',2.5,3],[6,'Fmaj7/C',3.2,3.5]]);
-  assert.equal(JSON.stringify(chords),before);
-});
-
 test('measured reattacks stay separate while clipped pieces of one attack stay tied',()=>{
   const {bassChartNotes}=bass();
   const chart={duration:2,bars:[

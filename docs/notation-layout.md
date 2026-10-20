@@ -1,5 +1,18 @@
 # Chart layout and playback following
 
+Bass Notes / TAB and Drum Sheet now use alphaTab exclusively. There is no
+notation renderer selector, comparison view or legacy chart fallback. Pitches
+outside the detected 4/5-string tuning stay in complete standard notation with
+diagnostics. Rendering failures offer Retry, and PDF export waits for a complete
+score. Shared compact notation in the Analysis sidebar remains independent.
+The development notes below also describe the earlier custom chart layouts.
+
+Run `npm run smoke:notation` for a headless bass/drum rendering, playback,
+table-refresh, retry and PDF check using synthetic musical events. Set
+`CHORDPILOT_NOTATION_FIXTURES` to a local snapshot directory containing
+`fixtures.json` and `full-bass-5.json` to include saved-song passages and the
+75-bar Overjoyed regression. Snapshots and generated outputs are kept local.
+
 The [transcription-review follow-up](superpowers/validation/2026-10-19-overjoyed-transcription-review.md)
 adds selected-bar listening/corrections/verification, saved bass notation/TAB
 modes, metadata-derived compact headings and current-note/hit highlighting.

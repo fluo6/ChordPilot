@@ -171,7 +171,6 @@ function updateActiveBarFromPlayback() {
     }
     if (nextIndex >= 0 && typeof renderDetailDrums === 'function') {
       renderDetailDrums(state.chart.bars[nextIndex],barEndTime(nextIndex),originalTime);
-      if (state.chartRenderer === 'drums') highlightDrumHits(elements.chartPreview,originalTime);
     }
     if (typeof updateChartPlayback === 'function') updateChartPlayback(originalTime,nextIndex);
     return;
@@ -783,24 +782,6 @@ function renderChordProPreview(container) {
   container.appendChild(text);
 }
 
-function renderRendererComparison(kind) {
-  const root=elements.chartPreview;
-  if(typeof destroyAlphaTabChart==='function')destroyAlphaTabChart();
-  const text=(tag,value,className='')=>{const node=document.createElement(tag);node.textContent=value;node.className=className;return node;};
-  const compare=text('div','','renderer-compare');
-  const makePanel=(title,className)=>{
-    const panel=text('section','',`renderer-compare-panel ${className}`),heading=text('h2',title,'renderer-compare-heading'),body=text('div','',`renderer-compare-body renderer-compare-${className}-body`);
-    panel.append(heading,body);compare.append(panel);return body;
-  };
-  const current=makePanel('Current ChordPilot','current');
-  const alpha=makePanel('alphaTab 1.8.4','alpha');
-  root.replaceChildren(compare);
-  if(kind==='bass')renderBassChartPreview(current);else renderDrumChartPreview(current);
-  finishChartLayout(current,false);
-  renderAlphaTabChartPreview(alpha);
-  registerChartPlayback();
-}
-
 function renderChartPreview() {
   if (!elements.chartPreview || !elements.barsTable) {
     return;
@@ -809,30 +790,15 @@ function renderChartPreview() {
   if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
 
   const renderer = state.chartRenderer || "ireal";
-  if(elements.chartNotationRendererControl) elements.chartNotationRendererControl.hidden=!['bass','drums'].includes(renderer);
   if(elements.barsPerLineInput) elements.barsPerLineInput.disabled=renderer==='table';
   const showTable = renderer === "table";
   elements.barsTable.classList.toggle("hidden", !showTable);
   elements.chartPreview.classList.toggle("hidden", showTable);
-  if(state.notationRenderer==='compare' && ['bass','drums'].includes(renderer) && hasChart()) {
-    renderRendererComparison(renderer);
-    return;
-  }
-  if(state.notationRenderer==='alphatab' && ['bass','drums'].includes(renderer) && hasChart()) {
+  if (['bass','drums'].includes(renderer) && hasChart()) {
     renderAlphaTabChartPreview();
     return;
   }
-  if(typeof destroyAlphaTabChart==='function') destroyAlphaTabChart();
-  if (renderer === "bass" && hasChart()) {
-    renderBassChartPreview(elements.chartPreview);
-    if(typeof finishChartLayout==='function') finishChartLayout();
-    return;
-  }
-  if (renderer === 'drums' && hasChart()) {
-    renderDrumChartPreview(elements.chartPreview);
-    if(typeof finishChartLayout==='function') finishChartLayout();
-    return;
-  }
+  destroyAlphaTabChart();
   elements.chartPreview.innerHTML = "";
 
   if (showTable) {

@@ -686,7 +686,7 @@ button {
   min-height: 19px;
 }
 
-button:hover:not(:disabled):not(.piano-key):not(:where(.bass-chart-bar-select, .bass-chart-chord)) {
+button:hover:not(:disabled):not(.piano-key) {
   background: #293341;
   border-color: #5a6b82;
 }
@@ -2933,39 +2933,6 @@ table {
   padding: 10px;
 }
 
-.renderer-compare {
-  align-items: start;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-}
-
-.renderer-compare-panel {
-  background: #111821;
-  border: 1px solid #303947;
-  border-radius: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.renderer-compare-heading {
-  border-bottom: 1px solid #303947;
-  color: #dce6ef;
-  font-size: 12px;
-  margin: 0;
-  padding: 7px 9px;
-}
-
-.renderer-compare-body {
-  min-width: 0;
-  overflow: hidden;
-}
-
-@media screen and (max-width: 1200px) {
-  .renderer-compare { grid-template-columns: minmax(0, 1fr); }
-}
-
 .lyrics-reference-panel {
   background: #0b1017;
   border-top: 1px solid #242b35;
@@ -3292,66 +3259,17 @@ table {
   position: absolute;
   right: 8px;
 }
-
-.bass-chart {
-  background: #fff;
-  color: #171717;
-  color-scheme: light;
-  border: 1px solid #e2e2e2;
-  box-shadow: 0 2px 12px #0002;
-  min-width: 800px;
-  max-width: 1200px;
-  padding: 20px 24px;
-}
-.bass-chart-header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.bass-chart-heading { display: grid; gap: 5px; }
-.bass-chart-heading strong { font: 26px "MuseJazz Text", "Segoe UI", sans-serif; }
-.bass-chart-heading span, .bass-chart-header label, .bass-chart-footer { color: #666; font-size: 11px; line-height: 1.5; }
-.bass-chart-heading .transcription-sheet-status { color: #72623b; font-size: 11px; }
-.bass-chart-header label { display: flex; align-items: center; gap: 6px; }
-.bass-chart-header select { width: auto; color: #333; background: #fff; border: 1px solid #bbb; font-size: 11px; padding: 3px 5px; }
-.bass-chart-systems { display: grid; gap: 14px; }
-.bass-chart-section { color: #b33d35; font: 18px "MuseJazz Text", "Segoe UI", sans-serif; margin: 0; }
-.bass-chart-system { min-width: 0; overflow-x: auto; padding-bottom: 4px; }
-.bass-chart-bars { position: relative; height: 20px; }
-.bass-chart-measure, .bass-chart-chord { cursor: pointer; }
-.bass-chart-measure-highlight { fill: transparent; stroke: transparent; }
-.bass-chart-measure.selected > .bass-chart-measure-highlight { fill: rgb(76 142 137 / 4%); stroke: #9cbeb9; }
-.bass-chart-measure.active > .bass-chart-measure-highlight { fill: rgb(76 142 137 / 6%); stroke: #76aaa3; }
-.bass-chart-bar-select { position: absolute; color: #526268; background: transparent; border: 0; border-radius: 0; padding: 0 4px 2px; font: 11px/1.4 "Segoe UI", sans-serif; text-align: left; }
-.bass-chart-bar-select:hover { color: #245953; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
-.bass-chart-bar-select:focus-visible { outline: 2px solid #31817b; }
-.bass-chart-chords { position: relative; height: 30px; }
-.bass-chart-chord { position: absolute; display: inline-flex; align-items: baseline; white-space: nowrap; font: 20px/1.15 "MuseJazz Text", "Segoe UI", sans-serif; font-synthesis: none; }
-.bass-chart-chord.chord-beat-event { width: 0; top: 0; bottom: 4px; }
-.bass-chart-chord.chord-beat-event::after { right: auto; border-bottom: 0; border-left: 1px solid #a8b7bc; height: 4px; }
-.bass-chart-chord.offset-label::before { left: var(--chord-leader-left); top: calc(var(--chord-label-bottom) - 2px); bottom: auto; width: var(--chord-leader-width); border-left: 0; border-top: 1px dotted #b2c0c1; }
-.bass-chart-chord sup { font-size: .58em; line-height: 0; position: relative; top: -.5em; margin-left: 1px; }
-.bass-chart-staff > svg { display: block; width: 100% !important; height: auto; }
 .drum-view { min-width: 0; padding: 8px 0; }
 .drum-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .drum-controls button { padding: 5px 9px; font-size: 11px; }
 .drum-score { overflow: hidden; min-width: 0; }
 .drum-score > svg { display: block; max-width: 100%; }
-.drum-chart { min-width: 0; width: 100%; }
-.drum-chart .bass-chart-system { overflow: hidden; }
-.drum-chart .drum-score > svg { width: 100% !important; }
-.drum-chart .bass-chart-chord { padding: 0; border: 0; border-radius: 0; background: transparent; color: #171717; font-size: 20px; }
-.drum-chart .bass-chart-chord:hover { color: #147d79; background: transparent; }
 .drum-summary, .drum-table-cell { font-size: 11px; color: var(--muted); }
 .drum-table-cell { min-width: 110px; }
 .drum-error { font-size: 11px; color: #e9a66f; overflow-wrap: anywhere; }
-.drum-chart .drum-error { color: #9d3a23; }
 .drum-current path { fill: #13b8a6 !important; stroke: #13b8a6 !important; }
-.bass-chart .bass-current path { fill: #148a7e !important; stroke: #148a7e !important; }
-.bass-chart .bass-current text { fill: #148a7e !important; }
 .drum-measure.selected .drum-measure-hit { fill: rgb(76 142 137 / 4%); stroke: #9cbeb9; }
 .drum-measure.active .drum-measure-hit { fill: rgb(76 142 137 / 6%); stroke: #76aaa3; }
-.drum-chart .drum-measure { cursor: pointer; }
-.bass-chart .bass-tab-note text { fill: #171717; }
-.bass-chart .bass-beat-number { fill: #888; font-size: 10px; }
-.bass-chart-empty { color: #777; font-size: 11px; line-height: 1.5; margin: 8px 4px; }
-.bass-chart-footer { margin: 20px 0 0; }
 .transcription-review-panel { border: 1px solid var(--border); border-radius: 5px; margin: 8px 0; padding: 8px 10px; font-size: 11px; }
 .transcription-review-panel > summary { cursor: pointer; color: var(--muted); }
 .transcription-review-body { display: grid; gap: 8px; margin-top: 10px; }
@@ -3378,18 +3296,7 @@ table {
 .chart-follow-control { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
 .chordpro-system { display: block; break-inside: avoid; }
 .chordpro-measure { cursor: pointer; }
-#chartPreview .bass-chart { box-sizing: border-box; min-width: 100%; width: max-content; max-width: none; margin-inline: auto; }
-#chartPreview .bass-chart:not(.drum-chart) { width: 100%; }
-#chartPreview .bass-chart:not(.drum-chart) .bass-chart-bars { height: 18px; }
-#chartPreview .bass-chart-system { overflow: visible; padding-bottom: 4px; break-inside: avoid; page-break-inside: avoid; }
-#chartPreview .bass-chart-flow { position: relative; }
-#chartPreview .bass-chart-flow svg { max-width: none; width: 100% !important; display: block; }
-#chartPreview .bass-chart-systems { gap: 12px; }
-#chartPreview .bass-chart:not(.drum-chart) .bass-chart-systems { gap: 8px; }
-#chartPreview .drum-chart .bass-chart-system { padding-bottom: 0; }
-#chartPreview .drum-chart .bass-chart-systems { gap: 12px; }
-.drum-chart .bass-chart-chords { height: 30px; }
-.bass-chart-section, .chart-section-label {
+.chart-section-label {
   display: block; color: #365458; font: 600 12px/1.4 "Segoe UI", sans-serif;
   border-left: 2px solid #6d9e97; border-bottom: 1px solid #e0e8e6;
   padding: 2px 8px; background: transparent;
@@ -3433,7 +3340,6 @@ table {
 .ireal-measure.active, .measure-cell.active, .chordpro-measure.active { background: #ecf6f3; box-shadow: inset 0 -3px #4c8e89; }
 .drum-measure.active > .drum-measure-hit { fill: #e4f2ed; stroke: #74aaa0; }
 .drum-measure.selected:not(.active) > .drum-measure-hit { fill: #f0f5f8; }
-.bass-chart-bar-select.active { color: #147d79; font-weight: 700; }
 .ireal-measure.active::after, .measure-cell.active::after {
   content: ''; position: absolute; bottom: 2px; left: var(--playback-progress, 0%);
   width: 2px; height: 9px; background: #4c8e89; pointer-events: none;
@@ -3454,33 +3360,19 @@ table {
     border: 0 !important; background: white !important; transform: none !important;
   }
   #chartPreview { overflow: visible !important; display: block; width: var(--chart-paper-width); max-width: none; padding: 0; background: white !important; border: 0 !important; }
-  .renderer-compare { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6mm; }
-  .renderer-compare-panel { background: white; border: 0; border-radius: 0; }
-  .renderer-compare-heading { color: #333; padding: 0 0 3mm; break-after: avoid; page-break-after: avoid; }
-  .renderer-compare-body { overflow: visible; }
-  #chartPreview.hidden, #barsTable.hidden { display: none !important; }
-  #chartPreview .bass-chart, #chartPreview .ireal-chart { border: 0; box-shadow: none; padding: 0; }
-  #chartPreview .bass-chart-header label, #chartPreview .drum-controls, #chartPreview .bass-chart-footer { display: none; }
-  #chartPreview .bass-chart-header > p { display: none; }
+  #chartPreview.hidden, #barsTable.hidden { display: none !important; } #chartPreview .ireal-chart { border: 0; box-shadow: none; padding: 0; } #chartPreview .drum-controls{ display: none; }
   #chartPreview button { print-color-adjust: exact; }
   #chartPreview .active, #chartPreview .selected { background: transparent !important; box-shadow: none !important; }
   #chartPreview .active::after { display: none; }
   #chartPreview .chord-beat-track::after { display: none; }
   #chartPreview .chord-beat-event.playing { color: inherit; }
   #chartPreview .chordpro-event.playing { color: inherit; background: transparent; }
-  #chartPreview .chord-beat-event.playing::after { border-color: #8ca5a8; border-bottom-width: 2px; }
-  #chartPreview .bass-chart-measure-highlight, #chartPreview .drum-measure-hit { fill: transparent !important; stroke: transparent !important; }
+  #chartPreview .chord-beat-event.playing::after { border-color: #8ca5a8; border-bottom-width: 2px; } #chartPreview .drum-measure-hit { fill: transparent !important; stroke: transparent !important; }
   #chartPreview .drum-current path, #chartPreview .bass-current path { fill: #171717 !important; stroke: #171717 !important; }
   #chartPreview .bass-current text { fill: #171717 !important; }
   #chartPreview .measure-cell, #chartPreview .chordpro-chart { background: white !important; color: #171717 !important; border-color: #bbb !important; }
   #chartPreview .measure-cell strong { color: #171717 !important; }
-  #chartPreview .measure-cell span, #chartPreview .measure-cell em { color: #555 !important; }
-  #chartPreview .bass-chart-systems, #chartPreview .ireal-chart, #chartPreview .measure-grid-chart { display: block; }
-  #chartPreview .bass-chart-system, #chartPreview .ireal-row, #chartPreview .measure-grid-row { margin-bottom: 16px; }
-  #chartPreview .drum-chart .bass-chart-system { margin-bottom: 12px; }
-  #chartPreview .bass-chart-section, #chartPreview .chart-section-label { margin-bottom: 10px; }
-  #chartPreview .bass-chart-section, #chartPreview .chart-section-label { color: #444; border-color: #bbb; background: transparent; }
-  #chartPreview .bass-chart-bar-select { color: #555; font-weight: 400; text-decoration: none; }
+  #chartPreview .measure-cell span, #chartPreview .measure-cell em { color: #555 !important; } #chartPreview .ireal-chart, #chartPreview .measure-grid-chart { display: block; } #chartPreview .ireal-row, #chartPreview .measure-grid-row { margin-bottom: 16px; } #chartPreview .chart-section-label { margin-bottom: 10px; } #chartPreview .chart-section-label { color: #444; border-color: #bbb; background: transparent; }
   #barsTable { min-width: 0; width: 100%; color: #171717; }
   #barsTable tr { break-inside: avoid; }
   #barsTable input, #barsTable button { color: #171717 !important; background: white !important; }

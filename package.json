@@ -11,6 +11,7 @@
     "test:web": "node --test tests/js/web-*.test.js tests/js/runtime-services.test.js",
     "test:python": "node scripts/testing/run-python-tests.mjs",
     "smoke:web": "node scripts/testing/web-smoke.mjs",
+    "smoke:notation": "electron scripts/testing/alphatab-smoke.cjs",
     "build": "electron-builder --dir",
     "postbuild": "node scripts/packaging/create-platform-shortcut.mjs",
     "build:win": "electron-builder --win dir",

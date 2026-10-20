@@ -147,11 +147,6 @@ elements.chartRendererInput.addEventListener("change", () => {
   state.reviewKind=null;
   renderChartPreview();
 });
-elements.chartNotationRendererInput.addEventListener('change',()=>{
-  const choice=elements.chartNotationRendererInput.value;
-  state.notationRenderer=['alphatab','compare'].includes(choice)?choice:'current';
-  renderChartPreview();
-});
 elements.barsPerLineInput.addEventListener('change', () => {
   state.barsPerLine = Number(elements.barsPerLineInput.value) === 2 ? 2 : 4;
   renderChartPreview();

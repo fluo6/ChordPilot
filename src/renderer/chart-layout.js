@@ -29,16 +29,6 @@ function chordBeatLayout(bar, end, chart = {}, events = []) {
   return model;
 }
 
-function packChordLabels(labels,minimum,maximum,gap=8) {
-  if(labels.reduce((sum,label)=>sum+label.width,0)+Math.max(0,labels.length-1)*gap>maximum-minimum) return null;
-  const positions=[];
-  labels.forEach((label,i)=>positions.push(Math.max(minimum,label.onset,i ? positions[i-1]+labels[i-1].width+gap : minimum)));
-  for(let i=labels.length-1;i>=0;i--) {
-    positions[i]=Math.min(positions[i],(i<labels.length-1 ? positions[i+1]-gap : maximum)-labels[i].width);
-  }
-  return positions;
-}
-
 function fitChordBeatTracks(preview) {
   const tracks = [...preview.querySelectorAll('.chord-beat-track')];
   if (!tracks.length) return;
@@ -48,15 +38,14 @@ function fitChordBeatTracks(preview) {
     const width = track.getBoundingClientRect().width;
     const lanes = [];
     const ireal = Boolean(track.closest('.ireal-chart'));
-    const bass = track.classList.contains('bass-chart-chords');
-    const step = bass ? 28 : ireal ? 44 : 28;
+    const step = ireal ? 44 : 28;
     const entries=[...track.querySelectorAll('.chord-beat-event')].map(event => {
       const label = event.querySelector('.chord-beat-symbol');
       label.style.position = 'absolute';
       label.style.width = 'max-content';
       label.style.fontSize = '';
-      const minimum=bass ? Number(event.dataset.minLeft)*width/100 : 0;
-      const maximum=bass ? Number(event.dataset.maxRight)*width/100-4 : width;
+      const minimum=0;
+      const maximum=width;
       const available=Math.max(1,maximum-minimum);
       const naturalWidth = label.getBoundingClientRect().width;
       if (naturalWidth > available && width > 0) {
@@ -66,48 +55,20 @@ function fitChordBeatTracks(preview) {
       const onset = parseFloat(event.style.left)*width/100;
       return {event,label,minimum,maximum,width:labelWidth,onset};
     });
-    const packed=new Map();
-    if(bass) {
-      const measures=new Map();
-      entries.forEach(entry=>{
-        const key=`${entry.minimum}:${entry.maximum}`;
-        if(!measures.has(key))measures.set(key,[]);
-        measures.get(key).push(entry);
-      });
-      measures.forEach(labels=>{
-        const positions=packChordLabels(labels,labels[0].minimum,labels[0].maximum);
-        positions?.forEach((left,i)=>packed.set(labels[i],left));
-      });
-    }
     entries.forEach(entry=>{
       const {event,label,minimum,maximum,onset}=entry,labelWidth=entry.width;
-      const left = packed.get(entry) ?? Math.max(minimum, Math.min(onset, maximum-labelWidth));
-      let lane = packed.has(entry) ? 0 : lanes.findIndex(right => right+8 <= left);
+      const left = Math.max(minimum, Math.min(onset, maximum-labelWidth));
+      let lane = lanes.findIndex(right => right+8 <= left);
       if (lane < 0) lane = lanes.length;
       lanes[lane] = left+labelWidth;
       label.style.left = `${left-onset}px`; label.style.top = `${lane*step}px`;
       event.classList.toggle('offset-label', lane>0 || Math.abs(left-onset)>.5);
-      event.style.setProperty('--chord-label-bottom', `${lane*step+(bass ? 26 : ireal ? 34 : 22)}px`);
+      event.style.setProperty('--chord-label-bottom', `${lane*step+(ireal ? 34 : 22)}px`);
       event.style.setProperty('--chord-leader-left',`${Math.min(0,left-onset)}px`);
       event.style.setProperty('--chord-leader-width',`${Math.abs(left-onset)}px`);
     });
-    track.style.height = `${(bass ? 30 : ireal ? 70 : 54)+Math.max(0,lanes.length-1)*step}px`;
+    track.style.height = `${(ireal ? 70 : 54)+Math.max(0,lanes.length-1)*step}px`;
   });
-}
-
-function chartNotationAvailableWidth(container) {
-  const sheet=container.querySelector('.bass-chart');
-  const padding=node=>{
-    if(!node || typeof getComputedStyle!=='function') return 0;
-    const style=getComputedStyle(node);
-    return ['paddingLeft','paddingRight','borderLeftWidth','borderRightWidth'].reduce((total,key)=>total+(parseFloat(style[key])||0),0);
-  };
-  return Math.max(280,(container.clientWidth || 0)-padding(container)-padding(sheet));
-}
-
-function chartNotationWidth(systems,container) {
-  // Expand the music to the shared reading width, never its glyphs.
-  return Math.max(chartNotationAvailableWidth(container)/.65,...systems.filter(Boolean).map(system=>system.width));
 }
 
 let chartPlaybackNodes = new Map();
@@ -142,7 +103,7 @@ function registerChartPlayback() {
   const preview = state.chartRenderer === 'table' ? elements.barsTable : elements.chartPreview;
   if (!preview) return;
   chartPlaybackNodes = new Map();
-  preview.querySelectorAll('.ireal-measure, .measure-cell, .bass-chart-measure, .drum-measure, .alpha-chart-measure, .bass-chart-bar-select, .chordpro-measure, tbody tr').forEach(node => {
+  preview.querySelectorAll('.ireal-measure, .measure-cell, .alpha-chart-measure, .chordpro-measure, tbody tr').forEach(node => {
     const index = Number(node.dataset.index);
     if (!Number.isInteger(index)) return;
     if (!chartPlaybackNodes.has(index)) chartPlaybackNodes.set(index, []);
@@ -208,13 +169,11 @@ function updateChartPlayback(time, index) {
       event.classList.toggle('playing', time >= Number(event.dataset.start) && time < Number(event.dataset.end));
     });
   });
-  if(state.chartRenderer==='bass' && typeof highlightBassChartNotes==='function')highlightBassChartNotes(elements.chartPreview,time,index);
-  if(state.chartRenderer==='drums' && typeof highlightDrumHits==='function')highlightDrumHits(elements.chartPreview,time);
-  if(['alphatab','compare'].includes(state.notationRenderer) && typeof updateAlphaTabChartPlayback==='function')updateAlphaTabChartPlayback(time,index);
+  if(typeof updateAlphaTabChartPlayback==='function')updateAlphaTabChartPlayback(time,index);
   if (!state.chartAutoFollow || elements.audioPlayer?.paused || performance.now() < chartFollowSuspendedUntil) return;
   if (elements.chartResumeFollowBtn) elements.chartResumeFollowBtn.hidden = true;
   const node = nodes[0];
-  const system = node?._alphaSystem || node?.closest('.alpha-chart-system, .bass-chart-system, .ireal-row, .measure-grid-row, .chordpro-system') || node;
+  const system = node?._alphaSystem || node?.closest('.alpha-chart-system, .ireal-row, .measure-grid-row, .chordpro-system') || node;
   if (!system || system === chartFollowSystem) return;
   const bounds = system.getBoundingClientRect();
   const host = state.chartRenderer === 'table' ? elements.barsTable : elements.chartPreview;
@@ -233,20 +192,9 @@ function updateChartPlayback(time, index) {
 function finishChartLayout(preview=elements.chartPreview,registerPlayback=true) {
   if (!preview) return;
   preview.style.setProperty('--bars-per-line', chartBarsPerLine());
-  // Native SVG units use one physical scale for every system, including PDF.
   let width = 700;
-  preview.querySelectorAll('.bass-chart-flow').forEach(flow => {
-    const svg = flow.querySelector('svg');
-    if (!svg) return;
-    const units = Number(svg.getAttribute('viewBox')?.split(/\s+/)[2]);
-    if (!(units > 0)) return;
-    flow.style.width = `${units * .65}px`;
-    flow.style.minWidth = '0';
-    svg.style.width = `${units * .65}px`;
-    width = Math.max(width, units * .65);
-  });
   fitChordBeatTracks(preview);
-  const sheet=preview.querySelector('.alpha-chart, .bass-chart, .ireal-chart, .measure-grid-chart, .chordpro-chart');
+  const sheet=preview.querySelector('.alpha-chart, .ireal-chart, .measure-grid-chart, .chordpro-chart');
   if(sheet) width=Math.max(width,sheet.getBoundingClientRect().width);
   preview.style.setProperty('--chart-paper-width', `${width}px`);
   if(registerPlayback)registerChartPlayback();
@@ -260,7 +208,7 @@ async function prepareChartPrint() {
   finishChartLayout();
   // Preserve glyph scale on unusually dense scores by widening the page.
   const preview = elements.chartPreview;
-  if(Number.isFinite(alphaWidth))preview.style.setProperty('--chart-paper-width',`${alphaWidth*(state.notationRenderer==='compare'?2:1)}px`);
+  if(Number.isFinite(alphaWidth))preview.style.setProperty('--chart-paper-width',`${alphaWidth}px`);
   const width = Math.max(700, parseFloat(preview.style.getPropertyValue('--chart-paper-width')) || 700);
   let style = document.getElementById('chartPageSize');
   if (!style) { style = document.createElement('style'); style.id = 'chartPageSize'; document.head.append(style); }

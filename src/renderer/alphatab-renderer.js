@@ -1,4 +1,4 @@
-// Optional alphaTab renderer for the existing estimated bass/drum score views.
+// AlphaTab renderer for the estimated bass/drum score views.
 // ChordPilot remains responsible for analysis, timing, transport and selection.
 (function(){
   let runtime=null;
@@ -35,8 +35,9 @@
     .alpha-chart-error-details { margin-top:6px; color:#71321f; }
     .alpha-chart-error-details summary { cursor:pointer; }
     .alpha-chart-error-details pre { max-height:180px; overflow:auto; white-space:pre-wrap; font:11px/1.4 Consolas,monospace; }
-    .alpha-chart-fallback { min-width:0; }
-    .alpha-chart-fallback > .alpha-chart-error { margin-bottom:8px; }
+    .alpha-chart-error-panel { min-width:0; }
+    .alpha-chart-empty { color:#777; font-size:11px; line-height:1.5; margin:8px 4px; }
+    .alpha-chart-error-panel > .alpha-chart-error { margin-bottom:8px; }
     .alpha-chart-print { display:none; }
     .alpha-chart-print-part { position:relative; break-inside:avoid; page-break-inside:avoid; }
     .alpha-chart-print-part > svg { display:block; }
@@ -93,7 +94,7 @@
     }
     sheet.append(header);
     if(fixture.kind==='drums' && !fixture.chart.drums?.ok){
-      sheet.append(text('p','Select Analyse Drums to create the drum sheet.','bass-chart-empty'));
+      sheet.append(text('p','Select Analyse Drums to create the drum sheet.','alpha-chart-empty'));
       container.replaceChildren(sheet);return {sheet,engine:null,overlay:null};
     }
     const screen=text('div','','alpha-chart-screen'),engine=text('div','','alpha-chart-engine'),overlay=text('div','','alpha-chart-overlay');
@@ -112,7 +113,7 @@
     const tuning=BassTuning.configFor(fixture.strings);
     const lead=document.createElement('div');
     lead.textContent=converted.effectiveMode!==fixture.mode
-      ? `${fixture.mode==='tab'?'TAB-only':'Combined notation + TAB'} cannot represent every pitch on the selected ${fixture.strings}-string bass (${tuning.label}, ${BassTuning.rangeLabel(fixture.strings)}, 24 frets). AlphaTab is showing the complete standard notation; no pitches or rhythms were changed. Select the Current renderer to keep the existing TAB view.`
+      ? `${fixture.mode==='tab'?'TAB-only':'Combined notation + TAB'} cannot represent every pitch on the selected ${fixture.strings}-string bass (${tuning.label}, ${BassTuning.rangeLabel(fixture.strings)}, 24 frets). AlphaTab is showing the complete standard notation; no pitches or rhythms were changed.`
       : `${converted.diagnostics.length} note${converted.diagnostics.length===1?'':'s'} have no playable fingering on the selected ${fixture.strings}-string bass (${tuning.label}, ${BassTuning.rangeLabel(fixture.strings)}, 24 frets). The original pitch and rhythm remain in standard notation; affected TAB positions are left blank.`;
     panel.append(lead);
     if(converted.diagnostics.length){
@@ -275,25 +276,20 @@
     if(!runtime)return;
     runtime.resizeObserver?.disconnect();runtime.api?.destroy();runtime.sheet?.querySelector('.alpha-chart-print')?.remove();runtime=null;
   }
-  function showLegacyFallback(container,kind,error){
+  function showAlphaTabError(container,kind,error){
     destroyAlphaTabChart();
-    const wrapper=document.createElement('section');wrapper.className='alpha-chart-fallback';
+    const wrapper=document.createElement('section');wrapper.className='alpha-chart-error-panel';
     const notice=document.createElement('div');notice.className='alpha-chart-error';notice.setAttribute('role','alert');
     const message=error?.message||String(error);
-    notice.append(document.createTextNode(`alphaTab could not render this score (${message}). Showing the ChordPilot renderer so the score remains available.`));
+    notice.append(document.createTextNode(`alphaTab could not render this score (${message}). Your analysis and edits are preserved. Try rendering again.`));
     if(error?.stack){
       const details=document.createElement('details');details.className='alpha-chart-error-details';
       const summary=document.createElement('summary');summary.textContent='Technical details';
       const stack=document.createElement('pre');stack.textContent=error.stack;details.append(summary,stack);notice.append(details);
       console.error('alphaTab score render failed',error);
     }
-    const body=document.createElement('div');body.className='alpha-chart-fallback-body';wrapper.append(notice,body);container.replaceChildren(wrapper);
-    try{
-      if(kind==='bass')renderBassChartPreview(body);else renderDrumChartPreview(body);
-      finishChartLayout(body,false);registerChartPlayback();
-    }catch(fallbackError){
-      const detail=document.createElement('p');detail.className='alpha-chart-error';detail.textContent=`The fallback renderer also failed: ${fallbackError.message||fallbackError}`;wrapper.append(detail);
-    }
+    const retry=document.createElement('button');retry.type='button';retry.textContent='Retry rendering';
+    retry.addEventListener('click',()=>renderAlphaTabChartPreview(container));wrapper.append(notice,retry);container.replaceChildren(wrapper);
     return false;
   }
   function normalizeAlphaTabError(error){
@@ -310,7 +306,7 @@
     const kind=state.chartRenderer;
     if(!container||!['bass','drums'].includes(kind))return;
     let fixture;
-    try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showLegacyFallback(container,kind,error);}
+    try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showAlphaTabError(container,kind,error);}
     const measures=fixture.measures.map(source=>[
       source.number,source.start,source.end,source.section,Boolean(source.bar?.repeat_start),source.bar?.repeat_end,
       source.model.beats,source.model.beatValue,source.model.unitDenominator,source.model.anchors,
@@ -324,7 +320,7 @@
     const status=typeof transcriptionSheetStatus==='function'?transcriptionSheetStatus(fixture.chart,fixture.kind):'Unverified estimate';
     const key=JSON.stringify([kind,title,fixture.keyLabel,fixture.key,fixture.tempo,fixture.strings,fixture.mode,fixture.chart.drums?.ok,status,
       state.chordDisplayPreferences,chartBarsPerLine(),Math.round(container.clientWidth),measures]);
-    if(runtime?.key===key){
+    if(runtime?.key===key&&runtime.sheet.parentNode===container){
       if(runtime.ready){updateHighlights(chartPlaybackTime,chartPlaybackIndex);return true;}
       if(runtime.promise)return runtime.promise;
     }
@@ -332,10 +328,10 @@
     let view,converted;
     try{view=buildSheet(container,fixture);if(!view.engine)return;converted=AlphaTabScore.createScore(alphaTab,fixture,{barsPerLine:chartBarsPerLine()});showTabDiagnostics(view.sheet,fixture,converted);
       const display=view.sheet.querySelector('[aria-label="Bass notation display"]');if(display&&converted.effectiveMode!==fixture.mode)display.value=converted.effectiveMode;}
-    catch(error){return showLegacyFallback(container,kind,error);}
+    catch(error){return showAlphaTabError(container,kind,error);}
     let api;
     try{api=new alphaTab.AlphaTabApi(view.engine,nativeSettings(chartBarsPerLine()));}
-    catch(error){return showLegacyFallback(container,kind,error);}
+    catch(error){return showAlphaTabError(container,kind,error);}
     runtime={api,fixture,converted,...view,key,partials:new Map(),measureNodes:[],noteNodes:[],chordNodes:[],ready:false};
     const current=runtime;
     api.renderer.preRender.on(()=>{if(runtime===current)current.partials.clear();});
@@ -362,7 +358,7 @@
     });
     current.promise=(async()=>{
       try{await ready;}catch(error){
-        if(runtime===current)showLegacyFallback(container,kind,error);
+        if(runtime===current)showAlphaTabError(container,kind,error);
         return false;
       }
       if(runtime!==current)return false;
@@ -372,21 +368,18 @@
       });current.resizeObserver.observe(container);current.width=Math.round(api.container.width||0);
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       if(runtime!==current)return false;
-      updateHighlights(chartPlaybackTime,chartPlaybackIndex);finishChartLayout(container,state.notationRenderer!=='compare');
+      updateHighlights(chartPlaybackTime,chartPlaybackIndex);finishChartLayout(container);
       registerChartPlayback();return true;
     })();
     try{api.renderScore(converted.score,[0]);}
-    catch(error){return showLegacyFallback(container,kind,error);}
+    catch(error){return showAlphaTabError(container,kind,error);}
     return current.promise;
   }
   async function prepareAlphaTabPrint(){
-    if(!['alphatab','compare'].includes(state.notationRenderer)||!['bass','drums'].includes(state.chartRenderer))return null;
-    const container=state.notationRenderer==='compare'
-      ? elements.chartPreview.querySelector('.renderer-compare-alpha-body')
-      : elements.chartPreview;
-    await renderAlphaTabChartPreview(container||elements.chartPreview);
+    if(!['bass','drums'].includes(state.chartRenderer))return null;
+    await renderAlphaTabChartPreview();
     if(runtime?.ready)return printParts();
-    return null;
+    throw Error('The score could not be rendered for PDF export. Retry rendering before exporting.');
   }
   window.renderAlphaTabChartPreview=renderAlphaTabChartPreview;
   window.destroyAlphaTabChart=destroyAlphaTabChart;
