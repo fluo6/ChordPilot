@@ -218,16 +218,6 @@ function bassRhythm(notes, bar, barEnd, chart = {}) {
   return {beats,beatValue,totalUnits,unitDenominator,events,anchors};
 }
 
-function bassNotationTimeX(time, model, layout) {
-  const {anchors} = model;
-  if (!Number.isFinite(time) || time <= anchors[0]) return layout.startX;
-  if (time >= anchors.at(-1)) return layout.endX;
-  const beat = anchors.findIndex((end, index) => index > 0 && time < end) - 1;
-  const fraction = (time - anchors[beat]) / (anchors[beat + 1] - anchors[beat]);
-  const offset=(beat+fraction)*model.totalUnits/model.beats;
-  return layout.spacing ? layout.spacing.xAt(offset) : layout.startX+offset*layout.unitWidth;
-}
-
 function notationSpacing(offsets,total,left,right,startX,endX) {
   const gaps=offsets.slice(1).map((_,i)=>Math.max(24,right[i]+left[i+1]+8));
   const tail=Math.max(24,right.at(-1)+10);
@@ -301,7 +291,7 @@ function bassNotationVoices(model, key, strings, chordSymbols = []) {
   return {scoreNotes,tabNotes,scoreVoice,tabVoice};
 }
 
-function layoutBassNotation(model, voices, stave, tab, compact = false) {
+function layoutBassNotation(model, voices, stave, tab) {
   const {scoreNotes,tabNotes,scoreVoice,tabVoice}=voices;
   [...scoreNotes,...tabNotes].forEach(note=>note.setCenterAlignment(false));
   new Vex.Flow.Formatter().joinVoices([scoreVoice]).joinVoices([tabVoice])
@@ -318,13 +308,12 @@ function layoutBassNotation(model, voices, stave, tab, compact = false) {
   }
   const startX=stave.getNoteStartX()+left[0]+14;
   unitWidth=Math.max(unitWidth,(stave.getNoteEndX()-startX-24)/model.totalUnits);
-  const spacing=compact ? notationSpacing(model.events.map(e=>e.offset),model.totalUnits,left,right,startX,stave.getNoteEndX()-24) : null;
-  const endX=spacing ? spacing.endX : startX+model.totalUnits*unitWidth;
+  const endX=startX+model.totalUnits*unitWidth;
   const width=endX+Math.max(24,right.at(-1)+10)-stave.getX();
   stave.setWidth(width); tab.setWidth(width);
   scoreNotes.forEach((note,i)=>{
     const tick=note.getTickContext();
-    tick.setX(tick.getX()+(spacing ? spacing.positions[i] : startX+model.events[i].offset*unitWidth)-note.getCenterGlyphX());
+    tick.setX(tick.getX()+(startX+model.events[i].offset*unitWidth)-note.getCenterGlyphX());
     // TAB glyphs are narrower than noteheads. Shift the absolute drawing origin
     // (also used by stems, dots and ties), rather than just the glyph's x_shift.
     const fret=tabNotes[i];
@@ -332,11 +321,11 @@ function layoutBassNotation(model, voices, stave, tab, compact = false) {
     fret.setCenterXShift(note.getCenterGlyphX()-fret.getCenterGlyphX());
   });
   const beatUnits=model.beatValue===8 && model.beats>=6 && model.beats%3===0 ? denominator*3/8 : denominator/model.beatValue;
-  const beats=Array.from({length:model.totalUnits/beatUnits},(_,i)=>({number:i+1,x:spacing ? spacing.xAt(i*beatUnits) : startX+i*beatUnits*unitWidth}));
-  return {startX,endX,unitWidth,beats,spacing,left,right};
+  const beats=Array.from({length:model.totalUnits/beatUnits},(_,i)=>({number:i+1,x:startX+i*beatUnits*unitWidth}));
+  return {startX,endX,unitWidth,beats,left,right};
 }
 
-function layoutBassSystem(sources, strings, chart, key, minimumWidth = 400, compact = false) {
+function layoutBassSystem(sources, strings, chart, key, minimumWidth = 400) {
   const {Stave,TabStave,Clef,Beam,Fraction,Stem,Barline}=Vex.Flow;
   const measures=[];
   let scoreBottom=0,stemLength=35;
@@ -345,7 +334,7 @@ function layoutBassSystem(sources, strings, chart, key, minimumWidth = 400, comp
     const model=bassRhythm(notes,bar,barEnd,chart);
     if(!model) return;
     const first=measures.length===0;
-    const width=compact ? Math.max(160,model.events.length*18+90) : Math.max(minimumWidth/sources.length,model.events.length*48+160);
+    const width=Math.max(minimumWidth/sources.length,model.events.length*48+160);
     const stave=new Stave(8,12,width-16);
     const tab=new TabStave(8,0,width-16,{num_lines:strings,spacing_between_lines_px:14});
     if(first) {
@@ -396,7 +385,7 @@ function layoutBassSystem(sources, strings, chart, key, minimumWidth = 400, comp
     stave.setNoteStartX(start);tab.setNoteStartX(start);
     voices.scoreNotes.forEach(note=>note.setStave(stave));
     voices.tabNotes.forEach(note=>note.setStave(tab));
-    measure.layout=layoutBassNotation(model,voices,stave,tab,compact);
+    measure.layout=layoutBassNotation(model,voices,stave,tab);
     x=stave.getX()+stave.getWidth();
   });
   const connects=(left,right)=>Boolean(left?.tieToFollowingBar && right?.tieFromPrevious && left.midi===right.midi);
@@ -412,31 +401,6 @@ function layoutBassSystem(sources, strings, chart, key, minimumWidth = 400, comp
   const top=Math.min(0,...measures.flatMap(measure=>measure.voices.scoreNotes.flatMap(note=>note.getYs().map(y=>y-38))));
   const height=measures[0]?.tab.getYForLine(strings-1)+22 || 0;
   const system={measures,ties,scoreBottom,width:x+8,height,top};
-  if(compact) {
-    measures.forEach(measure=>measure.minimumWidth=measure.stave.getWidth());
-    fitBassSystem(system,minimumWidth);
-  }
-  return system;
-}
-
-function fitBassSystem(system,targetWidth) {
-  const widths=notationMeasureWidths(system.measures.map(measure=>measure.minimumWidth),targetWidth-16);
-  let x=8;
-  system.measures.forEach((measure,index)=>{
-    const {stave,tab,model,voices,layout}=measure;
-    const startInset=layout.startX-stave.getX(),endInset=stave.getX()+stave.getWidth()-layout.endX;
-    stave.setX(x).setWidth(widths[index]);tab.setX(x).setWidth(widths[index]);
-    const startX=x+startInset;
-    const spacing=notationSpacing(model.events.map(e=>e.offset),model.totalUnits,layout.left,layout.right,startX,x+widths[index]-endInset);
-    voices.scoreNotes.forEach((note,i)=>{
-      note.setStave(stave);voices.tabNotes[i].setStave(tab);
-      const tick=note.getTickContext();tick.setX(tick.getX()+spacing.positions[i]-note.getCenterGlyphX());
-    });
-    const beatUnits=model.beatValue===8 && model.beats>=6 && model.beats%3===0 ? model.unitDenominator*3/8 : model.unitDenominator/model.beatValue;
-    measure.layout={...layout,startX,endX:spacing.endX,spacing,beats:layout.beats.map((beat,i)=>({...beat,x:spacing.xAt(i*beatUnits)}))};
-    x+=widths[index];
-  });
-  system.width=x+8;
   return system;
 }
 

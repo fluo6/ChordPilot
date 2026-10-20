@@ -180,17 +180,15 @@ function drumControls(container) {
   if(state.drumError?.chart===state.chart) container.append(drumText('p',state.drumError.message,'drum-error'));
 }
 
-function renderDrumScore(container,sources,chart,paper=false,minimumWidth=paper ? 1000 : 380,engraving=null) {
-  const system=engraving ? fitDrumSystem(engraving,minimumWidth) : layoutDrumSystem(sources,chart,minimumWidth);
+function renderDrumScore(container,sources,chart) {
+  const system=layoutDrumSystem(sources,chart,380);
   const {Renderer}=Vex.Flow;
   const renderer=new Renderer(container,Renderer.Backends.SVG);renderer.resize(system.width,system.height);
-  const context=renderer.getContext();context.setFillStyle(paper?'#171717':'#e4e7ed');context.setStrokeStyle(paper?'#171717':'#e4e7ed');
+  const context=renderer.getContext();context.setFillStyle('#e4e7ed');context.setStrokeStyle('#e4e7ed');
   system.measures.forEach(measure=>{
     const {model,stave,notes,tuplets,beams}=measure;
     const group=context.openGroup('drum-measure');group.classList.add('drum-measure');group.dataset.index=String(measure.index ?? 0);
-    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    for(const [key,value] of Object.entries({x:stave.getX(),y:0,width:stave.getWidth(),height:system.height,fill:'transparent',stroke:'transparent',class:'drum-measure-hit'})) rect.setAttribute(key,String(value));
-    group.append(rect);stave.setContext(context).draw();
+    stave.setContext(context).draw();
     notes.forEach((note,i)=>{
       const item=model.events[i],hitGroup=context.openGroup('drum-hit');hitGroup.classList.add('drum-hit');
       if(item.hits.length) {
@@ -211,8 +209,7 @@ function renderDrumScore(container,sources,chart,paper=false,minimumWidth=paper 
 
 function highlightDrumHits(container,time) {
   container.querySelectorAll('.drum-current').forEach(group=>group.classList.remove('drum-current'));
-  const active=container.querySelector('.drum-measure.active') || container;
-  active.querySelectorAll('.drum-hit[data-times]').forEach(group=>{
+  container.querySelectorAll('.drum-hit[data-times]').forEach(group=>{
     group.classList.toggle('drum-current',JSON.parse(group.dataset.times).some(onset=>time>=onset && time<onset+.12));
   });
 }

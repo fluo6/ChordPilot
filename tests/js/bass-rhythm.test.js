@@ -6,7 +6,7 @@ const BassTuning=require('../../src/renderer/bass-tuning.js');
 function rhythm() {
   const Vex = require('../../src/renderer/vendor/vexflow-bravura-4.2.5.js');
   const {spellNotationPitch} = loadScript('src/renderer/chord-notation.js', ['spellNotationPitch']);
-  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'bassNotationTimeX', 'layoutBassSystem', 'notationMeasureWidths'], {Vex, spellNotationPitch,BassTuning}), Vex};
+  return {...loadScript('src/renderer/bass-view.js', ['bassRhythm', 'bassNotationVoices', 'layoutBassNotation', 'layoutBassSystem', 'notationMeasureWidths'], {Vex, spellNotationPitch,BassTuning}), Vex};
 }
 const note = (start, end, midi = 31) => ({start, end, midi, position:{string:4,fret:midi-28}});
 
@@ -36,7 +36,7 @@ test('tiny articulation gaps do not create micro-rests while fast measured attac
 test('later bass systems repeat the clef and key but omit an unchanged time signature',()=>{
   const {layoutBassSystem,Vex}=rhythm();
   const source={bar:{start:2},index:1,barEnd:4,notes:[note(2,4)]};
-  const result=layoutBassSystem([source],4,{time_signature:'4/4'},'Bb',500,true);
+  const result=layoutBassSystem([source],4,{time_signature:'4/4'},'Bb',500);
   for(const stave of [result.measures[0].stave,result.measures[0].tab]) {
     assert.equal(stave.getModifiers().filter(m=>m.getCategory()===Vex.Flow.TimeSignature.CATEGORY).length,0);
   }
@@ -91,28 +91,10 @@ test('continuous bass systems draw a single tie across a shared barline',()=>{
   ]);
 });
 
-test('compact bass systems justify to the shared width while score and TAB stay aligned',()=>{
-  const {layoutBassSystem}=rhythm();
-  const sources=Array.from({length:4},(_,i)=>({bar:{start:i*2},barEnd:i*2+2,
-    notes:Array.from({length:i===3?16:4},(_,j)=>note(i*2+j*(i===3?.125:.5),i*2+(j+1)*(i===3?.125:.5)))}));
-  const original=JSON.stringify(sources);
-  const system=layoutBassSystem(sources,4,{time_signature:'4/4'},'C',2400,true);
-  assert.ok(Math.abs(system.width-2400)<.01);
-  const widths=system.measures.map(measure=>measure.stave.getWidth());
-  assert.ok(Math.max(...widths)-Math.min(...widths)<1,'Use equal measures whenever their engraving minimums fit');
-  assert.ok(Math.min(...widths)>=2000/4*.65,'Sparse neighbours must remain readable');
-  for(const measure of system.measures) measure.voices.scoreNotes.forEach((score,i)=>{
-    assert.ok(Math.abs(score.getCenterGlyphX()-measure.voices.tabNotes[i].getCenterGlyphX())<1e-6);
-    assert.ok(score.getCenterGlyphX()>measure.stave.getX());
-    assert.ok(score.getCenterGlyphX()<measure.stave.getX()+measure.stave.getWidth());
-  });
-  assert.equal(JSON.stringify(sources),original);
-});
-
 test('bass score and TAB stay compact with clearance for stems and legible string spacing',()=>{
   const {layoutBassSystem}=rhythm();
   const source={bar:{start:0},barEnd:2,notes:[note(0,.5),note(.5,1),note(1,1.5),note(1.5,2)]};
-  const system=layoutBassSystem([source],4,{time_signature:'4/4'},'C',700,true);
+  const system=layoutBassSystem([source],4,{time_signature:'4/4'},'C',700);
   const {stave,tab}=system.measures[0];
   const gap=tab.getYForLine(0)-system.scoreBottom;
   assert.ok(gap>=50 && gap<=65,`Stem clearance should determine the staff-to-TAB gap: ${gap}`);
@@ -123,7 +105,7 @@ test('bass score and TAB stay compact with clearance for stems and legible strin
 test('TAB rhythm uses a clear upper lane for rests, flags and grouped stems',()=>{
   const {layoutBassSystem}=rhythm();
   for(const strings of [4,5]) {
-    const system=layoutBassSystem([{bar:{start:0},barEnd:2,notes:[note(0,.125),note(.125,.25),note(.5,.75),note(1,1.5)]}],strings,{time_signature:'4/4'},'C',1000,true);
+    const system=layoutBassSystem([{bar:{start:0},barEnd:2,notes:[note(0,.125),note(.125,.25),note(.5,.75),note(1,1.5)]}],strings,{time_signature:'4/4'},'C',1000);
     const m=system.measures[0],top=m.tab.getYForLine(0);
     m.voices.tabNotes.forEach((n,i)=>{
       if(m.model.events[i].sourceIndex===null)assert.ok(n.getYs()[0]<top-20,'Rests belong above the fret numbers');
@@ -152,26 +134,6 @@ test('balanced measure allocation honours dense minimums without starving sparse
   assert.ok(Math.abs(widths[2]-500)<.001);
   assert.ok(Math.abs(widths[0]-1100/3)<.001);
   assert.ok(Math.abs(widths.reduce((a,b)=>a+b,0)-1600)<.001);
-});
-
-test('chord labels align with score and TAB on uneven measured beats',()=>{
-  const {bassRhythm,bassNotationVoices,layoutBassNotation,bassNotationTimeX,Vex}=rhythm();
-  const times=[0,.3,.9,1.4,2];
-  const model=bassRhythm(times.slice(0,-1).map((start,i)=>note(start,times[i+1])),{start:0},2,
-    {time_signature:'4/4',beat_times:times});
-  const voices=bassNotationVoices(model,'C',4);
-  const stave=new Vex.Flow.Stave(8,12,500).addClef('bass');
-  const tab=new Vex.Flow.TabStave(8,126,500,{num_lines:4}).addTabGlyph();
-  const start=Math.max(stave.getNoteStartX(),tab.getNoteStartX());
-  stave.setNoteStartX(start);tab.setNoteStartX(start);
-  voices.scoreNotes.forEach(n=>n.setStave(stave));voices.tabNotes.forEach(n=>n.setStave(tab));
-  const layout=layoutBassNotation(model,voices,stave,tab);
-  times.slice(0,-1).forEach((time,i)=>{
-    assert.ok(Math.abs(bassNotationTimeX(time,model,layout)-voices.scoreNotes[i].getCenterGlyphX())<1e-6);
-    assert.ok(Math.abs(bassNotationTimeX(time,model,layout)-voices.tabNotes[i].getCenterGlyphX())<1e-6);
-  });
-  assert.equal(bassNotationTimeX(-1,model,layout),layout.startX);
-  assert.equal(bassNotationTimeX(3,model,layout),layout.endX);
 });
 
 test('bass score spells chromatic notes against the accompanying chord',()=>{

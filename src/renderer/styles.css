@@ -3268,8 +3268,6 @@ table {
 .drum-table-cell { min-width: 110px; }
 .drum-error { font-size: 11px; color: #e9a66f; overflow-wrap: anywhere; }
 .drum-current path { fill: #13b8a6 !important; stroke: #13b8a6 !important; }
-.drum-measure.selected .drum-measure-hit { fill: rgb(76 142 137 / 4%); stroke: #9cbeb9; }
-.drum-measure.active .drum-measure-hit { fill: rgb(76 142 137 / 6%); stroke: #76aaa3; }
 .transcription-review-panel { border: 1px solid var(--border); border-radius: 5px; margin: 8px 0; padding: 8px 10px; font-size: 11px; }
 .transcription-review-panel > summary { cursor: pointer; color: var(--muted); }
 .transcription-review-body { display: grid; gap: 8px; margin-top: 10px; }
@@ -3338,8 +3336,6 @@ table {
 .active > .chord-beat-track::after { display: block; }
 .ireal-measure:has(.chord-beat-track)::after, .measure-cell:has(.chord-beat-track)::after { display: none; }
 .ireal-measure.active, .measure-cell.active, .chordpro-measure.active { background: #ecf6f3; box-shadow: inset 0 -3px #4c8e89; }
-.drum-measure.active > .drum-measure-hit { fill: #e4f2ed; stroke: #74aaa0; }
-.drum-measure.selected:not(.active) > .drum-measure-hit { fill: #f0f5f8; }
 .ireal-measure.active::after, .measure-cell.active::after {
   content: ''; position: absolute; bottom: 2px; left: var(--playback-progress, 0%);
   width: 2px; height: 9px; background: #4c8e89; pointer-events: none;

@@ -276,7 +276,7 @@
     if(!runtime)return;
     runtime.resizeObserver?.disconnect();runtime.api?.destroy();runtime.sheet?.querySelector('.alpha-chart-print')?.remove();runtime=null;
   }
-  function showAlphaTabError(container,kind,error){
+  function showAlphaTabError(container,error){
     destroyAlphaTabChart();
     const wrapper=document.createElement('section');wrapper.className='alpha-chart-error-panel';
     const notice=document.createElement('div');notice.className='alpha-chart-error';notice.setAttribute('role','alert');
@@ -306,7 +306,7 @@
     const kind=state.chartRenderer;
     if(!container||!['bass','drums'].includes(kind))return;
     let fixture;
-    try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showAlphaTabError(container,kind,error);}
+    try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showAlphaTabError(container,error);}
     const measures=fixture.measures.map(source=>[
       source.number,source.start,source.end,source.section,Boolean(source.bar?.repeat_start),source.bar?.repeat_end,
       source.model.beats,source.model.beatValue,source.model.unitDenominator,source.model.anchors,
@@ -328,10 +328,10 @@
     let view,converted;
     try{view=buildSheet(container,fixture);if(!view.engine)return;converted=AlphaTabScore.createScore(alphaTab,fixture,{barsPerLine:chartBarsPerLine()});showTabDiagnostics(view.sheet,fixture,converted);
       const display=view.sheet.querySelector('[aria-label="Bass notation display"]');if(display&&converted.effectiveMode!==fixture.mode)display.value=converted.effectiveMode;}
-    catch(error){return showAlphaTabError(container,kind,error);}
+    catch(error){return showAlphaTabError(container,error);}
     let api;
     try{api=new alphaTab.AlphaTabApi(view.engine,nativeSettings(chartBarsPerLine()));}
-    catch(error){return showAlphaTabError(container,kind,error);}
+    catch(error){return showAlphaTabError(container,error);}
     runtime={api,fixture,converted,...view,key,partials:new Map(),measureNodes:[],noteNodes:[],chordNodes:[],ready:false};
     const current=runtime;
     api.renderer.preRender.on(()=>{if(runtime===current)current.partials.clear();});
@@ -358,7 +358,7 @@
     });
     current.promise=(async()=>{
       try{await ready;}catch(error){
-        if(runtime===current)showAlphaTabError(container,kind,error);
+        if(runtime===current)showAlphaTabError(container,error);
         return false;
       }
       if(runtime!==current)return false;
@@ -372,7 +372,7 @@
       registerChartPlayback();return true;
     })();
     try{api.renderScore(converted.score,[0]);}
-    catch(error){return showAlphaTabError(container,kind,error);}
+    catch(error){return showAlphaTabError(container,error);}
     return current.promise;
   }
   async function prepareAlphaTabPrint(){

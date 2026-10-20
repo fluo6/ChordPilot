@@ -124,9 +124,8 @@ Artifacts are in `outputs/notation-validation/`, including `drums-2.pdf`,
 
 Reproduce the integration/print checks:
 
-```text
-node_modules/.bin/electron scripts/testing/notation-layout-smoke.cjs
-python scripts/testing/check-notation-pdfs.py
+```powershell
+npm run smoke:notation
 npm run test:unit
 ```
 
@@ -173,10 +172,7 @@ The before/after JSON records notation counts and label collisions; use the
 current `after-*.png` for visual inspection.
 
 ```powershell
-npx electron scripts/testing/bass-readability-smoke.cjs after
-$env:CHORDPILOT_NOTATION_SMOKE_OUTPUT = 'outputs/bass-readability/full'
-npx electron scripts/testing/notation-layout-smoke.cjs
-python scripts/testing/check-notation-pdfs.py
+npm run smoke:notation
 npm run test:unit
 ```
 
@@ -216,8 +212,7 @@ Evidence is under `outputs/bass-engraving/`: `after-4-1672.png`,
 `after.json`, `full-song.json`, `pdf-check.json` and `unit-tests.log`.
 
 ```powershell
-npx electron scripts/testing/bass-engraving-smoke.cjs
-python scripts/testing/check-bass-engraving-pdfs.py
+npm run smoke:notation
 npm run test:unit
 ```
 
@@ -274,10 +269,6 @@ Artifacts: `outputs/bass-polish/after-4.png`, `after-2.png`, `before.json`,
 `after.json`, `layout.log`, `unit-tests.log`, `full/` and `pdf-check.log`.
 
 ```powershell
-$env:CHORDPILOT_READABILITY_OUTPUT = 'outputs/bass-polish'
-npx electron scripts/testing/bass-readability-smoke.cjs after
-$env:CHORDPILOT_NOTATION_SMOKE_OUTPUT = 'outputs/bass-polish/full'
-npx electron scripts/testing/notation-layout-smoke.cjs
-python scripts/testing/check-notation-pdfs.py
+npm run smoke:notation
 npm run test:unit
 ```
