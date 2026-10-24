@@ -189,6 +189,7 @@ function updateActiveBarFromPlayback() {
 }
 
 function renderBars() {
+  if (typeof syncCompactWorkspace === "function") syncCompactWorkspace();
   elements.barsBody.innerHTML = "";
   if (elements.chartPreview) {
     elements.chartPreview.innerHTML = "";
@@ -704,11 +705,13 @@ function renderIrealPreview(container) {
 
   let lastSection='';
   chartRows().forEach((row) => {
-    if(row[0].section && row[0].section!==lastSection) {
-      const section=document.createElement('h3');section.className='chart-section-label';section.textContent=row[0].section;chart.append(section);lastSection=row[0].section;
-    }
     const rowEl = document.createElement("div");
     rowEl.className = "ireal-row";
+    if(row[0].section && row[0].section!==lastSection) {
+      const section=document.createElement('span');
+      section.className='ireal-section-label';section.textContent=row[0].section;
+      section.title=row[0].section;rowEl.append(section);lastSection=row[0].section;
+    }
     row.forEach(({ bar, index }) => {
       const measure = document.createElement("button");
       measure.type = "button";
@@ -789,6 +792,7 @@ function renderChartPreview() {
   renderLyricsReferencePanel();
   if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
 
+  if (typeof syncChartWorkspace === "function") syncChartWorkspace();
   const renderer = state.chartRenderer || "ireal";
   if(typeof updateSpreadsheetChartControls==='function') updateSpreadsheetChartControls();
   if(elements.barsPerLineInput) elements.barsPerLineInput.disabled=renderer==='table';
@@ -839,6 +843,7 @@ function setDetailChordEditing(editing) {
 }
 
 function updateDetailPane() {
+  if(typeof syncAnalysisWorkspace==='function')syncAnalysisWorkspace();
   if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
   const bar = getSelectedBar();
   if (elements.detailChordEditBtn) {
@@ -955,15 +960,14 @@ function updateDetailPane() {
 
   const alternativeContainer = elements.detailChordAlternatives || elements.detailAlternatives;
   if (elements.detailChordAlternatives) elements.detailChordAlternatives.replaceChildren();
-  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.filter(item => item.chord !== display.chord).slice(0, 3) : [];
+  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.filter(item => item.chord !== display.chord) : [];
   alternatives.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = `${displayChordSymbol(item.chord, false)} · ${formatConfidence(item.score)}`;
     button.title = `Use ${item.chord}`;
     button.addEventListener("click", () => {
-      display.chord = item.chord;
-      if (event) syncBarChordSummary(bar);
+      applySelectedChordCorrection('chord', item.chord);
       renderBars();
     });
     alternativeContainer.appendChild(button);
@@ -996,7 +1000,7 @@ function renderChartReasonPane(bar = getSelectedBar()) {
   why.textContent = chordEvidenceText(display, state.selectedIndex);
   elements.chartReasonPane.append(chord, confidence, why, createPianoEvidence(display));
 
-  const alternatives = Array.isArray(display.alternatives) ? display.alternatives.slice(0, 6) : [];
+  const alternatives = Array.isArray(display.alternatives) ? display.alternatives : [];
   if (alternatives.length) {
     const list = document.createElement("div");
     list.className = "chart-reason-options";
@@ -1008,14 +1012,14 @@ function renderChartReasonPane(bar = getSelectedBar()) {
       symbol.textContent = displayChordSymbol(item.chord, false);
       option.append(symbol, ` ${formatConfidence(item.score)}`);
       option.addEventListener("click", () => {
-        display.chord = item.chord;
-        if (display !== bar) syncBarChordSummary(bar);
+        applySelectedChordCorrection('chord',item.chord);
         renderBars();
       });
       list.appendChild(option);
     });
     elements.chartReasonPane.appendChild(list);
   }
+  if(typeof renderChartWorkspaceInspector==='function')renderChartWorkspaceInspector(display);
 }
 
 function suggestionItemsForBar(bar) {

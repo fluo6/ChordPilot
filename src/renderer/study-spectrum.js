@@ -50,7 +50,7 @@ function averageSpectrumFrames(frames) {
         frequency_hz: peak.frequencySum / peak.power, level_db: Math.min(0, 10 * Math.log10(peak.power / maximum)) })) };
 }
 
-function createSpectrumPlot(spectrum, source, range = [], { compact = false, comparisonSpectrum = null, tailSpectrum = null, weightedSpectrum = null } = {}) {
+function createSpectrumPlot(spectrum, source, range = [], { compact = false, height = compact ? 240 : 310, comparisonSpectrum = null, tailSpectrum = null, weightedSpectrum = null } = {}) {
   const svgNode = (tag, attributes = {}, text = "") => {
     const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
     Object.entries(attributes).forEach(([name, value]) => element.setAttribute(name, value));
@@ -58,8 +58,8 @@ function createSpectrumPlot(spectrum, source, range = [], { compact = false, com
     return element;
   };
   const left = compact ? 42 : 50, right = compact ? 340 : 740;
-  const top = compact ? 76 : 90, bottom = compact ? 200 : 270;
-  const svg = svgNode("svg", { viewBox: compact ? "0 0 360 240" : "0 0 760 310", role: "img", "aria-label": `${source} frequency spectrum, ${range[0]}–${range[1]} seconds` });
+  const top = compact ? 76 : Math.min(90, height - 122), bottom = height - 40;
+  const svg = svgNode("svg", { viewBox: `0 0 ${compact ? 360 : 760} ${height}`, role: "img", "aria-label": `${source} frequency spectrum, ${range[0]}–${range[1]} seconds` });
   const low = spectrum.frequencies_hz[0];
   const high = spectrum.frequencies_hz.at(-1);
   const x = (frequency) => left + Math.max(0, Math.min(1, Math.log(frequency / low) / Math.log(high / low))) * (right - left);
@@ -231,7 +231,7 @@ function renderDetailSpectrum(frame, stabilizedFrame = null) {
   animation?.beginElement?.();
 }
 
-function createStudySpectrum(run) {
+function createStudySpectrum(run, { plotHeight = 310 } = {}) {
   const textNode = (tag, text, className = "") => {
     const element = document.createElement(tag);
     element.textContent = text; element.className = className;
@@ -261,7 +261,7 @@ function createStudySpectrum(run) {
     const spectrum = evidence.spectrum;
     const tailSpectrum = evidence.tail_reduced_spectrum;
     const weightedSpectrum = evidence.overtone_weighted_spectrum;
-    plot.replaceChildren(createSpectrumPlot(spectrum, selector.value, run.range, { tailSpectrum, weightedSpectrum }));
+    plot.replaceChildren(createSpectrumPlot(spectrum, selector.value, run.range, { tailSpectrum, weightedSpectrum, height: plotHeight }));
     fitSpectrumText(section);
     legend.replaceChildren();
     const labels = [["current", "Original"]];

@@ -102,16 +102,18 @@ function renderDetailChordNotation(frame, symbol) {
   container.title = `${label}. Strongest measured octave per chord tone (at least −24 dB), plus measured bass. Whole-note heads indicate pitches, not duration.`;
   try {
     const { Renderer, Stave, StaveNote, StaveConnector, Voice, Formatter, Accidental } = Vex.Flow;
-    const width = 260;
-    const renderer = new Renderer(container, Renderer.Backends.SVG);
-    renderer.resize(width, 220);
-    const context = renderer.getContext();
-    context.setFillStyle('#d8e1ec'); context.setStrokeStyle('#8d9caf');
-    const treble = new Stave(10, 30, width - 20).addClef('treble');
-    const bass = new Stave(10, 120, width - 20).addClef('bass');
+    // A compact grand staff keeps the glyphs legible in the narrow inspector.
+    const treble = new Stave(10, 30, 180).addClef('treble');
+    const bass = new Stave(10, 150, 180).addClef('bass');
     if (keySignature) [treble, bass].forEach(stave => stave.addKeySignature(keySignature));
     const noteStart = Math.max(treble.getNoteStartX(), bass.getNoteStartX());
-    [treble, bass].forEach(stave => { stave.setNoteStartX(noteStart); stave.setContext(context).draw(); });
+    // Allow extra room for wide key signatures and chord accidentals.
+    const width = Math.max(200, noteStart + 90);
+    const renderer = new Renderer(container, Renderer.Backends.SVG);
+    renderer.resize(width, 260);
+    const context = renderer.getContext();
+    context.setFillStyle('#d8e1ec'); context.setStrokeStyle('#8d9caf');
+    [treble, bass].forEach(stave => { stave.setWidth(width - 20); stave.setNoteStartX(noteStart); stave.setContext(context).draw(); });
     new StaveConnector(treble, bass).setType(StaveConnector.type.BRACE).setContext(context).draw();
     const voices = [], notes = [];
     for (const [clef, stave, pitches] of [
@@ -134,7 +136,7 @@ function renderDetailChordNotation(frame, symbol) {
     voices.forEach(({ voice, stave }) => voice.draw(context, stave));
     const ys = notes.flatMap(note => note.getYs());
     const top = Math.min(10, ...ys.map(y => y - 24));
-    const bottom = Math.max(210, ...ys.map(y => y + 24));
+    const bottom = Math.max(250, ...ys.map(y => y + 24));
     const svg = container.querySelector('svg');
     svg.setAttribute('viewBox', `0 ${top} ${width} ${bottom - top}`);
     svg.setAttribute('height', String(bottom - top));

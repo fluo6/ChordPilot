@@ -277,6 +277,7 @@ function renderStudyWaveform() {
   }
   studyElement("studyWaveHint").textContent = "Wheel to zoom around the selection; pan away to zoom under the mouse. Drag waveform to pan; drag selection or its edges to adjust. Ctrl/⌘-click endpoints or enable Select Range." + (peaks.length ? "" : " Analyze the song for a waveform preview.");
   state.study.waveScrollLeft = studyElement("studyWaveViewport").scrollLeft;
+  if(typeof renderPrototypeStudyTimeline==='function')renderPrototypeStudyTimeline();
 }
 function renderStudyChordOverlaps(run, container) {
   const overlaps = studyChordOverlaps(state.chart?.bars, run.range[0], run.range[1]);
@@ -300,6 +301,7 @@ function renderStudyChordOverlaps(run, container) {
   container.append(section);
 }
 function renderStudyResult() {
+  if (typeof preparePrototypeStudyResult === 'function') preparePrototypeStudyResult();
   const container = studyElement("studyResult"); container.replaceChildren();
   const run = studyCurrentRun(); const runs = studyCurrentRuns();
   const history = studyElement("studyRunInput"); history.replaceChildren();
@@ -338,7 +340,7 @@ function renderStudyResult() {
   }
   if (run.bass_reference) container.append(studyText("p", `${run.bass_reference.origin === "accompaniment" ? "Low accompaniment note" : "Bass reference"}: ${run.bass_reference.note} · ${Math.round(run.bass_reference.confidence * 100)}% confidence`));
   if (run.source_evidence?.bass?.used_for_notes === false) container.append(studyText("p", "No reliable bass fundamental was found; its original spectrum remains available.", "study-muted"));
-  container.append(createStudySpectrum(run));
+  container.append(createStudySpectrum(run, { plotHeight: 200 }));
   const alternatives = studyText("div", "", "study-candidates");
   (run.alternatives || []).forEach((item) => {
     const button = studyText("button", `${displayChordSymbol(item.chord, false, run.key_context?.key || run.settings?.known_key || run.settings?.song_key)} · ${Math.round(item.score * 100)}%`); button.type = "button";
@@ -359,6 +361,7 @@ function renderStudyResult() {
     fields.forEach((row) => { const tr = document.createElement("tr"); row.forEach((text) => tr.append(studyText("td", String(text ?? "")))); table.append(tr); });
     container.append(table);
   }
+  if (typeof arrangePrototypeStudyResult === 'function') arrangePrototypeStudyResult();
 }
 function renderStudy() {
   if (!elements.studyPanel) return;
@@ -394,6 +397,7 @@ function renderStudy() {
     row.append(button, remove); list.append(row);
   });
   renderStudyWaveform(); renderStudyResult();
+  if (typeof syncPrototypeStudy === 'function') syncPrototypeStudy();
 }
 function initializeStudy() {
   if (!elements.studyPanel) return;

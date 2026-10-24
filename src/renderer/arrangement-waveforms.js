@@ -8,9 +8,9 @@ function normalizeWaveformView(value = {}) {
     heightZoom: [.75, 1, 1.5, 2, 3, 4].includes(heightZoom) ? heightZoom : 1, trackHeights};
 }
 
-function waveformTrackHeight(view, name) {
-  const base = Object.hasOwn(view.trackHeights, name) ? view.trackHeights[name] : 72;
-  return Math.round(Math.max(64, Math.min(720, base * view.heightZoom)));
+function waveformTrackHeight(view, name, defaultHeight = typeof analysisDefaultTrackHeight === 'function' ? analysisDefaultTrackHeight() : 56) {
+  const base = Object.hasOwn(view.trackHeights, name) ? view.trackHeights[name] : defaultHeight;
+  return Math.round(Math.max(48, Math.min(720, base * view.heightZoom)));
 }
 
 function resizeArrangementWaveform(lane) {
@@ -26,7 +26,7 @@ function resizeArrangementWaveform(lane) {
 
 function setWaveformTrackHeight(lane, pixels) {
   const view = normalizeWaveformView(state.waveformView);
-  const height = Math.max(64, Math.min(720, Number(pixels) || 72));
+  const height = Math.max(48, Math.min(720, Number(pixels) || 56));
   state.waveformView = {...view, trackHeights: {...view.trackHeights, [lane.dataset.trackName]: height / view.heightZoom}};
   resizeArrangementWaveform(lane);
 }
@@ -46,12 +46,13 @@ function setWaveformView(field, value) {
 
 function initializeWaveformLane(lane, options) {
   lane.dataset.trackName = options.name;
+  if(typeof decoratePrototypeTrack==='function')decoratePrototypeTrack(lane);
   lane.querySelector('canvas')._waveformPeaks = options.waveform || [];
   const handle = document.createElement('div');
   handle.className = 'waveform-height-handle'; handle.tabIndex = 0;
   handle.setAttribute('role', 'separator'); handle.setAttribute('aria-orientation', 'horizontal');
   handle.setAttribute('aria-label', `Resize ${options.name} track height`);
-  handle.setAttribute('aria-valuemin', '64'); handle.setAttribute('aria-valuemax', '720');
+  handle.setAttribute('aria-valuemin', '48'); handle.setAttribute('aria-valuemax', '720');
   handle.title = `Drag to resize ${options.name} · double-click to reset · ↑ / ↓ to adjust`;
   let drag = null;
   handle.addEventListener('pointerdown', event => {
@@ -72,7 +73,10 @@ function initializeWaveformLane(lane, options) {
   });
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(name => handle.addEventListener(name, finish));
   handle.addEventListener('click', event => {event.preventDefault(); event.stopPropagation();});
-  const reset = () => setWaveformTrackHeight(lane, 72 * state.waveformView.heightZoom);
+  const reset = () => {
+    delete state.waveformView.trackHeights[options.name];
+    resizeArrangementWaveform(lane);
+  };
   handle.addEventListener('dblclick', event => {event.preventDefault(); event.stopPropagation(); reset();});
   handle.addEventListener('keydown', event => {
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End', ' ', 'Enter'].includes(event.key)) return;

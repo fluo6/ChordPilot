@@ -5,14 +5,14 @@ elements.simplifyChordsInput.addEventListener("change", () => {
   renderBars();
   renderTimeline();
 });
-elements.analyzeBtn.addEventListener("click", analyzeAudio);
+elements.analyzeBtn.addEventListener("click", event => openAnalysisSetup(event));
 elements.openSessionBtn.addEventListener("click", openSession);
 elements.saveSessionBtn.addEventListener("click", saveSession);
 elements.saveSessionAsBtn.addEventListener("click", () => saveSession({ saveAs: true }));
 elements.homeNewProjectBtn.addEventListener("click", chooseAudio);
 elements.youtubeStartForm.addEventListener("submit", startFromYoutubeLink);
 elements.homeOpenSessionBtn.addEventListener("click", openSession);
-elements.homeGoSongBtn.addEventListener("click", () => openEditorPanel("arrange"));
+elements.homeGoSongBtn.addEventListener("click", () => openEditorPanel("analysis"));
 elements.clearRecentBtn.addEventListener("click", () => {
   state.recentSessions = [];
   saveRecentSessions();
@@ -186,7 +186,7 @@ elements.trackHeightZoomInput.addEventListener('change', () => setWaveformView('
 elements.timelineFollowInput.addEventListener("change", () => setTimelineFollow(elements.timelineFollowInput.checked));
 elements.zoomOutBtn.addEventListener("click", () => setTimelineZoom(state.timelineZoom - 0.5));
 elements.zoomInBtn.addEventListener("click", () => setTimelineZoom(state.timelineZoom + 0.5));
-elements.zoomFitBtn.addEventListener("click", () => setTimelineZoom(1));
+elements.zoomFitBtn.addEventListener("click", () => {state.timelineFit=true;applyTimelineZoom({render:true});});
 elements.collapseToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSection(button));
 });

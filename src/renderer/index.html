@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChordPilot</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./prototype-workspace.css" />
+    <link rel="stylesheet" href="./song-details.css" />
   </head>
   <body>
     <div id="globalProgressBar" class="global-progress-bar hidden" role="progressbar" aria-label="Analysis in progress"></div>
-    <div class="app-frame">
-      <aside id="leftPane" class="left-pane">
-        <button id="leftPaneToggle" class="left-pane-toggle" type="button" title="Collapse navigation">&lt;</button>
+    <div class="app-frame rail-collapsed">
+      <aside id="leftPane" class="left-pane collapsed-rail">
+        <button id="leftPaneToggle" class="left-pane-toggle" type="button" title="Expand navigation" aria-label="Expand navigation" aria-expanded="false">&gt;</button>
         <div class="nav-brand">
           <strong>ChordPilot</strong>
           <span>Projects</span>
@@ -22,21 +24,15 @@
             </span>
             <span class="nav-label">Home</span>
           </button>
-          <button class="nav-item project-nav" type="button" data-editor-view="arrange" title="Song">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></svg>
-            </span>
-            <span class="nav-label">Song</span>
-          </button>
-          <button class="nav-item project-nav" type="button" data-editor-view="study" title="Local Study">
+          <button class="nav-item project-nav" type="button" data-editor-view="study" title="Passage Lab">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M4 12h16M9 8v8M15 8v8" /></svg></span>
-            <span class="nav-label">Local Study</span>
+            <span class="nav-label">Lab</span>
           </button>
-          <button class="nav-item project-nav" type="button" data-editor-view="analysis" title="Analysis">
+          <button class="nav-item project-nav" type="button" data-editor-view="analysis" title="Timeline">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" /></svg>
             </span>
-            <span class="nav-label">Analysis</span>
+            <span class="nav-label">Timeline</span>
           </button>
           <button class="nav-item project-nav" type="button" data-editor-view="log" title="Log">
             <span class="nav-icon" aria-hidden="true">
@@ -45,11 +41,11 @@
             <span class="nav-label">Log</span>
             <span id="navLogSpinner" class="nav-busy-dot hidden" title="Analysis running"></span>
           </button>
-          <button class="nav-item project-nav" type="button" data-editor-view="table" title="Table">
+          <button class="nav-item project-nav" type="button" data-editor-view="table" title="Charts">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z" /><path d="M4 10h16" /><path d="M4 15h16" /><path d="M10 5v14" /><path d="M16 5v14" /></svg>
             </span>
-            <span class="nav-label">Table</span>
+            <span class="nav-label">Charts</span>
           </button>
           <button class="nav-item" type="button" data-view="help" title="Help">
             <span class="nav-icon" aria-hidden="true">
@@ -77,7 +73,7 @@
           <section class="home-panel">
             <div class="home-panel-head">
               <strong>Current Project</strong>
-              <button id="homeGoSongBtn" type="button" disabled>Open Song</button>
+              <button id="homeGoSongBtn" type="button" disabled>Continue to Timeline</button>
             </div>
             <div id="currentProjectCard" class="current-project-card">
               <span>No project selected</span>
@@ -177,9 +173,9 @@
             <article class="help-section">
               <h2>Views</h2>
               <dl class="help-defs">
-                <dt>Song</dt>
-                <dd>Transport, arrangement lanes, chords, beats, lyrics, stems, and bar detail.</dd>
-                <dt>Analysis</dt>
+                <dt>Timeline</dt>
+                <dd>Transport, arrangement lanes, chords, beats, lyrics, stems, and Bar / Beat Detail. Open Song Details from the info button beside the song title.</dd>
+                <dt>Analysis Setup</dt>
                 <dd>Controls for tempo range, key hints, chord source, stems, cache, and lyrics.</dd>
                 <dt>Table</dt>
                 <dd>Chord chart, editable table, measure grid, bass tab and score with chords, and ChordPro views.</dd>
@@ -331,20 +327,20 @@
                   <li>A clear local triad contrasting with nearby roots protects the local chord: at least 75% of pitch strength in its root, third, and fifth, with at least 10% in each.</li>
                 </ul>
                 <p>These numbers are internal score weights, not percentages of audio removed. The separate experimental Tail Reduction setting defaults to <strong>0% (off)</strong>.</p>
-                <p>If the separated Bass stem is below 0.00001 RMS or below 3% of the accompaniment's RMS, it is too quiet to supply reliable roots. Local Study compares it against the loudest selected non-Bass source. A strong measured low accompaniment pitch can provide a fallback, labelled with its source. This is a low note, not proof of the chord root. Upper tones are not promoted past a weaker detected lower note, and compatible inversions remain available.</p>
+                <p>If the separated Bass stem is below 0.00001 RMS or below 3% of the accompaniment's RMS, it is too quiet to supply reliable roots. Passage Lab compares it against the loudest selected non-Bass source. A strong measured low accompaniment pitch can provide a fallback, labelled with its source. This is a low note, not proof of the chord root. Upper tones are not promoted past a weaker detected lower note, and compatible inversions remain available.</p>
                 <p>For guitar passages with a weak Bass stem, two corroborating low-note and guide-tone observations can bound the stability context. Observations need clear third/seventh evidence, and ambiguous nested pitch sets can remain one harmony. A confirmed root receives a score bonus equal to the transition cost (0.8 Balanced, 1.6 Sustained) per beat of evidence. This keeps changing upper voicings from replacing a supported ii–V–I with a later tonic. Original cell evidence and context boundaries remain saved.</p>
                 <p>A slash-voicing winner can corroborate a different root only when a matching-root candidate is within 0.35 raw score units and retains its strongly measured chord tones. Retained pitch peaks are used when available, so broad spectral spill does not protect an unmeasured note. This avoids turning a supported Cmaj9/E inversion into Em7.</p>
-                <p>A dominant 13th voicing can omit the fifth and ninth when the measured major third, minor seventh and thirteenth each supply at least 6% of normalized chroma. The seventh and thirteenth then count as essential tones. A weak or absent defining tone retains the ordinary missing-tone penalties. This applies to both song analysis and Local Study; chord formulas remain supplied by PyChord.</p>
-                <p>Seventh voicings can also omit a weak perfect fifth when the independently measured third and seventh each supply at least 6% of chroma. If the fifth remains below the 4.5% essential-tone threshold after bass blending, the measured seventh replaces it in essential-tone scoring. Sixth chords, altered fifths and suspended chords keep their ordinary requirements. This shared rule applies to song analysis and Local Study.</p>
+                <p>A dominant 13th voicing can omit the fifth and ninth when the measured major third, minor seventh and thirteenth each supply at least 6% of normalized chroma. The seventh and thirteenth then count as essential tones. A weak or absent defining tone retains the ordinary missing-tone penalties. This applies to both song analysis and Passage Lab; chord formulas remain supplied by PyChord.</p>
+                <p>Seventh voicings can also omit a weak perfect fifth when the independently measured third and seventh each supply at least 6% of chroma. If the fifth remains below the 4.5% essential-tone threshold after bass blending, the measured seventh replaces it in essential-tone scoring. Sixth chords, altered fifths and suspended chords keep their ordinary requirements. This shared rule applies to song analysis and Passage Lab.</p>
               </details>
               <details>
                 <summary>Half-diminished chords and harmonic families</summary>
-                <p>A root partial can resemble a major third and favor a dominant chord over m7♭5. With Overtone Weighting enabled, Auto/Fixed timing and Local Study can give a close half-diminished candidate extra support when root, minor third, flattened fifth and seventh are all measured. Root and minor third also need matching octave peaks. A major-third peak inside the voicing additionally requires measured roots one and two octaves below, close frequency agreement with the lowest root's fifth partial, and a minor third at least 3 dB stronger. Higher major-third peaks may follow that corroborated peak's measured octaves. Conflicting bass, missing tones, stronger independent major thirds or poorly matched frequencies block the preference.</p>
+                <p>A root partial can resemble a major third and favor a dominant chord over m7♭5. With Overtone Weighting enabled, Auto/Fixed timing and Passage Lab can give a close half-diminished candidate extra support when root, minor third, flattened fifth and seventh are all measured. Root and minor third also need matching octave peaks. A major-third peak inside the voicing additionally requires measured roots one and two octaves below, close frequency agreement with the lowest root's fifth partial, and a minor third at least 3 dB stronger. Higher major-third peaks may follow that corroborated peak's measured octaves. Conflicting bass, missing tones, stronger independent major thirds or poorly matched frequencies block the preference.</p>
                 <p>The credit is 1.3 × Overtone Weighting strength, capped at 0.65 raw score units, and applies only within that score gap. Merged events weight support by cell duration. This is a conservative ranking heuristic, not proof that an upper note is an overtone. It does not remove spectrum peaks, change keyboard notes or infer a missing root. Noisy transitions and weak minor thirds can still return another chord.</p>
               </details>
               <details>
                 <summary>Fading roots and early chord evidence</summary>
-                <p>Auto timing and Local Study can retain a chord supported by the first 250 ms of a 0.5–2 second interval when its root fades. This uses only audio inside that cell or selection. Fixed timing keeps its original cell ranking.</p>
+                <p>Auto timing and Passage Lab can retain a chord supported by the first 250 ms of a 0.5–2 second interval when its root fades. This uses only audio inside that cell or selection. Fixed timing keeps its original cell ranking.</p>
                 <p>The early chord needs a clear lead, its root must remain measured in the same octave and within 30 cents, and its defining tones must persist. New strong notes or clear low-note guidance block the preference. A conflicting major/minor third with at least 6% of measured pitch-class evidence also blocks it, even when weak in the individual MIDI-note evidence; chords such as 7♯9 that include both thirds remain eligible. Equal-length first/last windows must show root power falling below 75%; the early root's retained strength must also exceed its whole-interval strength by 1.5×. A close candidate can receive up to 0.45 raw score units, weighted by supported duration when cells merge. This changes ranking, not the measured notes or spectrum. Supporting ranges and decay ratios are saved; it is a conservative heuristic, not proof of the performed chord boundary.</p>
               </details>
               <details>
@@ -359,19 +355,19 @@
                   <div><strong class="help-average">Chord average · amber curve</strong><p>Evidence averaged across the continuous span of the same chosen chord, including adjacent bars. Chord changes, gaps, or source changes end the span.</p></div>
                   <div><strong class="help-tail">Tail reduced · purple curve</strong><p>When enabled, this is the current cell after predicted ringing power is subtracted. This evidence feeds chord scoring and the chord average.</p></div>
                 </div>
-                <p>Beat Detail and Local Study use the same pitch extractor, highlighting rules, and estimated dB scaling. Beat Detail combines measured accompaniment and bass pitches over the chosen chord passage; Local Study combines sources over its selected range. These different averaging intervals can produce different strengths. Detected chord tones at or above −24 dB are emphasized; other evidence is visually muted. This focus does not change chord scoring or audition levels.</p>
+                <p>Beat Detail and Passage Lab use the same pitch extractor, highlighting rules, and estimated dB scaling. Beat Detail combines measured accompaniment and bass pitches over the chosen chord passage; Passage Lab combines sources over its selected range. These different averaging intervals can produce different strengths. Detected chord tones at or above −24 dB are emphasized; other evidence is visually muted. This focus does not change chord scoring or audition levels.</p>
                 <p>Beat Detail starts at C1 and extends through B4; scroll horizontally for higher notes. Highlights follow estimated MIDI octaves rather than repeating pitch classes, and an orange dot identifies the lowest measured octave matching the bass reference. The frequency plot remains the labelled accompaniment source, so bass-only notes can appear on the keyboard without a matching accompaniment peak. Reanalyze older sessions to add measured bass-octave evidence; its octave is never invented. Legacy evidence without octave estimates is explicitly labelled as pitch classes.</p>
                 <p>The original and chord-average curves each have their own 0 dB peak. The tail-reduced curve shares the original reference so its attenuation remains visible. The average combines <strong>linear power</strong>, weighted by cell duration and source level when available. Older spectra without a source-level reference use duration-weighted relative power; reanalysis adds that reference.</p>
                 <p>The <strong>Pitch-class input to chord scorer</strong> bars show twelve normalized note classes, not another frequency spectrum. Teal is the selected harmonic source (usually accompaniment) after tail/overtone processing; amber is the input after a reliable Bass pitch is blended at up to 30% of its confidence. The stated percentage is that blend weight. Chord ranking also uses root/inversion agreement, essential notes, key and continuity, so the tallest bar alone does not name the chord. Reanalyse older results to add these bars.</p>
                 <pre class="help-formula">average power(f) = Σ [cell duration × cell power(f)] / Σ cell duration
 relative dB(f) = 10 × log10(power(f) / reference peak power)</pre>
-                <p>This passage average is a display step after chord recognition. It is not a filtered audio signal and is not fed back into chord scoring. Local Study averages over its selected range.</p>
+                <p>This passage average is a display step after chord recognition. It is not a filtered audio signal and is not fed back into chord scoring. Passage Lab averages over its selected range.</p>
               </details>
               <details>
                   <summary>Bass fretboard, TAB and score</summary>
                   <p>In Charts, Bass Notes / TAB offers Notation + TAB, TAB only and Notation only. This display preference is saved with the session. All chart views share the same bars, chords and playback clock.</p>
                   <p>Bass Notes shows the measured bass line for the selected bar. Amber positions belong to that bar; teal marks the note at the playback cursor. Each measured pitch gets one suggested position, preferring a low fret. Four strings use E–A–D–G; five strings add low B. The selected instrument is saved with the session.</p>
-                  <p>Bass fundamentals are tracked independently of the chord grid using a YIN-style repeating-waveform estimate: 120 ms frames every 20 ms, with an 80 ms rescue window for brief notes. This can recover a weak fundamental beneath stronger overtones. A longer integral period is accepted only when it explains the waveform substantially better; a pure upper note is not automatically lowered an octave. The same fundamentals supply bass/root evidence to chord analysis and Local Study.</p>
+                  <p>Bass fundamentals are tracked independently of the chord grid using a YIN-style repeating-waveform estimate: 120 ms frames every 20 ms, with an 80 ms rescue window for brief notes. This can recover a weak fundamental beneath stronger overtones. A longer integral period is accepted only when it explains the waveform substantially better; a pure upper note is not automatically lowered an octave. The same fundamentals supply bass/root evidence to chord analysis and Passage Lab.</p>
                   <p>A continuous bass slide can pass through several semitones without playing separate notes. For fragments shorter than 160 ms, the tracker checks continuing pitch movement above 500 cents per second between neighbouring pitches, confirms it with central 60 ms windows, and requires no renewed attack (less than a 1.4× level rise). Stable short chromatic notes are preserved. Rejected one-frame pitch glitches do not become the reference for filtering the next note.</p>
                   <p>Frames need at least 80% periodicity and tuning within 40 cents. Isolated 20 ms detections are discarded. Brief notes need a stable pitch core; low-confidence short notes also require a measured fundamental or a stable pair of second and third harmonics. Neighboring pitches under 160 ms are checked for a decaying release, while stable passing notes between longer notes can remain. A return below 10% of a recent note's RMS within 0.6 s is treated as ringing: the same pitch continues the previous held note, and a different pitch is omitted. Quiet legato notes, slides and very fast fills can still be missed. The score uses a finer grid when a confirmed short note would disappear on 1/16, and phrase-based fingering favours small hand shifts and nearby strings.</p>
                   <p>The bass-clef score is written one octave above the sounding pitch, as for electric bass. Score and TAB share rhythmic spacing, stems, beams, dotted values, rests and ties, including holds across bar lines. The chart's time signature and measured beat positions map detected starts and ends to the nearest sixteenth note; when a complete beat map is unavailable, spacing follows the bar's duration. Gaps without a detected pitch appear as rests. This is estimated rhythm: very short notes can disappear, triplets and swing are approximated, and an incorrect beat grid or meter produces incorrect notation. Hover a note for its original times; playback highlighting follows those original times.</p>
@@ -402,8 +398,8 @@ relative dB(f) = 10 × log10(power(f) / reference peak power)</pre>
 fresh power(f, t) = max(0, current power(f, t)
                          − strength × decay factor × previous power(f, t))</pre>
                 <p>A 0.25-second interval and 0.5-second power half-life give a decay factor of about <strong>0.707</strong>. At 100% strength, this subtracts up to 70.7% of the previous frame’s power at each frequency; at 50%, up to 35.4%. It is not a fixed percentage of current audio volume. The spectrum caption reports the actual power removed.</p>
-                <p>To try it, set <strong>Tail Reduction to 50%</strong> and <strong>Tail Half-life to 0.5 s</strong>, then reanalyze with Auto or Fixed timing. Set 0% for a baseline comparison. The first timing cell has no prior cell and is left unchanged. Local Study uses the equally sized range immediately before the selection, clipped at the song start; its saved fingerprint includes that context.</p>
-                <p>This changes analysis evidence, not playback audio. The independent bass detector uses original audio. When Bass is too quiet, the low accompaniment reference uses retained pitches after tail reduction and overtone weighting, so a removed tail cannot return as a bass note. In a Bass + Other Local Study, tail subtraction is applied to Other. Bass contributes verified fundamentals to keyboard evidence; its original spectrum can still show harmonic peaks. Real instruments decay differently, and useful arpeggio tones can be reduced too. Compare against 0% before accepting a changed chord.</p>
+                <p>To try it, set <strong>Tail Reduction to 50%</strong> and <strong>Tail Half-life to 0.5 s</strong>, then reanalyze with Auto or Fixed timing. Set 0% for a baseline comparison. The first timing cell has no prior cell and is left unchanged. Passage Lab uses the equally sized range immediately before the selection, clipped at the song start; its saved fingerprint includes that context.</p>
+                <p>This changes analysis evidence, not playback audio. The independent bass detector uses original audio. When Bass is too quiet, the low accompaniment reference uses retained pitches after tail reduction and overtone weighting, so a removed tail cannot return as a bass note. In a Bass + Other Passage Lab, tail subtraction is applied to Other. Bass contributes verified fundamentals to keyboard evidence; its original spectrum can still show harmonic peaks. Real instruments decay differently, and useful arpeggio tones can be reduced too. Compare against 0% before accepting a changed chord.</p>
               </details>
               <details>
                 <summary>Overtones (泛音) and fundamental evidence <span class="help-proposal">Experimental</span></summary>
@@ -425,12 +421,12 @@ fresh power(f, t) = max(0, current power(f, t)
               <p>Chord lettering: <a href="https://github.com/musescore/MuseScore/tree/main/fonts/musejazz" target="_blank" rel="noreferrer">MuseJazz Text</a> by Torsten Hämmerle and Abraham Lee, licensed under the <a href="https://openfontlicense.org/open-font-license-official-text/" target="_blank" rel="noreferrer">SIL Open Font License 1.1</a>.</p>
               <p>Staff engraving: <a href="https://github.com/0xfe/vexflow" target="_blank" rel="noreferrer">VexFlow 4.2.5</a>, bundled locally under the <a href="./vendor/VexFlow-LICENSE.txt" target="_blank">MIT license</a>, with <a href="./vendor/Bravura-OFL.txt" target="_blank">Bravura glyphs under SIL OFL 1.1</a>. The chord card shows strongest measured octaves per supported tone plus measured bass; whole-note heads indicate pitches, not rhythmic duration.</p>
               <p>The chord card's key checkbox uses the detected/native key of the measured audio. With it enabled, both staves show that signature and only chromatic accidentals or naturals appear beside notes. Turn it off for explicit note accidentals. The choice is saved in the session and changes notation only. If no valid key is available, the checkbox is disabled.</p>
-              <p>The Notation menu in the project header chooses Text (Dm11, Cmaj7) or Jazz (D−11, CΔ7) symbols and letter or number roots. Number roots can use the song tonic as 1, or the relative major in minor keys (Am becomes 6m in C). Chromatic roots use ♭2, ♭3, ♯4, ♭6 and ♭7; without a valid key, letters remain visible. Local Study uses its saved analysis key. This device remembers the preference. Analysis, playback, staff pitches, saved chord names and exports retain their original musical meaning; edit fields use letter names. Simplify Chords still independently controls shortened extension labels.</p>
+              <p>The Notation menu in the project header chooses Text (Dm11, Cmaj7) or Jazz (D−11, CΔ7) symbols and letter or number roots. Number roots can use the song tonic as 1, or the relative major in minor keys (Am becomes 6m in C). Chromatic roots use ♭2, ♭3, ♯4, ♭6 and ♭7; without a valid key, letters remain visible. Passage Lab uses its saved analysis key. This device remembers the preference. Analysis, playback, staff pitches, saved chord names and exports retain their original musical meaning; edit fields use letter names. Simplify Chords still independently controls shortened extension labels.</p>
               <p>Chord vocabulary includes 6/9 and m6/9 (root, third, fifth, sixth and ninth, without a seventh), diminished seventh, minor-major seventh and common altered dominants: 7♭5, 7♯5, 7♭9, 7♯9, 7♯11 and 7♭13, plus maj7♯11. You can enter C6/9, C69 or C6add9; an inversion such as C6/9/E keeps E as the bass. Extensions need measured note evidence; supporting a symbol does not guarantee recognition in a dense recording.</p>
-              <p>Bass noise reference: whole-track and Local Study tracking share a recording-level threshold measured in the same resampled analysis bandwidth: max(0.0001, 0.005 × the recording’s 95th-percentile frame RMS). The gate checks each short frame, so rests do not dilute a valid note into rejection. Only amplitude calibration uses the wider recording; selected pitch evidence stays within the chosen range. This helps prevent quiet periodic background tones becoming bass guidance, but it cannot prove musical relevance. Bass-only selections without a verified fundamental show N.C.; the original spectrum remains available.</p>
+              <p>Bass noise reference: whole-track and Passage Lab tracking share a recording-level threshold measured in the same resampled analysis bandwidth: max(0.0001, 0.005 × the recording’s 95th-percentile frame RMS). The gate checks each short frame, so rests do not dilute a valid note into rejection. Only amplitude calibration uses the wider recording; selected pitch evidence stays within the chosen range. This helps prevent quiet periodic background tones becoming bass guidance, but it cannot prove musical relevance. Bass-only selections without a verified fundamental show N.C.; the original spectrum remains available.</p>
               <details>
                 <summary>Voicing patterns</summary>
-                <p>A chord name describes harmony; a voicing describes the pitches and their octave spacing. Optional “Possible …” subtitles identify So What, quartal, drop-2 and drop-3 patterns in Beat Detail and Local Study. Hover over the subtitle to see the original measured pitches. Reanalyse older results to capture the short audio slices needed for this feature.</p>
+                <p>A chord name describes harmony; a voicing describes the pitches and their octave spacing. Optional “Possible …” subtitles identify So What, quartal, drop-2 and drop-3 patterns in Beat Detail and Passage Lab. Hover over the subtitle to see the original measured pitches. Reanalyse older results to capture the short audio slices needed for this feature.</p>
                 <p>Quartal describes fourth-based spacing. So What names a specific quartal shape: three ascending perfect fourths followed by a major third. Its subtitle reads “Possible quartal · So What shape” to show the family and specific pattern together. Drop-2 and drop-3 lower the second or third voice from the top of a close four-note chord by one octave. These labels describe a possible spacing pattern, not confirmed fingering or hand allocation.</p>
                 <p>Other established families include shell voicings, rootless A/B positions, close and spread voicings, drop-2+4, upper-structure triads, stacked thirds and the Kenny Barron chord. These are research references; automatic subtitles currently cover the first four patterns only.</p>
                 <p>The detector compares both halves of short slices, checks that each voice persists in smaller 40 ms slices, and requires repeated support. It keeps the bass stem separate, preserves octaves and leaves the subtitle blank when the shape is unclear. A long arpeggio average cannot establish a simultaneous voicing. Subtitles do not change chord recognition or confidence.</p>
@@ -524,11 +520,11 @@ fresh power(f, t) = max(0, current power(f, t)
         <div id="sourceInfoPanel" class="collapsible-content source-info-panel"></div>
       </section>
 
-      <section class="transport editor-section arrange-section table-section">
+      <section class="transport editor-section arrange-section table-section analysis-section log-section">
         <div class="section-title">
           <button class="collapse-toggle" type="button" title="Collapse section">v</button>
           <strong>Source Playback</strong>
-          <button type="button" data-study-current title="Open Local Study with 0.5 seconds before and after the playback position">Study this moment</button>
+          <button type="button" data-study-current title="Open Passage Lab with 0.5 seconds before and after the playback position">Study this moment</button>
         </div>
         <div class="collapsible-content transport-content">
           <audio id="audioPlayer" controls></audio>
@@ -616,11 +612,11 @@ fresh power(f, t) = max(0, current power(f, t)
         </div>
       </section>
 
-      <section class="analysis-options editor-section analysis-section">
+      <section class="analysis-options editor-section analysis-section collapsed">
         <div class="section-title">
           <button class="collapse-toggle" type="button" title="Collapse section">v</button>
-          <strong>Analysis Options</strong>
-          <button type="button" data-study-current title="Open Local Study with 0.5 seconds before and after the playback position">Study this moment</button>
+          <strong>Analysis settings</strong><span class="compact-settings-hint">Timing · key · harmony · separation · lyrics</span>
+          <button type="button" data-study-current title="Open Passage Lab with 0.5 seconds before and after the playback position">Study this moment</button>
         </div>
         <div class="collapsible-content options-grid">
           <div class="analysis-preset-row">
@@ -934,6 +930,8 @@ fresh power(f, t) = max(0, current power(f, t)
               Follow
               <input id="timelineFollowInput" type="checkbox" checked />
             </label>
+            <button id="analysisSettingsToggle" type="button" aria-expanded="false" aria-controls="analysisSettingsDock">Settings</button>
+            <button id="detailInspectorToggle" type="button" aria-controls="barDetailInspector" aria-expanded="true">Bar detail</button>
             <div class="timeline-zoom">
               <button id="zoomOutBtn" type="button" title="Zoom out">-</button>
               <input id="timelineZoomInput" type="range" min="1" max="8" step="0.25" value="1" title="Timeline zoom" />
@@ -983,12 +981,12 @@ fresh power(f, t) = max(0, current power(f, t)
           </div>
         </section>
 
-        <div id="arrangementResizeHandle" class="arrangement-resize-handle" title="Drag to resize Bar Detail"></div>
+        <div id="arrangementResizeHandle" class="arrangement-resize-handle" title="Drag or use arrow keys to resize Bar Detail" role="separator" aria-label="Resize Bar / Beat Detail" aria-orientation="vertical" tabindex="0"></div>
 
-        <aside class="detail-pane collapsible">
+        <aside id="barDetailInspector" class="detail-pane collapsible" aria-label="Bar / Beat Detail">
           <div class="detail-title">
             <button class="collapse-toggle" type="button" title="Collapse section">v</button>
-            <strong>Beat Detail</strong>
+            <strong>Bar / Beat Detail</strong>
             <span id="detailBarLabel">No beat</span>
           </div>
           <div class="collapsible-content detail-content">
@@ -1058,8 +1056,31 @@ fresh power(f, t) = max(0, current power(f, t)
               <button class="collapse-toggle" type="button" title="Collapse section">v</button>
               <strong>Charts</strong>
             </div>
+            <div class="workspace-modes" role="group" aria-label="Chart workspace mode">
+              <button type="button" data-chart-mode="read" aria-pressed="false" title="Read the score with fewer distractions; Escape returns to Review">Performance</button>
+              <button type="button" data-chart-mode="review" aria-pressed="true" title="Inspect musical evidence alongside the score">Review</button>
+              <button type="button" data-chart-mode="edit" aria-pressed="false" title="Show bar editing and export actions">Edit</button>
+            </div>
+            <label class="renderer-picker">Bars / line
+              <select id="barsPerLineInput"><option value="2">2</option><option value="4" selected>4</option></select>
+            </label>
+            <label class="renderer-picker" title="Clean hides timing guides and explanatory footers. Musical events, bar numbers and review warnings remain available.">Detail
+              <select id="chartDetailInput"><option value="clean">Clean</option><option value="detailed">Detailed</option></select>
+            </label>
+            <label class="chart-zoom-control">Zoom<input id="chartZoomInput" aria-label="Score zoom" type="range" min="75" max="150" step="5" value="100" /><output id="chartZoomOutput">100%</output></label>
+            <button id="chartZoomReset" type="button" title="Reset score zoom to 100%">100%</button>
+            <button id="chartInspectorToggle" type="button" aria-expanded="true" aria-controls="chartInspector">Inspector</button>
+            <button data-export="pdf" type="button" title="Export the current chart layout as PDF" disabled>PDF</button>
+          </div>
+          <div class="chart-format-toolbar">
+            <div class="chart-format-tabs" role="group" aria-label="Quick chart formats">
+              <button type="button" data-chart-format="ireal" aria-pressed="true">Chords</button>
+              <button type="button" data-chart-format="bass" aria-pressed="false">Bass + TAB</button>
+              <button type="button" data-chart-format="drums" aria-pressed="false">Drums</button>
+              <button type="button" data-chart-format="melody" aria-pressed="false">Melody</button>
+            </div>
             <label class="renderer-picker" title="Views share chords, bars and playback; bass and drums add estimated instrument parts.">
-              View
+              All formats
               <select id="chartRendererInput">
                 <option value="ireal" selected>Chord Chart</option>
                 <option value="table">Editable Table</option>
@@ -1072,11 +1093,9 @@ fresh power(f, t) = max(0, current power(f, t)
                 <option value="chordpro">ChordPro Text</option>
               </select>
             </label>
-            <label class="renderer-picker">Bars per line:
-              <select id="barsPerLineInput"><option value="2">2</option><option value="4" selected>4</option></select>
-            </label>
-            <button data-export="pdf" type="button" title="Export the current chart layout as PDF" disabled>PDF</button>
+            <button id="chartMixerToggle" type="button" aria-expanded="true" aria-controls="tableStemMixer">Stem mixer</button>
           </div>
+          <nav id="chartSectionNav" class="chart-section-nav" aria-label="Jump to song section" hidden></nav>
           <div id="tableStemMixer" class="table-stem-mixer collapsible-content" role="group" aria-label="Stem volumes" hidden></div>
           <div id="spreadsheetChartControls" class="spreadsheet-chart-controls collapsible-content" hidden>
             <label>Beats per cell <select id="spreadsheetBeatsInput"><option value="0.5">½</option><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
@@ -1088,11 +1107,7 @@ fresh power(f, t) = max(0, current power(f, t)
             <span class="spreadsheet-copy-hint">Paste normally for styling. For values only, format destination cells as Text / Plain text to preserve slash chords. Blank cells continue the previous chord; → keeps changes within one cell.</span>
             <span id="spreadsheetCopyStatus" class="spreadsheet-copy-status" role="status" aria-live="polite"></span>
           </div>
-          <div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div>
-          <details id="transcriptionReview" class="transcription-review-panel" hidden>
-            <summary>Review transcription</summary>
-            <div class="transcription-review-body"></div>
-          </details>
+          <details class="chart-lyrics-disclosure"><summary>Lyrics reference</summary><div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div></details>
           <div id="chartPreview" class="chart-preview collapsible-content"></div>
           <table id="barsTable" class="collapsible-content hidden">
             <thead>
@@ -1111,12 +1126,19 @@ fresh power(f, t) = max(0, current power(f, t)
             <tbody id="barsBody"></tbody>
           </table>
         </section>
-        <aside class="chart-reason-pane">
+        <div id="chartInspectorResize" class="arrangement-resize-handle" role="separator" aria-label="Resize chord inspector" aria-orientation="vertical" tabindex="0" title="Drag or use arrow keys to resize inspector"></div>
+        <aside id="chartInspector" class="chart-reason-pane" aria-label="Why This Chord">
           <div class="chart-reason-title">
             <strong>Why This Chord</strong>
             <span id="chartReasonLabel">No bar</span>
           </div>
-          <div id="chartReasonPane" class="chart-reason-content"></div>
+          <div class="chart-inspector-scroll">
+            <div id="chartReasonPane" class="chart-reason-content"></div>
+          <details id="transcriptionReview" class="transcription-review-panel" hidden>
+            <summary>Review transcription</summary>
+            <div class="transcription-review-body"></div>
+          </details>
+          </div>
         </aside>
       </section>
       <section id="studyPanel" class="editor-section study-section">
@@ -1126,7 +1148,7 @@ fresh power(f, t) = max(0, current power(f, t)
           <div id="studyList"></div>
         </aside>
         <div class="study-workspace">
-          <div class="study-heading"><h2>Local Study</h2><span class="study-original">Original audio</span></div>
+          <div class="study-heading"><h2>Passage Lab</h2><span class="study-original">Original audio</span></div>
           <p id="studyDirtyText" class="study-muted"></p>
           <div class="study-toolbar">
             <button id="studySelectBtn" type="button" aria-pressed="false">Select Range</button>
@@ -1267,5 +1289,10 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./study-playback.js"></script>
     <script src="./keyboard.js"></script>
     <script src="./renderer.js"></script>
+    <script src="./compact-workspace.js"></script>
+    <script src="./chart-workspace.js"></script>
+    <script src="./analysis-workspace.js"></script>
+    <script src="./prototype-workspace.js"></script>
+    <script src="./song-details.js"></script>
   </body>
 </html>
