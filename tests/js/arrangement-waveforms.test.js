@@ -8,7 +8,7 @@ test('waveform view defaults and restored settings are bounded independently fro
   assert.deepEqual(plain(normalize()),{gain:1,heightZoom:1,trackHeights:{}});
   const view=normalize({gain:4,heightZoom:2,trackHeights:{Bass:120,Other:'bad'}});
   assert.equal(height(view,'Bass'),240);
-  assert.equal(height(view,'Full Mix'),144);
+  assert.equal(height(view,'Full Mix'),112);
   assert.equal(height(normalize({heightZoom:4,trackHeights:{Bass:9000}}),'Bass'),720);
   assert.equal(normalize({gain:Infinity,heightZoom:-4}).gain,1);
   assert.deepEqual(plain(normalize(null)),{gain:1,heightZoom:1,trackHeights:{}});

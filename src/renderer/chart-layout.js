@@ -35,10 +35,11 @@ function fitChordBeatTracks(preview) {
   // Fit labels into the available bar, using vertical lanes for nearby changes.
   // A short event must never force the entire sheet beyond its parent panel.
   tracks.forEach(track => {
-    const width = track.getBoundingClientRect().width;
+    const zoom=typeof chartWorkspaceZoom==='function'?chartWorkspaceZoom():1;
+    const width = track.getBoundingClientRect().width/zoom;
     const lanes = [];
     const ireal = Boolean(track.closest('.ireal-chart'));
-    const step = ireal ? 44 : 28;
+    const step = ireal ? 34 : 28;
     const entries=[...track.querySelectorAll('.chord-beat-event')].map(event => {
       const label = event.querySelector('.chord-beat-symbol');
       label.style.position = 'absolute';
@@ -47,11 +48,11 @@ function fitChordBeatTracks(preview) {
       const minimum=0;
       const maximum=width;
       const available=Math.max(1,maximum-minimum);
-      const naturalWidth = label.getBoundingClientRect().width;
+      const naturalWidth = label.getBoundingClientRect().width/zoom;
       if (naturalWidth > available && width > 0) {
         label.style.fontSize = `${parseFloat(getComputedStyle(label).fontSize)*available/naturalWidth}px`;
       }
-      const labelWidth = label.getBoundingClientRect().width;
+      const labelWidth = label.getBoundingClientRect().width/zoom;
       const onset = parseFloat(event.style.left)*width/100;
       return {event,label,minimum,maximum,width:labelWidth,onset};
     });
@@ -63,11 +64,11 @@ function fitChordBeatTracks(preview) {
       lanes[lane] = left+labelWidth;
       label.style.left = `${left-onset}px`; label.style.top = `${lane*step}px`;
       event.classList.toggle('offset-label', lane>0 || Math.abs(left-onset)>.5);
-      event.style.setProperty('--chord-label-bottom', `${lane*step+(ireal ? 34 : 22)}px`);
+      event.style.setProperty('--chord-label-bottom', `${lane*step+(ireal ? 28 : 22)}px`);
       event.style.setProperty('--chord-leader-left',`${Math.min(0,left-onset)}px`);
       event.style.setProperty('--chord-leader-width',`${Math.abs(left-onset)}px`);
     });
-    track.style.height = `${(ireal ? 70 : 54)+Math.max(0,lanes.length-1)*step}px`;
+    track.style.height = `${(ireal ? 40 : 54)+Math.max(0,lanes.length-1)*step}px`;
   });
 }
 
@@ -202,6 +203,7 @@ function finishChartLayout(preview=elements.chartPreview,registerPlayback=true) 
 
 async function prepareChartPrint() {
   if (!hasChart()) return;
+  if(typeof setCompactChartPrinting==='function')setCompactChartPrinting(true);
   renderChartPreview();
   const alphaWidth=typeof prepareAlphaTabPrint==='function'?await prepareAlphaTabPrint():null;
   await document.fonts.ready;

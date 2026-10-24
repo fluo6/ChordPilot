@@ -4,6 +4,7 @@ function renderTimeline() {
   elements.beatLane.innerHTML = "";
   elements.visualStemLanes.innerHTML = "";
   applyTimelineZoom();
+  if (typeof renderPrototypeTimeline === "function") renderPrototypeTimeline();
   if (typeof syncWaveformViewControls === 'function') syncWaveformViewControls();
 
   if (!hasChart()) {

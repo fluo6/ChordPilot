@@ -175,6 +175,7 @@ function setStemVolume(player, value) {
 }
 
 function applyStemMix() {
+
   const request = ++stemPlaybackRequest;
   const solo = state.soloStem;
   const hasStems = state.stemPlayers.length > 0;

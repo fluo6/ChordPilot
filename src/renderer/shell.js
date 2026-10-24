@@ -165,6 +165,7 @@ function setAnalysisActive(active, message = "Analyzing...") {
   if (active) {
     setStatus(message);
   }
+  if (typeof syncPrototypeWorkspace === 'function') syncPrototypeWorkspace();
 }
 
 function updateAnalysisProgressMessage(message) {
@@ -220,7 +221,8 @@ function appendLog(message) {
   });
   row.textContent = `${time}  ${message}`;
   elements.analysisLog.appendChild(row);
-  elements.analysisLog.scrollTop = elements.analysisLog.scrollHeight;
+  if(typeof syncPrototypeConsole==='function')syncPrototypeConsole();
+  else elements.analysisLog.scrollTop = elements.analysisLog.scrollHeight;
 }
 
 function beginLoading(message = "Working...") {
@@ -289,6 +291,7 @@ function addJob(message, status = "done") {
 }
 
 function setView(view) {
+  document.body.dataset.view = view;
   if (view !== state.currentView && typeof cancelActiveChordBoundaryDrag === "function") cancelActiveChordBoundaryDrag();
   if (view !== "song" && typeof stopStudyPlayback === "function") stopStudyPlayback();
   updateProjectNavigation();
@@ -296,29 +299,37 @@ function setView(view) {
     view = "home";
   }
   state.currentView = view;
+  if(view!=="song"&&typeof setAnalysisSetupOpen==='function')setAnalysisSetupOpen(false,false);
   elements.homeView.classList.toggle("hidden", view !== "home");
   elements.helpView.classList.toggle("hidden", view !== "help");
   elements.editorView.classList.toggle("hidden", view !== "song");
   elements.navItems.forEach((item) => {
     item.classList.toggle("active", item.dataset.view === view || (view === "song" && item.dataset.editorView === state.editorPanel));
   });
+  if (view !== "song" && typeof syncCompactWorkspace === "function") syncCompactWorkspace();
   if (view === "song") {
-    setEditorPanel(state.editorPanel || "arrange");
+    setEditorPanel(state.editorPanel || "analysis");
     requestAnimationFrame(() => applyTimelineZoom({ render: true }));
   } else if (view === "home") {
     renderHome();
   }
+  if (typeof syncPrototypeWorkspace === 'function') syncPrototypeWorkspace();
 }
 
 function setEditorPanel(name) {
-  if ((name || "arrange") !== state.editorPanel && typeof cancelActiveChordBoundaryDrag === "function") cancelActiveChordBoundaryDrag();
+  // Keep saved Song routes and existing callers compatible with the consolidated Timeline.
+  name = !name || name === "arrange" ? "analysis" : name;
+  if (name !== state.editorPanel && typeof cancelActiveChordBoundaryDrag === "function") cancelActiveChordBoundaryDrag();
   if (name !== "study" && typeof stopStudyPlayback === "function") stopStudyPlayback();
-  state.editorPanel = name || "arrange";
+  state.editorPanel = name;
+  if(state.editorPanel!=="analysis"&&typeof setAnalysisSetupOpen==='function')setAnalysisSetupOpen(false,false);
   elements.editorView.dataset.panel = state.editorPanel;
   if (name === "study" && typeof renderStudy === "function") renderStudy();
   elements.navItems.forEach((item) => {
     item.classList.toggle("active", item.dataset.editorView === state.editorPanel || (state.currentView === "home" && item.dataset.view === "home"));
   });
+  if (typeof syncCompactWorkspace === "function") syncCompactWorkspace();
+  if (typeof syncAnalysisWorkspace === "function") syncAnalysisWorkspace();
   if (typeof applyStemMix === "function") {
     applyStemMix();
   }
@@ -328,6 +339,7 @@ function setEditorPanel(name) {
       applyTimelineZoom({ render: true });
     }
   });
+  if (typeof syncPrototypeWorkspace === 'function') syncPrototypeWorkspace();
 }
 
 function openEditorPanel(name) {
@@ -345,6 +357,9 @@ function toggleLeftPane() {
   document.querySelector(".app-frame")?.classList.toggle("rail-collapsed", collapsed);
   elements.leftPaneToggle.textContent = collapsed ? ">" : "<";
   elements.leftPaneToggle.title = collapsed ? "Expand navigation" : "Collapse navigation";
+  elements.leftPaneToggle.setAttribute("aria-label", elements.leftPaneToggle.title);
+  elements.leftPaneToggle.setAttribute("aria-expanded", String(!collapsed));
+  if(typeof refreshPrototypeControlIcons==='function')refreshPrototypeControlIcons();
   requestAnimationFrame(() => applyTimelineZoom({ render: true }));
 }
 
@@ -352,8 +367,11 @@ function applyDetailPaneWidth() {
   const workspace = elements.arrangementResizeHandle?.closest(".workspace");
   const workspaceWidth = workspace?.clientWidth || 0;
   const maxWidth = workspaceWidth ? Math.max(190, Math.min(520, workspaceWidth - 360)) : 520;
-  state.detailPaneWidth = Math.max(190, Math.min(maxWidth, Number(state.detailPaneWidth) || 236));
-  elements.editorView.style.setProperty("--detail-pane-width", `${state.detailPaneWidth}px`);
+  // Keep the preferred width when the window temporarily limits the visible pane.
+  state.detailPaneWidth = Math.max(190, Math.min(520, Number(state.detailPaneWidth) || 320));
+  const width = window.innerWidth <= 860 ? state.detailPaneWidth : Math.min(maxWidth, state.detailPaneWidth);
+  elements.editorView.style.setProperty("--detail-pane-width", `${width}px`);
+  elements.arrangementResizeHandle?.setAttribute("aria-valuenow", String(Math.round(width)));
 }
 
 function startArrangementResize(event) {
@@ -362,7 +380,7 @@ function startArrangementResize(event) {
   }
   event.preventDefault();
   const startX = event.clientX;
-  const startWidth = state.detailPaneWidth;
+  const startWidth = Number.parseFloat(elements.editorView.style.getPropertyValue("--detail-pane-width")) || state.detailPaneWidth;
   elements.arrangementResizeHandle.classList.add("active");
   document.body.classList.add("resizing-detail-pane");
 
@@ -384,6 +402,7 @@ function startArrangementResize(event) {
 }
 
 function renderHome() {
+  if (typeof syncPrototypeWorkspace === 'function') syncPrototypeWorkspace();
   const projectOpen = hasProject();
   updateProjectNavigation();
   elements.homeGoSongBtn.disabled = !projectOpen;
@@ -447,6 +466,7 @@ function renderHome() {
       elements.recentSessionsList.appendChild(button);
     });
   }
+  if(typeof decoratePrototypeRecentSessions==='function')decoratePrototypeRecentSessions();
   renderJobs();
 }
 
@@ -572,10 +592,11 @@ function renderSourceInfo() {
   fileCard.append(fileTitle, grid);
   details.appendChild(fileCard);
   elements.sourceInfoPanel.appendChild(details);
+  if (typeof arrangePrototypeSource === 'function') arrangePrototypeSource();
 }
 
 function updateProjectIdentity(fallbackLabel) {
-  const title = state.audio?.title || state.audio?.name || "ChordPilot";
+  const title = state.chart?.title || state.audio?.title || state.audio?.name || "ChordPilot";
   const meta = fallbackLabel || [
     state.audio?.artist || "",
     state.audio?.album || "",
@@ -600,9 +621,11 @@ function updateProjectIdentity(fallbackLabel) {
     `;
   }
   renderSourceInfo();
+  if(typeof syncSongDetails==='function')syncSongDetails();
 }
 
 function renderJobs() {
+  if (typeof renderPrototypeJobs === 'function') renderPrototypeJobs();
   elements.jobList.innerHTML = "";
   if (!state.jobs.length) {
     elements.jobList.innerHTML = "<span>No analysis jobs yet</span>";
@@ -628,6 +651,8 @@ function toggleSection(button) {
   const collapsed = section.classList.toggle("collapsed");
   button.textContent = collapsed ? ">" : "v";
   button.title = collapsed ? "Expand section" : "Collapse section";
+  button.setAttribute("aria-expanded", String(!collapsed));
+  if(typeof syncAnalysisWorkspace==='function')syncAnalysisWorkspace();
   requestAnimationFrame(() => {
     applyTimelineZoom({ render: true });
   });
@@ -920,7 +945,9 @@ function percentAt(seconds) {
 
 function timelineBodyWidth() {
   const duration = getChartDuration();
-  const viewportWidth = Math.max(720, elements.timelineViewport.clientWidth - 134);
+  const availableWidth=Math.max(160,elements.timelineViewport.clientWidth-126);
+  if(state.timelineFit)return availableWidth;
+  const viewportWidth = Math.max(720,availableWidth);
   const pixelsPerSecond = 8 * state.timelineZoom;
   return Math.max(viewportWidth, Math.round(duration * pixelsPerSecond));
 }
@@ -928,6 +955,7 @@ function timelineBodyWidth() {
 function applyTimelineZoom(options = {}) {
   state.timelineZoom = Math.max(1, Math.min(8, Number(state.timelineZoom) || 1));
   elements.timelineZoomInput.value = String(state.timelineZoom);
+  elements.zoomFitBtn?.setAttribute('aria-pressed',String(Boolean(state.timelineFit)));
   syncTimelineFollowControl();
   elements.timelineViewport.style.setProperty("--timeline-body-width", `${timelineBodyWidth()}px`);
   if (options.render) {
@@ -994,9 +1022,10 @@ function updateTimelineTransportInfo() {
 }
 
 function setTimelineZoom(value, anchorTime = elements.audioPlayer.currentTime || 0, anchorClientX = null) {
+  const wasFit=Boolean(state.timelineFit);state.timelineFit=false;
   const previous = state.timelineZoom;
   state.timelineZoom = Math.max(1, Math.min(8, Number(value) || 1));
-  if (state.timelineZoom === previous) {
+  if (state.timelineZoom === previous && !wasFit) {
     return;
   }
   renderTimeline();
@@ -1036,6 +1065,7 @@ function renderMeta() {
     elements.timeInput.value = "";
     updateKeyInputHint();
     updateAudioPreviewState();
+    if(typeof syncPrototypeWorkspace==='function')syncPrototypeWorkspace();
     return;
   }
 
@@ -1049,6 +1079,7 @@ function renderMeta() {
   elements.timeInput.value = state.chart.time_signature || "4/4";
   updateKeyInputHint();
   updateAudioPreviewState();
+  if(typeof syncPrototypeWorkspace==='function')syncPrototypeWorkspace();
 }
 
 function createInput(value, onChange, className) {

@@ -1,0 +1,210 @@
+<!-- Review-only controls. Original ChordPilot selectors remain unchanged. -->
+<style id="review-tools-styles">
+  #review-tools { position:fixed;right:12px;bottom:35px;z-index:100000;font:13px/1.5 system-ui,sans-serif;color:#e7edf5; }
+  #review-tools > summary { cursor:pointer;list-style:none;border:1px solid #53677e;border-radius:7px;background:#1c2b3b;padding:8px 14px;box-shadow:0 3px 20px #0005; }
+  #review-tools[open] { width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 60px);overflow:auto;background:#121c28;border:1px solid #53677e;border-radius:8px;box-shadow:0 10px 50px #0008; }
+  #review-tools[open] > summary { border:0;border-bottom:1px solid #53677e;border-radius:0; }
+  #review-tools .review-content { padding:12px;display:grid;gap:10px; }
+  #review-tools p { margin:0;font:inherit; }
+  #review-tools label { display:grid;gap:4px;font:inherit;color:inherit; }
+  #review-tools :is(button,input,textarea,select) { box-sizing:border-box;max-width:100%;font:inherit; }
+  #review-tools textarea { width:100%;min-height:76px;resize:vertical; }
+  #review-tools code { white-space:pre-wrap;overflow-wrap:anywhere;color:#8ee8d6;user-select:all;font-size:12px; }
+  #review-tools .review-actions { display:flex;flex-wrap:wrap;gap:6px; }
+  #review-note-list { display:grid;gap:9px;max-height:220px;overflow:auto; }
+  #review-note-list article { border:1px solid #435166;border-radius:5px;padding:9px;white-space:pre-wrap;overflow-wrap:anywhere; }
+  #review-note-list button { padding:3px 7px;min-height:24px;font-size:11px;margin-top:6px; }
+  #review-highlight { position:fixed;z-index:99999;pointer-events:none;border:2px solid #ffcf68;background:#ffcf6815;box-sizing:border-box; }
+  #review-notice { position:fixed;left:50%;bottom:45px;transform:translateX(-50%);z-index:100001;max-width:min(620px,85vw);background:#20364b;color:#fff;padding:12px 16px;border:1px solid #8ba8c4;border-radius:8px;font:13px/1.5 system-ui; }
+  #review-tools [hidden], #review-highlight[hidden], #review-notice[hidden] { display:none!important; }
+  @media print { #review-tools,#review-highlight,#review-notice { display:none!important; } }
+</style>
+<details id="review-tools" open>
+  <summary>UI/UX review tools · <span id="review-note-count">0</span> notes</summary>
+  <div class="review-content">
+    <p><strong>ChordPilot · offline review</strong><br>Current app UI with a synthetic 16-bar song. Playback is silent. Analysis, downloads and session operations are demo-only.</p>
+    <p>Explore the sidebar, chart formats, bar details and settings. Collapse this panel to review the compact layout.</p>
+    <label>Screen<select id="review-screen"><option value="home">Home</option><option value="analysis">Timeline</option><option value="table">Charts / scores</option><option value="study">Passage Lab</option><option value="log">Log</option><option value="help">Help</option></select></label>
+    <div class="review-actions"><button id="review-inspect" type="button" aria-pressed="false">Pick an element</button><button id="review-reset" type="button">Reset demo</button></div>
+    <label>CSS selector<input id="review-selector" value="#editorView" spellcheck="false" /></label>
+    <code id="review-source">src/renderer/index.html</code>
+    <label>Priority<select id="review-priority"><option>Suggestion</option><option>High</option><option>Medium</option><option>Low</option></select></label>
+    <label>Feedback<textarea id="review-feedback" placeholder="What is confusing? What should change, and why?"></textarea></label>
+    <button id="review-add-note" type="button">Attach feedback to selector</button>
+    <div id="review-note-list" aria-live="polite"></div>
+    <div class="review-actions"><button id="review-download" type="button">Download annotated HTML</button><button id="review-guide" type="button">Download selector guide</button></div>
+    <p id="review-save-status" role="status">Send the annotated HTML back to the app owner. Notes are embedded inside it; click “Attach feedback” before downloading.</p>
+    <details><summary>For a reviewer or another AI</summary><p>Review the existing UI, hierarchy, navigation, density, accessibility, responsive layout, and music editing workflow. Include a CSS selector, problem, proposed change, priority, and reason for each suggestion. Preserve the app's music features. IDs/classes match the source. Styles: <code>style#chordpilot-styles</code>. Script origins: <code>script[data-source]</code>. Selector/source map: <code>#review-manifest</code>. Feedback: <code>#review-data</code>. Third-party licenses: <code>#review-licenses</code>. Screens represent a populated project; operating-system dialogs and backend progress are outside this prototype. Help logos use offline placeholders. Notes persist in this tab until downloaded or closed.</p></details>
+  </div>
+</details>
+<div id="review-highlight" hidden></div>
+<div id="review-notice" role="status" hidden></div>
+<script data-source="review/tools">
+(() => {
+  // Capture a clean startup document, before loading the synthetic project.
+  // Downloading uses this copy so canvases, blob URLs and live editor DOM never leak.
+  const startup = document.documentElement.cloneNode(true);
+  startup.querySelectorAll('[data-review-runtime], .app-tooltip').forEach(node => node.remove());
+  const saved = JSON.parse(document.getElementById('review-data').textContent);
+  const manifest = JSON.parse(document.getElementById('review-manifest').textContent);
+  const notes = Array.isArray(saved.notes) ? saved.notes : [];
+  const byId = id => document.getElementById(id);
+  const tools = byId('review-tools'), highlight = byId('review-highlight');
+  let inspecting = false, noticeTimer;
+  window.__reviewNotice = message => {
+    byId('review-notice').textContent = message;
+    byId('review-notice').hidden = false;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => byId('review-notice').hidden = true, 5500);
+  };
+  function download(name, body, type) {
+    const url = URL.createObjectURL(new Blob([body], {type}));
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = name; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function screenName() { return state.currentView === 'song' ? state.editorPanel : state.currentView; }
+  function go(screen) {
+    if (['home','help'].includes(screen)) setView(screen); else openEditorPanel(screen);
+    byId('review-screen').value = screen;
+  }
+  function selectorFor(element) {
+    const parts = [];
+    for (let node = element; node && node !== document.body; node = node.parentElement) {
+      if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
+      let part = node.tagName.toLowerCase();
+      const classes = [...node.classList].filter(name => !['active','selected','playing','hidden'].includes(name));
+      if (classes.length) part += '.' + classes.map(name => CSS.escape(name)).join('.');
+      for (const name of ['data-index','data-event-index','data-editor-view','data-view','data-start']) {
+        if (node.hasAttribute(name)) part += `[${name}="${CSS.escape(node.getAttribute(name))}"]`;
+      }
+      const siblings = node.parentElement ? [...node.parentElement.children].filter(item => item.tagName === node.tagName) : [];
+      if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(node)+1})`;
+      parts.unshift(part);
+    }
+    return parts.join(' > ');
+  }
+  function sourceFor(element) {
+    const nearest = element?.closest('[id]');
+    const locations = [];
+    if (nearest && manifest.ids[nearest.id]) locations.push(`${manifest.html}:${manifest.ids[nearest.id]} (#${nearest.id})`);
+    for (const name of element?.classList || []) if (manifest.classes[name]) locations.push(`${manifest.css}:${manifest.classes[name]} (.${name})`);
+    return locations.join('\n') || 'Dynamic UI: search the selector in src/renderer/*.js and styles.css';
+  }
+  function select(element) {
+    byId('review-selector').value = selectorFor(element);
+    byId('review-source').textContent = sourceFor(element);
+  }
+  function setInspect(value) {
+    inspecting = value; highlight.hidden = true;
+    byId('review-inspect').setAttribute('aria-pressed', String(value));
+    byId('review-inspect').textContent = value ? 'Picking… click element (Esc cancels)' : 'Pick an element';
+    if (value) tools.open = false;
+  }
+  document.addEventListener('pointermove', event => {
+    if (!inspecting || tools.contains(event.target)) { highlight.hidden = true; return; }
+    const rect = event.target.getBoundingClientRect();
+    Object.assign(highlight.style, {left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
+    highlight.hidden = false;
+  }, true);
+  document.addEventListener('click', event => {
+    if (!inspecting || tools.contains(event.target)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    select(event.target); setInspect(false); tools.open = true; byId('review-feedback').focus();
+  }, true);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && inspecting) {setInspect(false);tools.open=true;} }, true);
+  byId('review-selector').addEventListener('change', () => {
+    try { const node = document.querySelector(byId('review-selector').value); byId('review-source').textContent = node ? sourceFor(node) : 'Selector does not match this screen.'; }
+    catch { byId('review-source').textContent = 'Invalid CSS selector.'; }
+  });
+  function renderNotes() {
+    byId('review-note-count').textContent = String(notes.length);
+    byId('review-note-list').replaceChildren();
+    notes.forEach((note, index) => {
+      const article = document.createElement('article'), text = document.createElement('p');
+      text.textContent = `${index+1}. ${note.priority} · ${note.screen}\n${note.selector}\n${note.feedback}`;
+      const jump = document.createElement('button'); jump.type='button';jump.textContent='Go to element';
+      jump.addEventListener('click', () => {
+        if(note.renderer){state.chartRenderer=note.renderer;elements.chartRendererInput.value=note.renderer;renderChartPreview();}
+        go(note.screen);byId('review-selector').value=note.selector;byId('review-source').textContent=note.source;
+        requestAnimationFrame(() => {try {document.querySelector(note.selector)?.scrollIntoView({block:'center'});} catch {}});
+      });
+      const remove = document.createElement('button'); remove.type='button';remove.textContent='Remove';
+      remove.addEventListener('click', () => {notes.splice(index,1);renderNotes();});
+      article.append(text,jump,remove);byId('review-note-list').append(article);
+    });
+    byId('review-data').textContent = JSON.stringify({notes,screen:screenName(),chartRenderer:state.chartRenderer}).replace(/</g,'\\u003c');
+  }
+  byId('review-add-note').addEventListener('click', () => {
+    const feedback=byId('review-feedback').value.trim(), selector=byId('review-selector').value.trim();
+    if (!feedback || !selector) {window.__reviewNotice('Enter a selector and feedback first.');return;}
+    try {document.querySelector(selector);} catch {window.__reviewNotice('Enter a valid CSS selector.');return;}
+    notes.push({selector,source:byId('review-source').textContent,priority:byId('review-priority').value,screen:screenName(),renderer:state.chartRenderer,viewport:{width:innerWidth,height:innerHeight},feedback});
+    byId('review-feedback').value='';renderNotes();byId('review-save-status').textContent='Feedback attached. Download the annotated HTML to keep or send these notes.';
+  });
+  byId('review-download').addEventListener('click', () => {
+    if (byId('review-feedback').value.trim()) {window.__reviewNotice('Attach your draft feedback before downloading.');return;}
+    const copy=startup.cloneNode(true);
+    copy.querySelector('#review-data').textContent=JSON.stringify({notes,screen:screenName(),chartRenderer:state.chartRenderer}).replace(/</g,'\\u003c');
+    download('ChordPilot-uiux-feedback.html','<!doctype html>\n'+copy.outerHTML,'text/html;charset=utf-8');
+    byId('review-save-status').textContent=`Downloaded HTML with ${notes.length} embedded note(s). Send that file back to the app owner.`;
+  });
+  byId('review-guide').addEventListener('click', () => {
+    const guide=['# ChordPilot UI/UX review',manifest.description,'','Original CSS selectors and JavaScript are preserved. Use the review panel to attach selector-specific notes and download an annotated HTML.','', '## Static element IDs',...Object.entries(manifest.ids).map(([id,line])=>`#${id} — ${manifest.html}:${line}`),'','## CSS classes (first occurrence)',...Object.entries(manifest.classes).map(([name,line])=>`.${name} — ${manifest.css}:${line}`),'','## JavaScript sources',...manifest.scripts];
+    download('ChordPilot-selector-guide.md',guide.join('\n'),'text/markdown;charset=utf-8');
+  });
+  byId('review-screen').addEventListener('change', event => go(event.target.value));
+  byId('review-inspect').addEventListener('click', () => setInspect(!inspecting));
+  // The native transport gets a local silent WAV. No real music or external requests.
+  const bytes = new Uint8Array(44+32*8000);bytes.fill(128,44);
+  const view = new DataView(bytes.buffer), word=(offset,value)=>[...value].forEach((letter,i)=>bytes[offset+i]=letter.charCodeAt(0));
+  word(0,'RIFF');view.setUint32(4,bytes.length-8,true);word(8,'WAVE');word(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,8000,true);view.setUint32(28,8000,true);view.setUint16(32,1,true);view.setUint16(34,8,true);word(36,'data');view.setUint32(40,bytes.length-44,true);
+  const audioUrl=URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}));
+  // Retain chart transposition and the audition controls without external media.
+  playPianoNotes=async()=>window.__reviewNotice('Note audition is silent in this UI/UX review copy.');
+  applyAudioPreview=async()=>window.__reviewNotice('The chart updates here; audio processing needs the ChordPilot backend.');
+  function resetDemo(screen='analysis',renderer='ireal') {
+    elements.audioPlayer.pause();
+    const demo=JSON.parse(JSON.stringify(window.__reviewDemo));
+    demo.audio.url=audioUrl;demo.chart.stems.stems.forEach(stem=>stem.url=audioUrl);demo.ui.chartRenderer=renderer;
+    state.recentSessions=[];state.jobs=[];
+    restoreSessionPayload(demo);
+    state.study.draft.start=8;state.study.draft.end=10;
+    const evidence=JSON.parse(JSON.stringify(demo.chart.bars[4].evidence));
+    evidence.detected_pitches.forEach(note=>note.frequency_hz=440*2**((note.midi-69)/12));
+    evidence.spectrum.peaks.forEach(peak=>peak.midi=Math.round(69+12*Math.log2(peak.frequency_hz/440)));
+    const settings=studySettings({song_key:'C'});
+    const run={id:'ui-demo-run',range:[8,10],sources:['bass','other'],settings,chord:'Em7',chord_confidence:.87,pitch_confidence:.92,algorithm_version:'local-study-v10',
+      evidence,source_evidence:{other:evidence},alternatives:[{chord:'Em7',score:.87},{chord:'C6',score:.64},{chord:'Em9',score:.42},{chord:'Gmaj7',score:.28}]};
+    state.studies=normalizeStudies([{id:'ui-demo-study',name:'Verse loop',start:8,end:10,sources:run.sources,settings,notes:'Synthetic UI fixture: listen and compare the chord candidates.',runs:[run]}]);
+    openStudy('ui-demo-study');
+    state.recentSessions=['Morning Light','River Road','Autumn Echo','City Lights','Blue Horizon'].map((title,index)=>({title,audioName:'Synthetic UI review fixture',key:['C','G','D','A','E'][index],tempo:120-index*6,bars:16,synthetic:true}));
+    state.jobs=[{message:'Synthetic UI fixture: chord analysis complete',status:'done',time:'09:30:00'},{message:'Synthetic UI fixture: stems prepared',status:'done',time:'09:28:00'},{message:'Synthetic UI fixture: melody review ready',status:'done',time:'09:27:00'}];
+    renderHome();
+    addJob('Synthetic demo project ready — no backend processing','done');
+    clearLog();appendLog('UI/UX review snapshot • synthetic 16-bar project • silent playback');
+    appendLog('Analysis and file operations are unavailable in this offline review copy.');
+    setStatus('UI/UX review demo · playback is silent');
+    go(screen);
+  }
+  byId('review-reset').addEventListener('click', () => resetDemo());
+  // Backend-only buttons retain their layout and enabled appearance for review.
+  const backend = '#chooseBtn,#homeNewProjectBtn,#openSessionBtn,#homeOpenSessionBtn,#saveSessionBtn,#saveSessionAsBtn,#youtubeStartBtn,#reanalyzeChordsBtn,#reanalyzeLyricsBtn,#reanalyzeAllBtn,#analyzeDrumsBtn,#analyzeMelodyBtn,#applyAudioPreviewBtn,.source-actions button,#studyAnalyzeBtn,[data-export],[data-export-audio],.lane-export';
+  document.addEventListener('click', event => {
+    const button=event.target.closest('button');
+    if(button?.matches('.recent-session')){
+      event.preventDefault();event.stopImmediatePropagation();go('analysis');
+      window.__reviewNotice('Timeline preview opened with the demo project. Open real saved songs in the application.');
+      return;
+    }
+    if(button?.hasAttribute('data-analysis-setup'))return;
+    if (event.target.closest(backend) || button && /^(re)?analy[sz]e\b/i.test(button.textContent.trim())) {event.preventDefault();event.stopImmediatePropagation();window.__reviewNotice('Demo only: this action needs the ChordPilot backend. Explore the populated screens and add UI/UX feedback.');}
+  }, true);
+  byId('youtubeStartForm').addEventListener('submit', event => {event.preventDefault();event.stopImmediatePropagation();window.__reviewNotice('Demo only: YouTube import needs the ChordPilot backend.');},true);
+  document.addEventListener('click',event=>{if(event.target.closest('[data-prototype-backend-action]')){event.preventDefault();event.stopImmediatePropagation();window.__reviewNotice('This action requires the ChordPilot backend. This is a synthetic, offline UI review.');}},true);
+  resetDemo(saved.screen === 'arrange' ? 'analysis' : (saved.screen || 'analysis'),saved.chartRenderer || 'ireal');byId('review-tools').open=false;renderNotes();
+  // Sidebar clicks can also change the selected screen.
+  document.addEventListener('click',()=>queueMicrotask(()=>byId('review-screen').value=screenName()));
+  window.__reviewReady=true;
+})();
+</script>

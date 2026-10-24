@@ -64,6 +64,7 @@ async function playStudySelection({ loop = false } = {}) {
       if (generation !== studyPlayback.generation) return;
       const master = players[0];
       checkBoundary();
+      if(typeof syncPrototypeStudyCursor==='function')syncPrototypeStudyCursor(master.currentTime);
       if (generation !== studyPlayback.generation) return;
       if (!master.ended) {
         players.slice(1).forEach((player) => {

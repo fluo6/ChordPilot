@@ -1,0 +1,20 @@
+# ChordPilot — Consolidate Song into Timeline
+
+Implement the approved Song/Timeline consolidation in the **actual ChordPilot codebase**, using `ChordPilot-Consolidated-Timeline-Song-Details-Concept.html` and its normal/open screenshot previews as visual and interaction references. The HTML is an offline synthetic UI review snapshot, **not** replacement production code. Inspect the existing components, state model, session persistence and routing before editing. Work in the existing worktree; keep changes focused.
+
+## Scope
+
+1. **Navigation:** Remove the separate Song entry. Use `Home · Timeline · Charts · Lab · Log · Help`. Route previous Song/open/continue actions to Timeline. Retain compatibility for any existing deep links or internal IDs instead of breaking callers. Keep “Passage Lab” as the Lab page heading.
+2. **Global song header:** Show the song title with a small **ⓘ info button** next to it (not a pencil; the title itself remains non-clickable). Add compact readouts for displayed key, BPM and time signature when space allows. The readouts may open/focus the corresponding Song Details fields. Give the info button an active teal state, “Song Details” tooltip, `aria-expanded` and keyboard focus styling.
+3. **Song Details panel:** Clicking ⓘ toggles one panel containing song metadata (artwork, title, artist/album/genre where supported), musical settings, source audio, project/session information and notes. Use the **existing bound inputs and state**, not independent duplicate form state. Keep existing advanced tuning/audio/session controls reachable in an expandable group. Preserve validation and normal persistence; if a metadata field cannot truly be edited and saved, keep it read-only instead of suggesting edits are saved.
+4. **Inspector relationship:** On Timeline, Song Details and Bar / Beat Detail **share the right-side slot**, one at a time; changing panels preserves their state and the selected bar. Opening Song Details must never permanently collapse Bar Detail. The info button, an internal close control and Escape must all close the panel. Bar Detail must have an obvious way to switch back. On Charts/Lab, the info button may show the same drawer as an overlay. Avoid permanently reducing the music area.
+5. **Responsive:** At ~1600/1366px, align the Song Details width and spacing with the existing inspector. At 600px, show a full-width **workspace** drawer, scrollable internally; don't create page-level horizontal overflow. Keep the primary title, info button and core playback controls visible.
+6. **Cleanup:** Song Overview, Arrangement Summary, available stems and session actions currently duplicate Timeline and the global toolbar. Migrate uniquely useful controls; remove redundant panels and navigation rather than relocating all duplication. Home Continue should open Timeline. Maintain the existing analysis setup workflow, with Settings and Analyze available from Timeline.
+
+## Non-negotiable preservation
+
+Keep all **five Timeline lanes** (Full Mix, Vocals, Drums, Bass, Other), their solo/mute/volume/export controls, the **complete Bar / Beat Detail inspector**, current piano and bass/guitar fretboards, chord-name font, and **alphaTab** notation renderer. Do not replace backend audio, analysis, state or PDF workflows with synthetic preview implementations. Avoid unnecessary layout rewrites, mock data, or unrelated Passage Lab feature work.
+
+## QA / acceptance
+
+Test in the real app with a genuine session, not only the synthetic HTML. Check: old Song routes and Home Continue now open Timeline; ⓘ opens/closes/reopens reliably; Song Details forms use real data and saved changes persist after reopening the session; key/BPM/time behave like the original controls (including transpose semantics); Bar / Beat Detail survives panel switches; Analysis Setup still reopens; all lanes and notation remain intact; no keyboard-focus trap, JS errors or horizontal overflow at **1600, 1366, and 600px**. Include before/after screenshots and note anything backend-dependent that was not validated.

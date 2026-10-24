@@ -234,14 +234,14 @@ function renderTranscriptionReview() {
   for(const [value,label] of [['chords','Chords'],['bass','Bass notes'],['drums','Drum hits'],['melody','Vocal melody']]) {
     const option=text('option',label);option.value=value;select.append(option);
   }
-  select.value=kind;select.onchange=()=>{state.reviewKind=select.value;renderTranscriptionReview();};controls.append(select);
+  select.value=kind;select.onchange=()=>{state.reviewKind=select.value;renderTranscriptionReview();renderChartReasonPane();};controls.append(select);
   const button=(label,run)=>{const n=text('button',label);n.type='button';n.onclick=run;return n;};
   controls.append(button('Listen to bar',()=>listenTranscriptionBar(chart,bar,end)));
   if(kind!=='chords') controls.append(button('Listen to stem',()=>listenTranscriptionBar(chart,bar,end,kind==='melody'?'vocals':kind)));
   controls.append(button('Stop',stopTranscriptionListen));
   const verify=button(status==='Verified'?'Mark unverified':'Mark verified',()=>{
     if(!verifyTranscription(chart,bar,end,kind,status!=='Verified')) {setStatus('Reset stale edits or refresh analysis before verifying.');return;}
-    renderChartPreview();renderTranscriptionReview();
+    renderChartPreview();renderTranscriptionReview();renderChartReasonPane();
   });
   verify.disabled=(['drums','melody'].includes(kind) && (!chart[kind]?.ok || chart[kind].stale)) || (kind==='bass' && !hasReviewedBassEvents(chart,bar,end));
   controls.append(verify);body.append(controls);

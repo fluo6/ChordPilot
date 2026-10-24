@@ -682,6 +682,7 @@ async function exportChart(format) {
     setStatus(error.message);
     showErrorDialog("Export Error", error.message);
   } finally {
+    if(format==='pdf'&&typeof setCompactChartPrinting==='function')setCompactChartPrinting(false);
     finishLoading();
   }
 }
@@ -849,8 +850,8 @@ function restoreSessionPayload(session) {
   }
   updateRowState({ scroll: true });
   updatePlayhead();
-  const restoredPanel = session.ui?.editorPanel === "log" ? (hasChart() ? "arrange" : "analysis") : (session.ui?.editorPanel || "arrange");
-  openEditorPanel(restoredPanel);
+  // Opening a song starts at Timeline, regardless of its last saved workspace.
+  openEditorPanel("analysis");
   renderHome();
 }
 
