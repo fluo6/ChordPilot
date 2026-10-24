@@ -790,11 +790,12 @@ function renderChartPreview() {
   if(typeof renderTranscriptionReview==='function') renderTranscriptionReview();
 
   const renderer = state.chartRenderer || "ireal";
+  if(typeof updateSpreadsheetChartControls==='function') updateSpreadsheetChartControls();
   if(elements.barsPerLineInput) elements.barsPerLineInput.disabled=renderer==='table';
   const showTable = renderer === "table";
   elements.barsTable.classList.toggle("hidden", !showTable);
   elements.chartPreview.classList.toggle("hidden", showTable);
-  if (['bass','drums'].includes(renderer) && hasChart()) {
+  if (['bass','drums','melody'].includes(renderer) && hasChart()) {
     renderAlphaTabChartPreview();
     return;
   }
@@ -815,6 +816,10 @@ function renderChartPreview() {
 
   if (renderer === "ireal") {
     renderIrealPreview(elements.chartPreview);
+  } else if (renderer === "spreadsheet") {
+    renderSpreadsheetChart(elements.chartPreview);
+  } else if (renderer === "numbered") {
+    renderNumberedChart(elements.chartPreview);
   } else if (renderer === "chordpro") {
     renderChordProPreview(elements.chartPreview);
   } else {
@@ -1064,8 +1069,8 @@ function barEndTime(index) {
   return Number(state.chart.bars[index + 1]?.start ?? state.chart.duration ?? elements.audioPlayer.duration ?? 0);
 }
 
-function beatsPerBar() {
-  return Number(String(state.chart?.time_signature || "4/4").split("/")[0]) || 4;
+function beatsPerBar(bar) {
+  return Number(String(bar?.time_signature || state.chart?.time_signature || "4/4").split("/")[0]) || 4;
 }
 
 function beatTimes() {
@@ -1075,9 +1080,9 @@ function beatTimes() {
   if (!hasChart()) {
     return [];
   }
-  const beats = beatsPerBar();
   const times = [];
   state.chart.bars.forEach((bar, barIndex) => {
+    const beats = bar.pickup_beats || beatsPerBar(bar);
     const start = Number(bar.start) || 0;
     const end = barEndTime(barIndex) || start + secondsPerBar();
     const step = Math.max(0.01, (end - start) / beats);
@@ -1100,7 +1105,7 @@ function beatNumberAtTime(barIndex, time) {
     if (time >= beats[index] - 0.04) active = index;
     else break;
   }
-  return Math.min(beatsPerBar(), active + 1);
+  return Math.min(beatsPerBar(state.chart.bars[barIndex]), active + 1);
 }
 
 function evidenceRangeText(bar, index) {

@@ -145,6 +145,10 @@
       return result.result;
     },
 
+    async analyzeMelody(payload = {}) {
+      const {result}=await postJson('/api/analyze-melody',{mediaId:mediaId(payload.audioPath),force:payload.force===true,...(payload.language?{language:payload.language}:{})});
+      return result;
+    },
     async prepareStems(audioPath) {
       const result = await postJson('/api/prepare-stems',{mediaId:mediaId(audioPath)});
       return browserChart({stems:result.stems}).stems;

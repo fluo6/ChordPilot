@@ -4,7 +4,55 @@ const {loadScript,plain}=require('./helpers/load-script');
 const BassTuning=require('../../src/renderer/bass-tuning.js');
 const names=['transcriptionBasis','transcriptionReviewStatus','setTranscriptionCorrection','effectiveTranscriptionEvents','verifyTranscription','captureDetectedChords','chartDisplayTitle','hasReviewedBassEvents','reviewedBassTrack','parseReviewPitch','resetTranscriptionCorrection'];
 const transpose=loadScript('src/renderer/transpose.js',['transposeBarChordFields'],{PITCH_NAMES:['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'],ENHARMONIC_TO_PITCH:{}});
-const api=()=>loadScript('src/renderer/transcription-review.js',names,transpose);
+const api=(state={})=>loadScript('src/renderer/transcription-review.js',names,{...transpose,state});
+
+test('changing melody rhythm precision requires review while preserving manual corrections',()=>{
+  const state={melodyNotation:{resolution:16,cleanChords:true}},a=api(state);
+  const chart={duration:2,bars:[{start:0}],melody:{ok:true,events:[{start:0,end:1,midi:60}]}};
+  const bar=chart.bars[0];
+  a.setTranscriptionCorrection(chart,bar,2,'melody',[{start:0,end:1,midi:62}]);
+  a.verifyTranscription(chart,bar,2,'melody',true);
+  state.melodyNotation.cleanChords=false;
+  assert.equal(a.transcriptionReviewStatus(chart,bar,2,'melody'),'Verified');
+  state.melodyNotation.resolution=32;
+  assert.equal(a.transcriptionReviewStatus(chart,bar,2,'melody'),'Needs review');
+  assert.equal(a.effectiveTranscriptionEvents(chart,bar,2,'melody')[0].midi,62);
+  assert.equal(a.verifyTranscription(chart,bar,2,'melody',true),true);
+  assert.equal(a.transcriptionReviewStatus(chart,bar,2,'melody'),'Verified');
+});
+
+test('melody corrections preserve raw concert pitch and invalidate verification after model changes',()=>{
+  const a=api(),chart={source_path:'song.wav',duration:4,bars:[{start:0},{start:2}],melody:{ok:true,model:'v1',fingerprint:'a',events:[{start:1,end:3,midi:72}]}};
+  const bar=chart.bars[0],saved=JSON.stringify(chart.melody);
+  const raw=a.effectiveTranscriptionEvents(chart,bar,2,'melody');assert.equal(raw[0].end,2);assert.equal(raw[0].continuesToNext,true);
+  a.setTranscriptionCorrection(chart,bar,2,'melody',[{start:1,end:2,midi:73}]);
+  assert.equal(a.effectiveTranscriptionEvents(chart,bar,2,'melody')[0].midi,73);assert.equal(JSON.stringify(chart.melody),saved);
+  assert.equal(a.verifyTranscription(chart,bar,2,'melody',true),true);
+  assert.throws(()=>a.setTranscriptionCorrection(chart,bar,2,'melody',[{start:1,end:2,midi:200}]),/MIDI/);
+  chart.melody.model='v2';assert.equal(a.transcriptionReviewStatus(chart,bar,2,'melody'),'Needs review');
+  chart.melody.stale=true;assert.equal(a.verifyTranscription(chart,bar,2,'melody',true),false);
+});
+test('pitch-correcting both halves of a melody sustain retains ties and neighbour edits invalidate verification',()=>{
+  const a=api(),chart={source_path:'song.wav',duration:4,bars:[{start:0},{start:2}],melody:{ok:true,model:'v1',events:[{start:1,end:3,midi:72}]}};
+  const [first,second]=chart.bars;
+  a.setTranscriptionCorrection(chart,first,2,'melody',[{start:1,end:2,midi:73}]);
+  a.setTranscriptionCorrection(chart,second,4,'melody',[{start:2,end:3,midi:73}]);
+  assert.equal(a.effectiveTranscriptionEvents(chart,first,2,'melody')[0].continuesToNext,true);
+  assert.equal(a.effectiveTranscriptionEvents(chart,second,4,'melody')[0].continuesFromPrevious,true);
+  a.verifyTranscription(chart,second,4,'melody',true);
+  a.setTranscriptionCorrection(chart,first,2,'melody',[]);
+  assert.equal(a.transcriptionReviewStatus(chart,second,4,'melody'),'Needs review');
+});
+
+test('editing a later neighbouring tuplet attack invalidates the preceding melody review',()=>{
+  const a=api(),chart={duration:3,bars:[{start:0},{start:1.5}],melody:{ok:true,events:[
+    {start:1,end:4/3,midi:60},{start:4/3,end:5/3,midi:62},{start:5/3,end:2,midi:64}]}};
+  const [first,second]=chart.bars;
+  a.setTranscriptionCorrection(chart,second,3,'melody',[{start:1.5,end:5/3,midi:62},{start:5/3,end:2,midi:64}]);
+  assert.equal(a.verifyTranscription(chart,first,1.5,'melody',true),true);
+  a.setTranscriptionCorrection(chart,second,3,'melody',[{start:1.5,end:5/3,midi:62}]);
+  assert.equal(a.transcriptionReviewStatus(chart,first,1.5,'melody'),'Needs review');
+});
 function fixture(){return {source_path:'song.wav',beat_times:[0,.5,1,1.5,2],analysis_engine:{options:{}},
   drums:{ok:true,fingerprint:'model-a',events:[{time:.25,instrument:'kick',score:.8}]},
   duration:2,bars:[{start:0,chord:'C',chord_events:[{start:0,end:2,chord:'C',confidence:.7}],bass_events:[{start:.1,end:1.8,midi:36,confidence:.98,attack_start:.1}]}]};}

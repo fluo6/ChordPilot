@@ -1,16 +1,19 @@
 // Reviews belong to a particular recording, bar and set of predictions. Model
 // outputs stay available when a performer corrects an interpretation.
 function transcriptionRawEvents(chart,bar,end,kind) {
+  if(kind==='melody')return (chart.melody?.events||[]).filter(note=>note.end>bar.start&&note.start<end).map(note=>({...note,
+    source_start:note.start,source_end:note.end,attack_start:note.start,start:Math.max(bar.start,note.start),end:Math.min(end,note.end),
+    continuesFromPrevious:note.start<bar.start,continuesToNext:note.end>end}));
   if(kind==='drums') return (chart.drums?.events || []).filter(hit=>hit.time>=bar.start && hit.time<end);
   if(kind==='bass') return bar.bass_events || [];
   return bar.chord_events?.length ? bar.chord_events : [{start:bar.start,end,chord:bar.chord || 'N.C.',confidence:bar.confidence}];
 }
 
 function transcriptionBasis(chart,bar,end,kind) {
-  const fields=kind==='drums' ? ['time','instrument','score'] : kind==='bass'
+  const fields=kind==='melody'?['start','end','midi','pitch_midi','source_start','source_end']:kind==='drums' ? ['time','instrument','score'] : kind==='bass'
     ? ['start','end','midi','confidence','frequency_hz','attack_start'] : ['start','end','chord','confidence','evidence_stale'];
   return JSON.stringify([chart.source_path,bar.start,end,(chart.beat_times || []).filter(t=>t>=bar.start && t<=end),
-    kind==='drums' ? [chart.drums?.model,chart.drums?.fingerprint] : chart.analysis_engine?.options,
+    ['drums','melody'].includes(kind) ? [chart[kind]?.model,chart[kind]?.fingerprint] : chart.analysis_engine?.options,
     transcriptionRawEvents(chart,bar,end,kind).map(event=>fields.map(field=>event[field]))]);
 }
 
@@ -33,13 +36,15 @@ function captureDetectedChords(bar,end,offset=0) {
 
 function setTranscriptionCorrection(chart,bar,end,kind,events) {
   const clean=events.map(event=>kind==='drums' ? {time:Number(event.time),instrument:event.instrument,manual:true}
-    : kind==='bass' ? {start:Number(event.start),end:Number(event.end),midi:Number(event.midi),attack_start:Number(event.start),manual:true}
+    : ['bass','melody'].includes(kind) ? {start:Number(event.start),end:Number(event.end),midi:Number(event.midi),attack_start:Number(event.start),manual:true}
       : {start:Number(event.start),end:Number(event.end),chord:String(event.chord || '').trim(),manual:true,evidence_stale:true});
   clean.sort((a,b)=>(a.time ?? a.start)-(b.time ?? b.start));
-  if(kind==='bass')clean.forEach(note=>{
-    const source=effectiveTranscriptionEvents(chart,bar,end,kind).find(item=>item.start===note.start && item.midi===note.midi);
+  if(['bass','melody'].includes(kind))clean.forEach(note=>{
+    const source=effectiveTranscriptionEvents(chart,bar,end,kind).find(item=>item.start===note.start && (kind==='melody'||item.midi===note.midi));
     if(source && Number.isFinite(source.attack_start))note.attack_start=source.attack_start;
     else if(source)delete note.attack_start;
+    if(kind==='melody'&&source){note.continuesFromPrevious=Boolean(source.continuesFromPrevious);
+      note.continuesToNext=Boolean(source.continuesToNext&&source.end===note.end);}
   });
   let previous=bar.start;
   clean.forEach(event=>{
@@ -50,6 +55,7 @@ function setTranscriptionCorrection(chart,bar,end,kind,events) {
     } else {
       if(!Number.isFinite(event.end) || event.end<=start || event.end>end || start<previous-1e-6) throw new Error('Use positive, non-overlapping durations inside this bar.');
       if(kind==='bass' && (!Number.isInteger(event.midi) || event.midi<21 || event.midi>67)) throw new Error('Bass pitches must be MIDI 21–67.');
+      if(kind==='melody' && (!Number.isInteger(event.midi)||event.midi<0||event.midi>127))throw Error('Vocal pitches must be MIDI 0–127.');
       if(kind==='chords' && (!event.chord || Math.abs(start-previous)>1e-6)) throw new Error('Chords must cover the bar without gaps.');
       previous=event.end;
     }
@@ -95,7 +101,7 @@ function resetTranscriptionCorrection(chart,bar,end,kind) {
 
 function transcriptionReviewStatus(chart,bar,end,kind) {
   const entry=bar.transcription_review?.[kind];
-  if(kind==='drums' && chart.drums?.stale) return 'Needs review';
+  if(['drums','melody'].includes(kind) && chart[kind]?.stale) return 'Needs review';
   if(entry?.basis && entry.basis!==transcriptionBasis(chart,bar,end,kind)) return 'Needs review';
   if(!entry?.verified)return 'Unverified';
   const current=transcriptionVerificationEvents(chart,bar,end,kind);
@@ -104,7 +110,7 @@ function transcriptionReviewStatus(chart,bar,end,kind) {
 }
 
 function verifyTranscription(chart,bar,end,kind,verified) {
-  if(verified && ((kind==='drums' && (!chart.drums?.ok || chart.drums.stale)) || (kind==='bass' && !hasReviewedBassEvents(chart,bar,end)))) return false;
+  if(verified && ((['drums','melody'].includes(kind) && (!chart[kind]?.ok || chart[kind].stale)) || (kind==='bass' && !hasReviewedBassEvents(chart,bar,end)))) return false;
   const entry=(bar.transcription_review ||= {})[kind] ||= {};
   // A stale correction must be reset or edited before accepting new evidence.
   if(verified && entry.events && entry.basis!==transcriptionBasis(chart,bar,end,kind)) return false;
@@ -137,6 +143,18 @@ function reviewedDrumTrack(chart,start=-Infinity,end=Infinity) {
 }
 
 function transcriptionVerificationEvents(chart,bar,end,kind) {
+  if(kind==='melody'){
+    const index=chart.bars?.indexOf(bar) ?? -1;
+    // Precision changes written durations, but must not invalidate source edits.
+    const resolution=Number(typeof state==='undefined'?16:state.melodyNotation?.resolution)===32?32:16;
+    const evidence=index>=0?[index-1,index,index+1].filter(i=>i>=0&&i<chart.bars.length).map(i=>{
+      const owner=chart.bars[i],stop=chart.bars[i+1]?.start ?? chart.duration;
+      // Neighbouring attacks establish cross-bar tuplets as well as sustain
+      // ties, so verification must include the complete adjacent evidence.
+      return effectiveTranscriptionEvents(chart,owner,stop,kind);
+    }):[effectiveTranscriptionEvents(chart,bar,end,kind)];
+    return JSON.stringify({resolution,evidence});
+  }
   // A near-barline hit may be engraved on the next downbeat. Include adjacent
   // original-time hits so editing their owning bar also invalidates this review.
   return JSON.stringify(kind==='drums' ? reviewedDrumTrack(chart,bar.start-.035,end+.035)
@@ -200,9 +218,10 @@ function renderTranscriptionReview() {
   if(!panel) return;
   const chart=state.chart,bar=chart?.bars[state.selectedIndex];
   panel.hidden=!bar;if(!bar)return;
-  const kind=state.reviewKind || (state.chartRenderer==='bass' ? 'bass' : state.chartRenderer==='drums' ? 'drums' : 'chords');
+  const kind=state.reviewKind || (state.chartRenderer==='numbered'?'melody':['bass','drums','melody'].includes(state.chartRenderer)?state.chartRenderer:'chords');
   const end=barEndTime(state.selectedIndex),entry=bar.transcription_review?.[kind];
-  const signature=JSON.stringify([state.selectedIndex,kind,transcriptionBasis(chart,bar,end,kind),entry,chart.drums?.stale]);
+  const signature=JSON.stringify([state.selectedIndex,kind,transcriptionBasis(chart,bar,end,kind),entry,chart.drums?.stale,chart.melody?.stale,
+    kind==='melody'?transcriptionVerificationEvents(chart,bar,end,kind):null]);
   if(panel._signature===signature && panel._chart===chart && panel._bar===bar)return;
   panel._signature=signature;panel._chart=chart;panel._bar=bar;
   const text=(tag,value,className='')=>{const n=document.createElement(tag);n.textContent=value;n.className=className;return n;};
@@ -212,21 +231,21 @@ function renderTranscriptionReview() {
   body.replaceChildren();
   const controls=text('div','','transcription-review-controls'),select=document.createElement('select');
   select.setAttribute('aria-label','Review instrument');
-  for(const [value,label] of [['chords','Chords'],['bass','Bass notes'],['drums','Drum hits']]) {
+  for(const [value,label] of [['chords','Chords'],['bass','Bass notes'],['drums','Drum hits'],['melody','Vocal melody']]) {
     const option=text('option',label);option.value=value;select.append(option);
   }
   select.value=kind;select.onchange=()=>{state.reviewKind=select.value;renderTranscriptionReview();};controls.append(select);
   const button=(label,run)=>{const n=text('button',label);n.type='button';n.onclick=run;return n;};
   controls.append(button('Listen to bar',()=>listenTranscriptionBar(chart,bar,end)));
-  if(kind!=='chords') controls.append(button('Listen to stem',()=>listenTranscriptionBar(chart,bar,end,kind==='bass'?'bass':'drums')));
+  if(kind!=='chords') controls.append(button('Listen to stem',()=>listenTranscriptionBar(chart,bar,end,kind==='melody'?'vocals':kind)));
   controls.append(button('Stop',stopTranscriptionListen));
   const verify=button(status==='Verified'?'Mark unverified':'Mark verified',()=>{
     if(!verifyTranscription(chart,bar,end,kind,status!=='Verified')) {setStatus('Reset stale edits or refresh analysis before verifying.');return;}
     renderChartPreview();renderTranscriptionReview();
   });
-  verify.disabled=(kind==='drums' && (!chart.drums?.ok || chart.drums.stale)) || (kind==='bass' && !hasReviewedBassEvents(chart,bar,end));
+  verify.disabled=(['drums','melody'].includes(kind) && (!chart[kind]?.ok || chart[kind].stale)) || (kind==='bass' && !hasReviewedBassEvents(chart,bar,end));
   controls.append(verify);body.append(controls);
-  body.append(text('p',kind==='drums' ? 'Kit classes are model guesses. Scores are model activations, not accuracy. Environmental percussion may not fit these classes.'
+  body.append(text('p',kind==='melody'?'Review original vocal pitches against the vocals stem. The score follows display transposition. Check harmonies, octave errors, slides and repeated syllables.':kind==='drums' ? 'Kit classes are model guesses. Scores are model activations, not accuracy. Environmental percussion may not fit these classes.'
     : kind==='bass' ? 'Measured low-register pitches; instrument and fingering are interpretations. Periodicity is signal evidence, not transcription accuracy.'
       : 'Detected chords and manual reference candidates are separate. A reference note never changes the detector.','study-muted'));
   if(kind==='drums') {
@@ -242,6 +261,7 @@ function renderTranscriptionReview() {
   const list=text('ul','','transcription-evidence');
   detected.forEach(event=>{
     const label=kind==='drums' ? `${event.time.toFixed(3)}s · ${DRUM_PARTS[event.instrument]?.name || event.instrument} · activation ${event.score?.toFixed(2) ?? 'unavailable'}`
+      : kind==='melody'?`${event.source_start.toFixed(3)}–${event.source_end.toFixed(3)}s · MIDI ${event.midi} · estimated vocal pitch`
       : `${event.start.toFixed(3)}–${event.end.toFixed(3)}s · ${kind==='bass' ? `${bassPitchLabel(event.midi)} · periodicity ${event.confidence?.toFixed(2) ?? 'unavailable'}` : `${event.chord} · score ${event.confidence?.toFixed(2) ?? 'unavailable'}`}`;
     list.append(text('li',label));
   });
@@ -263,7 +283,7 @@ function renderTranscriptionReview() {
     if(kind==='drums') {
       const n=document.createElement('select');n.name='instrument';n.setAttribute('aria-label','Drum class');
       Object.entries(DRUM_PARTS).forEach(([value,part])=>{const o=text('option',part.name);o.value=value;n.append(o);});n.value=event.instrument || 'kick';row.append(n);
-    } else field(kind==='bass'?'midi':'chord',kind==='bass'?bassPitchLabel(event.midi):event.chord,'text');
+    } else field(['bass','melody'].includes(kind)?'midi':'chord',['bass','melody'].includes(kind)?bassPitchLabel(event.midi):event.chord,'text');
     row.append(button('Remove',()=>row.remove()));rows.append(row);
   };
   (stale?entry.events:effective).forEach(addRow);

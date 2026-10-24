@@ -11,6 +11,38 @@ import chordpilot_analysis as analysis
 
 
 class BeatTrackingTests(unittest.TestCase):
+    def test_joint_model_uses_full_mix_while_default_stem_timing_is_preserved(self):
+        sr = 1000
+        accompaniment = np.zeros(sr * 5)
+        accompaniment[np.arange(250, 4750, 500)] = 1
+        bleed = np.zeros_like(accompaniment)
+        bleed[np.arange(100, 4900, 600)] = .02
+        source, other, drums = Path('mix.wav'), Path('other.wav'), Path('drums.wav')
+        stems = {'stems': [{'name': 'other', 'path': str(other)}, {'name': 'drums', 'path': str(drums)}]}
+        for engine, expected in [('onset', 'drums'), ('beat_this', 'full mix')]:
+            measured = {'tempo': 120, 'beat_times': [.25, .75, 1.25]}
+            with self.subTest(expected=expected), \
+                 patch.object(analysis, 'load_audio', side_effect=lambda path: (bleed if path == drums else accompaniment, sr)), \
+                 patch.object(analysis, 'estimate_rhythm', return_value=measured.copy()) as rhythm, \
+                 patch.object(analysis, 'estimate_bars_from_audio', return_value=[]), \
+                 patch.object(analysis, 'normalize_bars_chords'), patch.object(analysis, 'attach_timed_chord_events'):
+                result = analysis.estimate_high_quality_from_stems(source, stems, {'rhythm_engine': engine})
+            self.assertEqual(result.get('rhythm_source'), expected)
+            self.assertIs(rhythm.call_args.args[0], bleed if expected == 'drums' else accompaniment)
+            self.assertEqual(result['beat_times'], measured['beat_times'])
+
+    def test_missing_drums_keeps_full_mix_timing_and_separate_accompaniment_chords(self):
+        mix, other = np.ones(1000), np.ones(1000) * .25
+        with patch.object(analysis, 'load_audio', side_effect=lambda path: (other if path.name == 'other.wav' else mix, 1000)), \
+             patch.object(analysis, 'estimate_rhythm', return_value={'tempo': 100, 'beat_times': [0, .6]} ) as rhythm, \
+             patch.object(analysis, 'estimate_bars_from_audio', return_value=[]) as bars, \
+             patch.object(analysis, 'normalize_bars_chords'), patch.object(analysis, 'attach_timed_chord_events'):
+            result = analysis.estimate_high_quality_from_stems(Path('mix.wav'),
+                {'stems': [{'name': 'other', 'path': 'other.wav'}]}, {})
+        self.assertEqual(result['rhythm_source'], 'full mix')
+        self.assertIs(rhythm.call_args.args[0], mix)
+        self.assertIs(bars.call_args.args[0], other)
+
     def track(self, times, tempo=120, offset=0):
         envelope = np.zeros(round((times[-1] + 1) * 100))
         envelope[np.rint(np.array(times) * 100).astype(int)] = 1

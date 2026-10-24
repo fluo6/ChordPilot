@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, clipboard } = require("electron");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -196,7 +196,17 @@ ipcMain.handle("study:analyzeRange", async (_event, payload) => {
 });
 
 ipcMain.handle('drums:analyze', async (_event, payload) => services.analyzeDrums({audioPath:payload?.audioPath,force:payload?.force === true}));
+ipcMain.handle('melody:analyze', async (_event,payload)=>services.analyzeMelody({audioPath:payload?.audioPath,force:payload?.force===true,language:payload?.language}));
 ipcMain.handle('audio:prepareStems', async (_event, audioPath) => services.prepareStems({audioPath}));
+
+ipcMain.handle('clipboard:spreadsheetChart', (_event, payload) => {
+  if (typeof payload?.text !== 'string' || typeof payload?.html !== 'string' ||
+      Buffer.byteLength(payload.text, 'utf8') + Buffer.byteLength(payload.html, 'utf8') > 20 * 1024 * 1024)
+    throw Error('The spreadsheet clipboard payload is invalid or too large.');
+  if (payload.html) clipboard.write({text:payload.text,html:payload.html});
+  else clipboard.writeText(payload.text);
+  return true;
+});
 
 ipcMain.handle("chart:export", async (_event, payload) => {
   const { chart, format } = payload;

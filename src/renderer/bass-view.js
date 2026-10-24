@@ -152,7 +152,7 @@ function createStringFretboard(notes, names, instrument) {
 
 function bassRhythm(notes, bar, barEnd, chart = {}) {
   if (!bar || !Number.isFinite(bar.start) || !(barEnd > bar.start)) return null;
-  const signature = /^(\d+)\/(2|4|8|16)$/.exec(chart.time_signature || '4/4');
+  const signature = /^(\d+)\/(2|4|8|16)$/.exec(bar.time_signature || chart.time_signature || '4/4');
   const fullBeats = signature && Number(signature[1]) >= 1 && Number(signature[1]) <= 32 ? Number(signature[1]) : 4;
   const beats = Number.isInteger(bar.pickup_beats) && bar.pickup_beats > 0 && bar.pickup_beats < fullBeats ? bar.pickup_beats : fullBeats;
   const beatValue = signature ? Number(signature[2]) : 4;
@@ -183,7 +183,7 @@ function bassRhythm(notes, bar, barEnd, chart = {}) {
   const values = [[16,'1',0],[12,'2',1],[8,'2',0],[6,'4',1],[4,'4',0],[3,'8',1],[2,'8',0],[1,'16',0]]
     .map(([units,duration,dots])=>[units*unitDenominator/16,duration,dots]);
   for(let denominator=32;denominator<=unitDenominator;denominator*=2) values.push([unitDenominator/denominator,String(denominator),0]);
-  const events = [];
+  const events = [],diagnostics = [];
   const append = (start,end,sourceIndex) => {
     const first = events.length;
     while(start<end) {
@@ -210,12 +210,13 @@ function bassRhythm(notes, bar, barEnd, chart = {}) {
       release=quantize(next.start,held(next));
     }
     const end=Math.max(0,Math.min(totalUnits-remaining,Math.max(release,confirmedShort(note)?start+1:0)));
-    if(end<=start) return;
+    if(end<=start){diagnostics.push({sourceIndex:index,midi:note.midi,start:note.start,end:note.end,
+      reason:'This bass note portion is shorter than the display grid or overlaps a quantized note. Original evidence is retained.'});return;}
     if(start>cursor) append(cursor,start,null);
     append(start,end,index); cursor=end;
   });
   if(cursor<totalUnits) append(cursor,totalUnits,null);
-  return {beats,beatValue,totalUnits,unitDenominator,events,anchors};
+  return {beats,beatValue,totalUnits,unitDenominator,events,anchors,diagnostics};
 }
 
 function notationSpacing(offsets,total,left,right,startX,endX) {

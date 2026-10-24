@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { loadScript, plain } = require("./helpers/load-script");
+const {melodyNotationSettings} = loadScript('src/renderer/melody-view.js', ['melodyNotationSettings']);
+const {spreadsheetChartSettings} = loadScript('src/renderer/spreadsheet-chart.js', ['spreadsheetChartSettings']);
 
 function environment(overrides = {}) {
   const helpers = loadScript("src/renderer/study-model.js", ["studyCopy", "studyRangeError", "advanceStudySelection", "studySettings", "studySourceNames", "createStudyState", "saveStudyRecord", "compareStudyRuns", "normalizeStudies", "studyChordOverlaps"]);
@@ -116,6 +118,8 @@ test("Save Session flushes pending runs and preserves dirty edits made during th
   env.setStudyRange(1, 2); await env.analyzeStudySelection();
   let resolve; let payload; let saveOptions;
   const { saveSession } = loadScript("src/renderer/actions.js", ["saveSession"], {
+    melodyNotationSettings,
+    spreadsheetChartSettings,
     state: env.state, studyCopy: (value) => plain(value), saveCurrentStudy: env.saveCurrentStudy, studySaveToken: env.studySaveToken,
     renderStudy() {}, syncMetaToState() {}, collectAnalysisOptions: () => ({}),
     chartBarsPerLine: loadScript('src/renderer/chart-layout.js',['chartBarsPerLine'],{state:env.state}).chartBarsPerLine,

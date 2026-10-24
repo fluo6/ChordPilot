@@ -1,0 +1,41 @@
+{
+  "title": "Promises — Jesus Molina reharmonization",
+  "source_url": "https://www.youtube.com/watch?v=cWqAJd-DXMc",
+  "video_title": "when you discover a new chord",
+  "transcription_by": "Timothy Gondola",
+  "reference_kind": "Selected chord labels read manually from the embedded transcription. Attack coordinates checked against the original mix waveform, independently of ChordPilot's beat grid. This is a focused benchmark, not a complete authoritative transcription.",
+  "reference_frames_seconds": [1,8,16,40],
+  "printed_tempo": 180,
+  "timing_uncertainty_seconds": 0.04,
+  "timing_note": "The performed opening is about 154 BPM despite the printed 180. Grace notes, palm glissandi, melodic runs and ties are not all separate harmonies. Beat annotations below are selected attacked beats only; no interpolation is treated as human ground truth.",
+  "settings": {"known_key":"", "chord_timing":"auto", "chord_grid":"half_beat", "chord_stability":"detailed", "tail_reduction":0, "overtone_weighting":0.5, "simplify_chords":false},
+  "windows": [
+    {"start":2.64,"end":2.90,"chord":"E","bar":2,"beat":1,"split":"calibration"},
+    {"start":3.03,"end":3.30,"chord":"D/F#","bar":2,"beat":2,"split":"calibration"},
+    {"start":3.43,"end":3.68,"chord":"E/G#","bar":2,"beat":3,"split":"calibration"},
+    {"start":3.82,"end":4.08,"chord":"Amaj9","bar":2,"beat":4,"split":"calibration"},
+    {"start":8.88,"end":9.14,"chord":"E","bar":6,"beat":1,"split":"calibration"},
+    {"start":9.27,"end":9.53,"chord":"D/F#","bar":6,"beat":2,"split":"calibration"},
+    {"start":9.66,"end":9.91,"chord":"E/G#","bar":6,"beat":3,"split":"calibration"},
+    {"start":10.09,"end":10.30,"chord":"Amaj9","bar":6,"beat":4,"split":"calibration"},
+    {"start":15.12,"end":15.36,"chord":"E","bar":10,"beat":1,"split":"calibration"},
+    {"start":15.51,"end":15.76,"chord":"D/F#","bar":10,"beat":2,"split":"calibration"},
+    {"start":15.89,"end":16.10,"chord":"E/G#","bar":10,"beat":3,"split":"calibration"},
+    {"start":16.29,"end":16.55,"chord":"Bm11","bar":10,"beat":4,"split":"calibration"},
+    {"start":38.65,"end":39.50,"chord":"Amaj9","bar":25,"beat":1,"split":"held_out"},
+    {"start":39.69,"end":39.79,"chord":"Gmaj9","bar":25,"beat":4,"split":"held_out"},
+    {"start":39.90,"end":40.30,"chord":"Cmaj9","bar":25,"beat":4.5,"split":"held_out"},
+    {"start":40.48,"end":40.71,"chord":"Bbmaj9","bar":26,"beat":2,"split":"held_out"},
+    {"start":40.91,"end":41.11,"chord":"Amaj9","bar":26,"beat":3,"split":"held_out"},
+    {"start":41.34,"end":41.48,"chord":"Gmaj9","bar":26,"beat":4,"split":"held_out"},
+    {"start":41.68,"end":41.88,"chord":"Amaj9","bar":27,"beat":1,"split":"held_out"},
+    {"start":42.10,"end":42.20,"chord":"Bbmaj9","bar":27,"beat":2,"split":"held_out"},
+    {"start":42.32,"end":42.74,"chord":"Gmaj9","bar":27,"beat":2.5,"split":"held_out"}
+  ],
+  "attacked_beats": [
+    {"time":2.590,"bar":2,"beat":1},{"time":2.979,"bar":2,"beat":2},{"time":3.382,"bar":2,"beat":3},{"time":3.757,"bar":2,"beat":4},
+    {"time":8.824,"bar":6,"beat":1},{"time":9.211,"bar":6,"beat":2},{"time":9.600,"bar":6,"beat":3},{"time":10.029,"bar":6,"beat":4},
+    {"time":15.058,"bar":10,"beat":1},{"time":15.447,"bar":10,"beat":2},{"time":15.826,"bar":10,"beat":3},{"time":16.223,"bar":10,"beat":4},
+    {"time":38.473,"bar":25,"beat":1},{"time":38.894,"bar":25,"beat":2},{"time":39.247,"bar":25,"beat":3},{"time":39.646,"bar":25,"beat":4}
+  ]
+}

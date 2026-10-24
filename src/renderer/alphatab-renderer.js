@@ -11,6 +11,8 @@
     .alpha-chart-heading strong { font:26px 'MuseJazz Text','Segoe UI',sans-serif; }
     .alpha-chart-heading span,.alpha-chart-footer { color:#666; font-size:11px; line-height:1.5; }
     .alpha-chart-heading .transcription-sheet-status { color:#72623b; }
+    .alpha-chart-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .alpha-chart-controls label { display:flex; align-items:center; gap:4px; font-size:12px; }
     .alpha-chart-screen { position:relative; min-width:0; width:100%; overflow:hidden; }
     .alpha-chart-engine { min-width:0; width:100%; }
     .alpha-chart-overlay { position:absolute; inset:0; pointer-events:none; }
@@ -22,9 +24,14 @@
     .alpha-chart-measure.selected:not(.active)::after { background:rgb(76 142 137 / 3%); border-color:rgb(76 142 137 / 30%); }
     .alpha-chart .alpha-chart-measure:hover:not(:disabled) { border:0; background:transparent!important; box-shadow:none; }
     .alpha-chart-number { position:absolute; left:2px; top:2px; color:#526268; font:11px 'Segoe UI',sans-serif; white-space:nowrap; }
+    .alpha-chart-number-review { color:#8a6530; }
     .alpha-chart-note-hit { position:absolute; z-index:2; border:0; border-radius:4px; padding:0; background:transparent; pointer-events:auto; }
     .alpha-chart-note-hit.playing { background:rgb(23 182 162 / 28%); box-shadow:0 0 0 2px #189585; }
     .alpha-chart-cursor { position:absolute; z-index:3; width:2px; background:#189585; pointer-events:none; }
+    .alpha-chart-melody .alpha-chart-measure.active::after { background:rgb(76 142 137 / 3%);border-color:transparent; }
+    .alpha-chart-melody .alpha-chart-measure.selected:not(.active)::after { background:rgb(76 142 137 / 1.5%);border-color:transparent; }
+    .alpha-chart-melody .alpha-chart-note-hit.playing { background:rgb(23 182 162 / 12%);box-shadow:none; }
+    .alpha-chart-melody .alpha-chart-cursor { width:1px; }
     .alpha-chart .alpha-chart-chord { appearance:none; -webkit-appearance:none; position:absolute; z-index:4; box-sizing:content-box; min-height:0; margin:0; border:0!important; border-radius:0; padding:0!important; background:transparent!important; box-shadow:none!important; color:#171717!important; font:20px 'MuseJazz Text','Segoe UI',sans-serif; line-height:1.15; text-align:left; text-shadow:none; white-space:nowrap; cursor:pointer; pointer-events:auto; }
     .alpha-chart .alpha-chart-chord:hover:not(:disabled) { border:0!important; background:transparent!important; color:#171717!important; filter:none; }
     .alpha-chart-chord sup { font-size:.58em; }
@@ -45,7 +52,7 @@
     @media print {
       .alpha-chart { padding:0; }
       .alpha-chart-screen { display:none !important; }
-      .alpha-chart-header label { display:none !important; }
+      .alpha-chart-header label,.alpha-chart-header button,.alpha-chart-controls { display:none !important; }
       .alpha-chart-print { display:block; }
       .alpha-chart-print .alpha-chart-chord { color:#171717!important;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;pointer-events:none; }
       .alpha-chart-print .alpha-chart-section-label { color:#365458!important;background:transparent!important; }
@@ -54,14 +61,14 @@
   document.head.append(css);
 
   const place=(node,bounds)=>Object.assign(node.style,{left:`${bounds.x}px`,top:`${bounds.y}px`,width:`${bounds.w}px`,height:`${bounds.h}px`});
-  function nativeSettings(barsPerLine){
+  function nativeSettings(barsPerLine,kind){
     const a=alphaTab,s=new a.Settings();
     s.core.useWorkers=true;s.core.scriptFile=new URL('./vendor/alphatab/alphaTab.min.js',document.baseURI).href;
     s.core.engine='svg';s.core.enableLazyLoading=false;s.core.includeNoteBounds=true;s.core.fontDirectory=fontDirectory;
-    s.display.scale=.65;s.display.barsPerRow=barsPerLine;s.display.padding=[8,0,0,0];
+    s.display.scale=kind==='melody'?.78:.65;s.display.barsPerRow=barsPerLine;s.display.padding=[8,0,0,0];
     s.display.layoutMode=a.LayoutMode.Parchment;s.display.barCountPerPartial=barsPerLine;
     // Keep ChordPilot's chord symbols in their own timed overlay above notation.
-    s.display.firstNotationStaffPaddingTop=112;
+    s.display.firstNotationStaffPaddingTop=kind==='melody'?128:112;
     s.display.resources.engravingSettings.tabLineSpacing=14;
     s.display.resources.tablatureFont=new a.model.Font('Arial',18);
     s.display.notationStaffPaddingTop=12;s.display.notationStaffPaddingBottom=12;
@@ -73,13 +80,14 @@
   }
   function buildSheet(container,fixture){
     const text=(tag,content,className='')=>{const node=document.createElement(tag);node.textContent=content;node.className=className;return node;};
-    const sheet=text('section','','alpha-chart');
+    const sheet=text('section','',`alpha-chart${fixture.kind==='melody'?' alpha-chart-melody':''}`);
     const header=text('div','','alpha-chart-header'),heading=text('div','','alpha-chart-heading');
     heading.append(text('strong',typeof chartDisplayTitle==='function'?chartDisplayTitle(fixture.chart,state.audio||{}):fixture.title||'Untitled'),
       text('span',`${fixture.keyLabel||fixture.key||'?'} · ${fixture.tempo||'?'} BPM · alphaTab 1.8.4`),
       text('span',typeof transcriptionSheetStatus==='function'?transcriptionSheetStatus(fixture.chart,fixture.kind):'Unverified estimate','transcription-sheet-status'));
     header.append(heading);
     if(fixture.kind==='drums')drumControls(header);
+    if(fixture.kind==='melody')melodyControls(header);
     if(fixture.kind==='bass'){
       const label=text('label','Bass strings (auto) '),select=document.createElement('select');
       select.setAttribute('aria-label','Automatically detected bass chart strings');
@@ -93,15 +101,39 @@
       modeLabel.append(mode);header.append(modeLabel);
     }
     sheet.append(header);
+    if(fixture.kind==='bass'){
+      const issues=fixture.measures.flatMap(measure=>(measure.model.diagnostics||[]).map(item=>`Bar ${measure.number}, MIDI ${item.midi}, ${item.start.toFixed(3)}s: ${item.reason}`));
+      if(issues.length){const details=text('details','','alpha-chart-diagnostic');details.append(text('summary',`Bass review notes (${issues.length})`));
+        const list=text('ul','');issues.forEach(issue=>list.append(text('li',issue)));details.append(list);sheet.append(details);}
+    }
+    if(fixture.chart.timing_diagnostics?.length){const details=text('details','','alpha-chart-diagnostic');details.open=true;
+      details.append(text('summary','Beat / bar alignment needs review'));const list=text('ul','');
+      fixture.chart.timing_diagnostics.forEach(message=>list.append(text('li',message)));details.append(list);sheet.append(details);}
     if(fixture.kind==='drums' && !fixture.chart.drums?.ok){
       sheet.append(text('p','Select Analyse Drums to create the drum sheet.','alpha-chart-empty'));
       container.replaceChildren(sheet);return {sheet,engine:null,overlay:null};
+    }
+    if(fixture.kind==='melody'){
+      if(!fixture.chart.melody?.ok){sheet.append(text('p','Select Analyse Melody to estimate the lead vocal from the vocals stem.','alpha-chart-empty'));
+        container.replaceChildren(sheet);return {sheet,engine:null,overlay:null};}
+      const issues=fixture.measures.flatMap(measure=>(measure.model.diagnostics||[]).map(item=>`Bar ${measure.number}, MIDI ${item.midi}, ${item.start.toFixed(3)}s: ${item.reason}`));
+      issues.push(...fixture.measures.flatMap(measure=>measure.reviewIssues.map(issue=>`Bar ${measure.number}: ${issue}`)));
+      issues.push(...melodyCoverageDiagnostics(fixture.chart,fixture.measures[0].start,fixture.measures.at(-1).end));
+      if(fixture.chart.melody.stale)issues.unshift('The vocals source changed. Reanalyse Melody to refresh this estimate.');
+      issues.push(...(fixture.chart.melody.diagnostics||[]).map(item=>item.reason || String(item)));
+      if(issues.length){const details=text('details','','alpha-chart-diagnostic');details.append(text('summary',`Melody review notes (${issues.length})`));
+        const list=text('ul','');issues.forEach(issue=>list.append(text('li',issue)));details.append(list);sheet.append(details);}
+      if(fixture.chart.melody.previous_reviews?.length){const archive=text('details','','alpha-chart-diagnostic');
+        archive.append(text('summary',`${fixture.chart.melody.previous_reviews.length} previous melody reviews have different bar timings — inspect before reapplying`));
+        fixture.chart.melody.previous_reviews.forEach(item=>{archive.append(text('p',`Previous interval ${item.start.toFixed(3)}–${item.end.toFixed(3)}s${item.review.reference?` · ${item.review.reference}`:''}`));
+          const list=text('ul','');(item.review.events||[]).forEach(note=>list.append(text('li',`${note.start.toFixed(3)}–${note.end.toFixed(3)}s · MIDI ${note.midi}`)));archive.append(list);});sheet.append(archive);}
     }
     const screen=text('div','','alpha-chart-screen'),engine=text('div','','alpha-chart-engine'),overlay=text('div','','alpha-chart-overlay');
     if(fixture.kind==='drums')overlay.classList.add('alpha-chart-overlay-drums');
     screen.append(engine,overlay);sheet.append(screen);
     const footer=fixture.kind==='bass'
       ? `${BassTuning.configFor(fixture.strings).label} tuning · Bass sounds one octave below written notation. Rhythm and fingering are estimated.`
+      : fixture.kind==='melody' ? 'Estimated lead vocal · Concert pitch · Rhythm is quantized for display. Harmonies, breath sounds and slides may need correction.'
       : 'ADTOF audio estimate · kit classes require review. Rhythm is quantized for display; model activations are not accuracy scores.';
     sheet.append(text('p',footer,'alpha-chart-footer'));
     container.replaceChildren(sheet);return {sheet,screen,engine,overlay};
@@ -152,21 +184,22 @@
         const hit=document.createElement('button');hit.type='button';hit.className='alpha-chart-measure';hit.dataset.index=String(index);hit.dataset.systemIndex=String(systemIndex);
         place(hit,bounds.realBounds);hit.setAttribute('aria-label',`Select bar ${source.number}`);hit.onclick=()=>selectBar(index,true);
         const number=document.createElement('span');number.className='alpha-chart-number';number.textContent=`Bar ${source.number}`;hit.append(number);hit._alphaSystem=system;nodes.append(hit);
+        if(source.reviewIssues?.length){number.classList.add('alpha-chart-number-review');number.textContent+=' · Review';hit.title=source.reviewIssues.join('\n');}
         runtime.measureNodes.push({node:hit,index,system});
       }
     });
     for(const entries of entriesByBar.values()){
       for(const entry of entries){
-      if(fixture.kind==='bass' && entry.source.sourceIndex===null)continue;
+      if(fixture.kind!=='drums' && entry.source.sourceIndex===null)continue;
       if(fixture.kind==='drums' && !entry.source.instruments.length)continue;
       for(const bounds of api.boundsLookup.findBeats(entry.beat)||[]){
         for(const noteBounds of bounds.notes||[]){
           const hit=document.createElement('button');hit.type='button';hit.className='alpha-chart-note-hit';
           const source=fixture.measures[entry.bar],event=entry.source;
-          hit.title=fixture.kind==='bass'?(event.position?`MIDI ${event.midi} · string ${event.position.string}, fret ${event.position.fret}`:`MIDI ${event.midi} · no playable TAB position; retained in standard notation`):
+          hit.title=fixture.kind==='melody'?`Vocal MIDI ${event.midi} · estimated note; original timing retained`:fixture.kind==='bass'?(event.position?`MIDI ${event.midi} · string ${event.position.string}, fret ${event.position.fret}`:`MIDI ${event.midi} · no playable TAB position; retained in standard notation`):
             `${event.instruments.join(' + ')} · original hit times retained`;
           hit.setAttribute('aria-label',hit.title);place(hit,noteBounds.noteHeadBounds);nodes.append(hit);
-          const seek=fixture.kind==='bass'?source.notes[event.sourceIndex]?.start:event.hits?.[0]?.time;
+          const seek=fixture.kind!=='drums'?source.notes[event.sourceIndex]?.start:event.hits?.[0]?.time;
           hit.addEventListener('click',()=>{selectBar(entry.bar,false);if(Number.isFinite(seek))elements.audioPlayer.currentTime=seek/(Number(state.audioPreview?.tempoRate)||1);});
           runtime.noteNodes.push({node:hit,entry});
         }
@@ -189,7 +222,7 @@
       const finish=after?.beat.absolutePlaybackStart??before.beat.absolutePlaybackStart+before.beat.playbackDuration;
       const x=start+Math.max(0,Math.min(1,(tick-before.beat.absolutePlaybackStart)/Math.max(1,finish-before.beat.absolutePlaybackStart)))*(end-start);
       const label=document.createElement('button');label.type='button';label.className='alpha-chart-chord';
-      appendIrealChord(label,displayChordSymbol(chord.chord));label.title=`${chord.chord} · ${chord.start.toFixed(3)}s`;nodes.append(label);
+      appendIrealChord(label,chord.label??displayChordSymbol(chord.chord));label.title=`${chord.originalChords?.join(' → ')||chord.chord} · ${chord.start.toFixed(3)}s`;nodes.append(label);
       pendingChords.push({label,chord,barBounds,x});
       label.addEventListener('click',()=>{selectBar(chord.bar,false);elements.audioPlayer.currentTime=chord.start/(Number(state.audioPreview?.tempoRate)||1);});
       runtime.chordNodes.push({node:label,index:chord.bar});
@@ -225,7 +258,7 @@
     });
     noteNodes.forEach(({node,entry})=>{
       const source=fixture.measures[entry.bar],event=entry.source;
-      const playing=fixture.kind==='bass'
+      const playing=fixture.kind!=='drums'
         ? (()=>{const note=source.notes[event.sourceIndex];return Boolean(note&&time>=note.start&&time<note.end);})()
         : (event.hits||[]).some(hit=>time>=hit.time-.025&&time<hit.time+.15);
       node.classList.toggle('playing',playing);
@@ -265,7 +298,8 @@
         }else{
           copy=document.createElement('span');copy.className='alpha-chart-section-label';copy.textContent=node.textContent;
         }
-        copy.style.left=node.style.left;copy.style.top=`${y-partial.y}px`;copy.style.width=node.style.width;copy.style.height=node.style.height;overlay.append(copy);
+        const headingCollision=node.matches('.alpha-chart-measure')&&r.sectionNodes.some(({node:label,index})=>Number(node.dataset.index)===index&&Math.abs(parseFloat(label.style.top)-y)<20);
+        copy.style.left=node.style.left;copy.style.top=`${y-partial.y+(headingCollision?22:0)}px`;copy.style.width=node.style.width;copy.style.height=node.style.height;overlay.append(copy);
       }
       chunk.append(overlay);print.append(chunk);
     }
@@ -304,7 +338,7 @@
   }
   async function renderAlphaTabChartPreview(container=elements.chartPreview){
     const kind=state.chartRenderer;
-    if(!container||!['bass','drums'].includes(kind))return;
+    if(!container||!['bass','drums','melody'].includes(kind))return;
     let fixture;
     try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showAlphaTabError(container,error);}
     const measures=fixture.measures.map(source=>[
@@ -318,7 +352,8 @@
     ]);
     const title=typeof chartDisplayTitle==='function'?chartDisplayTitle(fixture.chart,state.audio||{}):fixture.title||'Untitled';
     const status=typeof transcriptionSheetStatus==='function'?transcriptionSheetStatus(fixture.chart,fixture.kind):'Unverified estimate';
-    const key=JSON.stringify([kind,title,fixture.keyLabel,fixture.key,fixture.tempo,fixture.strings,fixture.mode,fixture.chart.drums?.ok,status,
+    const key=JSON.stringify([kind,title,fixture.keyLabel,fixture.key,fixture.tempo,fixture.strings,fixture.mode,fixture.melodySettings,fixture.chart.drums?.ok,status,
+      fixture.chart.melody?.ok,fixture.chart.melody?.stale,fixture.chart.melody?.diagnostics,fixture.chart.melody?.voice_review,fixture.chart.melody?.previous_reviews,state.melodyBusy,state.melodyError?.chart===fixture.chart?state.melodyError.message:'',
       state.chordDisplayPreferences,chartBarsPerLine(),Math.round(container.clientWidth),measures]);
     if(runtime?.key===key&&runtime.sheet.parentNode===container){
       if(runtime.ready){updateHighlights(chartPlaybackTime,chartPlaybackIndex);return true;}
@@ -330,7 +365,7 @@
       const display=view.sheet.querySelector('[aria-label="Bass notation display"]');if(display&&converted.effectiveMode!==fixture.mode)display.value=converted.effectiveMode;}
     catch(error){return showAlphaTabError(container,error);}
     let api;
-    try{api=new alphaTab.AlphaTabApi(view.engine,nativeSettings(chartBarsPerLine()));}
+    try{api=new alphaTab.AlphaTabApi(view.engine,nativeSettings(chartBarsPerLine(),kind));}
     catch(error){return showAlphaTabError(container,error);}
     runtime={api,fixture,converted,...view,key,partials:new Map(),measureNodes:[],noteNodes:[],chordNodes:[],ready:false};
     const current=runtime;
@@ -376,7 +411,7 @@
     return current.promise;
   }
   async function prepareAlphaTabPrint(){
-    if(!['bass','drums'].includes(state.chartRenderer))return null;
+    if(!['bass','drums','melody'].includes(state.chartRenderer))return null;
     await renderAlphaTabChartPreview();
     if(runtime?.ready)return printParts();
     throw Error('The score could not be rendered for PDF export. Retry rendering before exporting.');

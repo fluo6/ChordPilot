@@ -13,7 +13,7 @@ function chartBeatAtTime(time, model) {
 
 function chordBeatLayout(bar, end, chart = {}, events = []) {
   const start = Number(bar.start);
-  const fullBeats = Math.max(1, Math.min(32, parseInt(chart.time_signature, 10) || 4));
+  const fullBeats = Math.max(1, Math.min(32, parseInt(bar.time_signature || chart.time_signature, 10) || 4));
   const beats = Number.isInteger(bar.pickup_beats) && bar.pickup_beats > 0 && bar.pickup_beats < fullBeats ? bar.pickup_beats : fullBeats;
   const measured = [...new Set((chart.beat_times || []).filter(Number.isFinite))]
     .filter(time => time > start + .04 && time < end - .04).sort((a,b) => a-b);
@@ -93,8 +93,8 @@ function resumeChartFollow() {
 }
 
 function refreshChartFollow() {
-  if(['drums','bass'].includes(state.chartRenderer) && elements.chartPreview?.clientWidth>0) renderChartPreview();
-  else if(['ireal','grid'].includes(state.chartRenderer) && elements.chartPreview?.clientWidth>0) finishChartLayout();
+  if(['drums','bass','melody','numbered'].includes(state.chartRenderer) && elements.chartPreview?.clientWidth>0) renderChartPreview();
+  else if(['ireal','grid','spreadsheet'].includes(state.chartRenderer) && elements.chartPreview?.clientWidth>0) finishChartLayout();
   chartFollowSystem=null;
   updateChartPlayback(chartPlaybackTime,chartPlaybackIndex);
 }
@@ -103,7 +103,7 @@ function registerChartPlayback() {
   const preview = state.chartRenderer === 'table' ? elements.barsTable : elements.chartPreview;
   if (!preview) return;
   chartPlaybackNodes = new Map();
-  preview.querySelectorAll('.ireal-measure, .measure-cell, .alpha-chart-measure, .chordpro-measure, tbody tr').forEach(node => {
+  preview.querySelectorAll('.ireal-measure, .measure-cell, .alpha-chart-measure, .chordpro-measure, .spreadsheet-measure, .numbered-chart-measure, tbody tr').forEach(node => {
     const index = Number(node.dataset.index);
     if (!Number.isInteger(index)) return;
     if (!chartPlaybackNodes.has(index)) chartPlaybackNodes.set(index, []);
@@ -173,7 +173,7 @@ function updateChartPlayback(time, index) {
   if (!state.chartAutoFollow || elements.audioPlayer?.paused || performance.now() < chartFollowSuspendedUntil) return;
   if (elements.chartResumeFollowBtn) elements.chartResumeFollowBtn.hidden = true;
   const node = nodes[0];
-  const system = node?._alphaSystem || node?.closest('.alpha-chart-system, .ireal-row, .measure-grid-row, .chordpro-system') || node;
+  const system = node?._alphaSystem || node?.closest('.alpha-chart-system, .ireal-row, .measure-grid-row, .chordpro-system, .spreadsheet-row, .numbered-chart-row') || node;
   if (!system || system === chartFollowSystem) return;
   const bounds = system.getBoundingClientRect();
   const host = state.chartRenderer === 'table' ? elements.barsTable : elements.chartPreview;
@@ -194,7 +194,7 @@ function finishChartLayout(preview=elements.chartPreview,registerPlayback=true) 
   preview.style.setProperty('--bars-per-line', chartBarsPerLine());
   let width = 700;
   fitChordBeatTracks(preview);
-  const sheet=preview.querySelector('.alpha-chart, .ireal-chart, .measure-grid-chart, .chordpro-chart');
+  const sheet=preview.querySelector('.alpha-chart, .ireal-chart, .measure-grid-chart, .chordpro-chart, .spreadsheet-chart, .numbered-chart');
   if(sheet) width=Math.max(width,sheet.getBoundingClientRect().width);
   preview.style.setProperty('--chart-paper-width', `${width}px`);
   if(registerPlayback)registerChartPlayback();

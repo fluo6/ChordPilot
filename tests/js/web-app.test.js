@@ -22,28 +22,29 @@ function studyWav(frequencies, seconds = 2) {
   return bytes;
 }
 
-test('optional drum routes use registered stem paths and persist results in sessions', async t => {
+for(const kind of ['drums','melody'])test(`optional ${kind} routes use registered stem paths and persist results in sessions`, async t => {
+  const source=kind==='melody'?'vocals':'drums';
   let runtime;const calls=[];
   runtime=await startTestServer(t,{services:{
     async prepareStems({audioPath}) {
       calls.push('stems');
-      const stem=path.join(runtime.root,'drums.wav');fs.writeFileSync(stem,studyWav([80]));
-      return {ok:true,stems:[{name:'drums',path:stem,status:'ready'}]};
+      const stem=path.join(runtime.root,source+'.wav');fs.writeFileSync(stem,studyWav([80]));
+      return {ok:true,stems:[{name:source,path:stem,status:'ready'}]};
     },
-    async analyzeDrums({sourcePaths}) {
-      calls.push('drums');assert.ok(fs.existsSync(sourcePaths.drums));assert.notEqual(sourcePaths.drums,'attacker.wav');
-      return {ok:true,events:[{time:.25,instrument:'kick',score:.8}]};
+    async [kind==='melody'?'analyzeMelody':'analyzeDrums']({sourcePaths}) {
+      calls.push(kind);assert.ok(fs.existsSync(sourcePaths[source]));assert.notEqual(sourcePaths[source],'attacker.wav');
+      return {ok:true,events:kind==='melody'?[{start:.25,end:.75,midi:72}]:[{time:.25,instrument:'kick',score:.8}]};
     }
   }});
   const song=await uploadFixture(runtime,'drum-song.wav',studyWav([80]));
-  const missing=await postJson(runtime,'/api/analyze-drums',{mediaId:song.id,sourcePaths:{drums:'attacker.wav'}});
+  const missing=await postJson(runtime,'/api/analyze-'+kind,{mediaId:song.id,sourcePaths:{[source]:'attacker.wav'}});
   assert.notEqual(missing.status,200);assert.deepEqual(calls,[]);
   const prepared=await postJson(runtime,'/api/prepare-stems',{mediaId:song.id});assert.equal(prepared.status,200);
-  const analyzed=await postJson(runtime,'/api/analyze-drums',{mediaId:song.id,sourcePaths:{drums:'attacker.wav'}});
-  assert.equal(analyzed.status,200,JSON.stringify(analyzed.body));assert.deepEqual(calls,['stems','drums']);
-  const stored=await runtime.storage.saveSession({app:'ChordPilot',version:1,audio:song,chart:{bars:[{start:0,chord:'C/E'}],drums:analyzed.body.result,stems:prepared.body.stems}});
+  const analyzed=await postJson(runtime,'/api/analyze-'+kind,{mediaId:song.id,sourcePaths:{[source]:'attacker.wav'}});
+  assert.equal(analyzed.status,200,JSON.stringify(analyzed.body));assert.deepEqual(calls,['stems',kind]);
+  const stored=await runtime.storage.saveSession({app:'ChordPilot',version:1,audio:song,chart:{bars:[{start:0,chord:'C/E'}],[kind]:analyzed.body.result,stems:prepared.body.stems}});
   const reopened=await runtime.storage.openSession(stored.id);
-  assert.equal(reopened.session.chart.drums.events[0].instrument,'kick');assert.equal(reopened.session.chart.bars[0].chord,'C/E');
+  assert.deepEqual(reopened.session.chart[kind].events,analyzed.body.result.events);assert.equal(reopened.session.chart.bars[0].chord,'C/E');
 });
 
 test("real Python range API detects triad and session history survives storage restart and cache clearing", async (t) => {

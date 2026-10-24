@@ -30,6 +30,9 @@ def estimate_with_librosa(path: Path) -> dict[str, Any]:
 
 def estimate_rhythm(audio: Any, sr: int, np: Any, options: dict[str, Any] | None = None) -> dict[str, Any]:
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
+    if options.get('rhythm_engine') in {'beat_this', 'beat_this_steady'}:
+        from chordpilot_beats import estimate_model_rhythm
+        return estimate_model_rhythm(audio, sr, np, options)
     hop, frame = int(options.get('onset_hop', 512)), int(options.get('onset_frame', 2048))
     envelope = onset_envelope(audio, sr, frame, hop, np)
     minimum, maximum = int(options.get('min_bpm', 60)), int(options.get('max_bpm', 190))
@@ -81,7 +84,7 @@ def estimate_builtin(path: Path, options: dict[str, Any] | None = None) -> dict[
     rhythm = estimate_rhythm(audio, sr, np, options)
     tempo, beat_times = rhythm['tempo'], rhythm['beat_times']
     log("analysis: estimating bar chords from chroma")
-    bars = estimate_bars_from_audio(audio, sr, tempo, "4/4", beat_times, np, "full mix", options)
+    bars = estimate_bars_from_audio(audio, sr, tempo, "4/4", beat_times, np, "full mix", options, rhythm.get('downbeat_times'), rhythm.get('measure_grid'))
     estimated_key = estimate_key_from_chroma(duration_weighted_cell_chroma(audio, sr, bars, tempo, "4/4", beat_times, np, options), np) if bars else "C"
     key = str(options.get("known_key") or estimated_key or "C")
     normalize_bars_chords(bars, key, np, options, "full mix", None)
@@ -126,7 +129,7 @@ def onset_envelope(audio: Any, sr: int, frame: int, hop: int, np: Any) -> Any:
         envelope = np.clip(envelope / high, 0, 1)
     return envelope
 
-def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_bpm: int = 70, max_bpm: int = 190) -> int:
+def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_bpm: int = 70, max_bpm: int = 190, prefer_fast: bool = True) -> int:
     fallback = max(min_bpm, min(max_bpm, 120))
     if len(envelope) < 8:
         return fallback
@@ -143,9 +146,9 @@ def estimate_tempo_from_envelope(envelope: Any, sr: int, hop: int, np: Any, min_
     lag = int(np.argmax(corr[min_lag:max_lag]) + min_lag)
     bpm = 60.0 * sr / (hop * lag)
     # The octave preference must stay inside the user's requested search range.
-    while bpm < 80 and bpm * 2 <= max_bpm:
+    while prefer_fast and bpm < 80 and bpm * 2 <= max_bpm:
         bpm *= 2
-    while bpm > 180 and bpm / 2 >= min_bpm:
+    while prefer_fast and bpm > 180 and bpm / 2 >= min_bpm:
         bpm /= 2
     return max(min_bpm, min(max_bpm, int(round(bpm))))
 
@@ -200,13 +203,19 @@ def measured_bar_starts(beat_times: list[float], beats_per_bar: int, phase: int 
     return ([beats[0]] if phase and beats else []) + beats[phase::beats_per_bar]
 
 
-def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: str, beat_times: list[float], np: Any, evidence_source: str = "full mix", options: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: str, beat_times: list[float], np: Any, evidence_source: str = "full mix", options: dict[str, Any] | None = None, downbeat_times: list[float] | None = None, measure_grid: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
     beats_per_bar = parse_beats_per_bar(time_signature)
     seconds_per_bar = (60.0 / max(tempo, 1)) * beats_per_bar
     duration = len(audio) / float(sr)
     phase = int(options.get('bar_phase', 0)) % beats_per_bar
     starts = measured_bar_starts(beat_times, beats_per_bar, phase)
+    if downbeat_times:
+        starts = sorted({float(t) for t in downbeat_times if 0 <= float(t) < duration})
+        pickup = [t for t in beat_times if t < starts[0]] if starts else []
+        phase = len(pickup)
+        if pickup:
+            starts.insert(0, pickup[0])
     if not starts:
         starts = [index * seconds_per_bar for index in range(max(8, int(math.ceil(duration / seconds_per_bar))))]
 
@@ -239,6 +248,16 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
                 "_chroma": chroma,
             }
         )
+    if measure_grid:
+        grid = {round(item['start'], 3): item for item in measure_grid}
+        for bar in bars:
+            item = grid.get(bar['start'])
+            if item:
+                bar['time_signature'] = '4/4' if item.get('pickup_beats') else f"{item['beats']}/4"
+                if item.get('pickup_beats'):
+                    bar['pickup_beats'] = item['pickup_beats']
+                bar['timing_evidence'] = item
+        phase = 0
     if bars and phase and beat_times:
         bars[0]['pickup_beats'] = min(phase, len(beat_times))
         bars[0]['section'] = 'Pickup'
@@ -262,21 +281,30 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
     options = options or dict(DEFAULT_ANALYSIS_OPTIONS)
     np = __import__("numpy")
     stem_paths = {stem["name"]: Path(stem["path"]) for stem in stems_result.get("stems", []) if stem.get("path")}
+    rhythm_name = 'drums' if 'drums' in stem_paths else 'full mix'
     rhythm_path = stem_paths.get("drums") or source_path
+    model_rhythm = options.get('rhythm_engine') in {'beat_this', 'beat_this_steady'}
+    if model_rhythm:
+        rhythm_name, rhythm_path = 'full mix', source_path
     chord_path, chord_source = select_high_quality_chord_source(source_path, stem_paths, options)
     bass_path = stem_paths.get("bass")
     bass_audio = None
     bass_sr = None
 
-    log("hq: estimating beat grid from drums/full mix")
+    log("hq: checking rhythm source")
     rhythm_audio, rhythm_sr = load_audio(rhythm_path)
+    rhythm_selection = 'drum stem available' if rhythm_name == 'drums' else 'no drum stem; full mix fallback'
+    if model_rhythm:
+        rhythm_selection = 'joint beat/downbeat model uses full mix'
+    log(f'hq: estimating beat grid from {rhythm_name} ({rhythm_selection})')
     rhythm_result = estimate_rhythm(rhythm_audio, rhythm_sr, np, options)
+    rhythm_result.update({'rhythm_source': rhythm_name, 'rhythm_selection': rhythm_selection})
     tempo = int(rhythm_result.get("tempo") or 120)
     beat_times = rhythm_result.get("beat_times") or []
 
     log(f"hq: estimating chord tones from {chord_source}")
-    chord_audio, chord_sr = load_audio(chord_path)
-    bars = estimate_bars_from_audio(chord_audio, chord_sr, tempo, "4/4", beat_times, np, chord_source, options)
+    chord_audio, chord_sr = (rhythm_audio, rhythm_sr) if chord_path == rhythm_path else load_audio(chord_path)
+    bars = estimate_bars_from_audio(chord_audio, chord_sr, tempo, "4/4", beat_times, np, chord_source, options, rhythm_result.get('downbeat_times'), rhythm_result.get('measure_grid'))
     duration = len(chord_audio) / float(chord_sr)
 
     if bass_path:
@@ -300,7 +328,7 @@ def estimate_high_quality_from_stems(source_path: Path, stems_result: dict[str, 
         "beat_times": beat_times,
         "bars": clean_bars,
         "key": key,
-        "engine": "demucs stems: other chords, bass roots, drums rhythm",
+        "engine": f"demucs stems: {chord_source} chords, bass roots, {rhythm_name} rhythm",
     }
 
 def add_bass_reference_to_bars(bars: list[dict[str, Any]], bass_audio: Any, bass_sr: int, np: Any, source: str = "bass stem") -> None:
@@ -402,7 +430,7 @@ def duration_weighted_cell_chroma(audio: Any, sr: int, bars: list[dict[str, Any]
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
         end = min(duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else duration)
-        for cell_start, cell_end in analysis_cell_bounds(start, end, beat_times, options.get("chord_grid", "beat"), bar.get('pickup_beats', beats_per_bar), tempo):
+        for cell_start, cell_end in analysis_cell_bounds(start, end, beat_times, options.get("chord_grid", "beat"), bar.get('pickup_beats', parse_beats_per_bar(bar.get('time_signature', time_signature))), tempo):
             total += chroma_for_segment(audio, sr, cell_start, cell_end, np, options) * (cell_end - cell_start)
     return total
 
@@ -463,7 +491,7 @@ def attach_timed_chord_events(bars: list[dict[str, Any]], audio: Any, sr: int, t
     for index, bar in enumerate(bars):
         start = float(bar.get("start", 0.0))
         end = min(song_duration, float(bars[index + 1]["start"]) if index + 1 < len(bars) else song_duration)
-        bounds = analysis_cell_bounds(start, end, beat_times, str(options.get("chord_grid", "beat")), bar.get('pickup_beats', beats_per_bar), tempo)
+        bounds = analysis_cell_bounds(start, end, beat_times, str(options.get("chord_grid", "beat")), bar.get('pickup_beats', parse_beats_per_bar(bar.get('time_signature', time_signature))), tempo)
         bar_cells = []
         for cell_start, cell_end in bounds:
             chroma = chroma_for_segment(audio, sr, cell_start, cell_end, np, options)
@@ -706,7 +734,9 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     options = normalize_analysis_options(raw_options)
     known_key = str(options.get("known_key") or "").strip()
     normalized_mode = "high-quality" if mode in {"high-quality", "hq", "stems"} else "fast"
-    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v2-rhythm-v1"
+    cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v2-rhythm-v2"
+    if options['rhythm_engine'] == 'beat_this_steady':
+        cache_mode += '-steady-v2'
     log(f"analyze: {path}")
     log(f"mode: {normalized_mode}")
     log(f"options: {json.dumps(options, sort_keys=True)}")
@@ -737,6 +767,8 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
                 builtin_result = estimate_high_quality_from_stems(path, stems_result, options)
             except Exception as exc:
                 log(f"hq: unavailable - {exc}")
+                if options.get('rhythm_engine') in {'beat_this', 'beat_this_steady'}:
+                    raise
                 if options.get("require_stems"):
                     raise RuntimeError(f"Stem separation failed: {exc}") from exc
                 stems_result = {
@@ -751,7 +783,7 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
             builtin_result = estimate_builtin(path, options)
     except Exception as exc:
         log(f"analysis: failed - {exc}")
-        if options.get("require_stems"):
+        if options.get("require_stems") or options.get('rhythm_engine') in {'beat_this', 'beat_this_steady'}:
             raise
         builtin_result = {"error": str(exc)}
 
@@ -797,11 +829,16 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
         "tempo_exact": builtin_result.get('tempo_exact', float(tempo)),
         "time_signature": time_signature,
         "beat_times": builtin_result.get("beat_times") or librosa_result.get("beat_times") or [],
+        "downbeat_times": builtin_result.get('downbeat_times', []),
+        "timing_diagnostics": builtin_result.get('timing_diagnostics', []),
         "analysis_engine": {
             "mode": normalized_mode,
             "options": options,
             "duration": "decoded audio" if builtin_result.get("duration") else "fallback",
             "tempo_beats": builtin_result.get('tempo_beats') or ("librosa" if librosa_result else "fallback"),
+            "rhythm_source": builtin_result.get('rhythm_source', 'full mix'),
+            "rhythm_selection": builtin_result.get('rhythm_selection', 'full mix analysis'),
+            "rhythm_model": builtin_result.get('rhythm_model'),
             "bar_alignment": builtin_result.get('bar_alignment', 'manual beat phase' if options['bar_phase'] else 'first tracked beat; unverified downbeat'),
             "key": key_source,
             "chords": chord_engine,

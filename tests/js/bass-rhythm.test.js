@@ -10,6 +10,13 @@ function rhythm() {
 }
 const note = (start, end, midi = 31) => ({start, end, midi, position:{string:4,fret:midi-28}});
 
+test('sub-grid bass portions remain explicitly diagnosed after bar regrouping',()=>{
+  const {bassRhythm}=rhythm(),notes=[{...note(.11,.12),confidence:.5}],before=JSON.stringify(notes);
+  const model=bassRhythm(notes,{start:0},2,{time_signature:'4/4'});
+  assert.equal(model.diagnostics?.length,1);assert.equal(model.diagnostics[0].sourceIndex,0);
+  assert.equal(model.diagnostics[0].midi,31);assert.equal(JSON.stringify(notes),before);
+});
+
 test('small beat-tracking offsets do not engrave a held note as a chain of ties',()=>{
   const {bassRhythm}=rhythm();
   const notes=[{...note(.07,1.75),confidence:.99}];

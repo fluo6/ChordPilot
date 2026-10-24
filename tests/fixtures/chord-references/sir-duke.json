@@ -1,0 +1,590 @@
+{
+  "title": "Sir Duke \u2014 LeftyBirdBASS TAB and original-track validation",
+  "tutorial_url": "https://www.youtube.com/watch?v=HpRTA9hJyfM",
+  "original_url": "https://www.youtube.com/watch?v=ETFvmkIA6S4",
+  "reference_kind": "Selected manually read standard E-A-D-G TAB frets and chord labels. Cyan video cursor determines approximate onset coordinates. Reference labels are evaluation-only.",
+  "timing_uncertainty_seconds": 0.08,
+  "alignment_note": "Waveform correlation and phrase checks support near-zero tutorial/original offset, within about 25ms across sampled sections. An initial one-beat RMS-rise alias was rejected.",
+  "bass_events": [
+    {
+      "time": 18.887,
+      "bar": 9,
+      "score_x": 600,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 2,
+      "midi": 35
+    },
+    {
+      "time": 19.438,
+      "bar": 9,
+      "score_x": 662,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 4,
+      "midi": 42
+    },
+    {
+      "time": 20.012,
+      "bar": 9,
+      "score_x": 749,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "G",
+      "fret": 4,
+      "midi": 47
+    },
+    {
+      "time": 20.587,
+      "bar": 9,
+      "score_x": 836,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 4,
+      "midi": 42
+    },
+    {
+      "time": 20.837,
+      "bar": 9,
+      "score_x": 885,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 2,
+      "midi": 35
+    },
+    {
+      "time": 21.212,
+      "bar": 10,
+      "score_x": 969,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "E",
+      "fret": 4,
+      "midi": 32
+    },
+    {
+      "time": 21.712,
+      "bar": 10,
+      "score_x": 1027,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 6,
+      "midi": 39
+    },
+    {
+      "time": 22.312,
+      "bar": 10,
+      "score_x": 1114,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 6,
+      "midi": 44
+    },
+    {
+      "time": 22.837,
+      "bar": 10,
+      "score_x": 1200,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 6,
+      "midi": 39
+    },
+    {
+      "time": 23.188,
+      "bar": 10,
+      "score_x": 1247,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "E",
+      "fret": 4,
+      "midi": 32
+    },
+    {
+      "time": 23.438,
+      "bar": 11,
+      "score_x": 1322,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "E",
+      "fret": 3,
+      "midi": 31
+    },
+    {
+      "time": 23.913,
+      "bar": 11,
+      "score_x": 1379,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 5,
+      "midi": 38
+    },
+    {
+      "time": 24.512,
+      "bar": 11,
+      "score_x": 1464,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 5,
+      "midi": 43
+    },
+    {
+      "time": 25.113,
+      "bar": 11,
+      "score_x": 1553,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 5,
+      "midi": 38
+    },
+    {
+      "time": 25.337,
+      "bar": 11,
+      "score_x": 1598,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "E",
+      "fret": 3,
+      "midi": 31
+    },
+    {
+      "time": 25.738,
+      "bar": 12,
+      "score_x": 436,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "E",
+      "fret": 2,
+      "midi": 30
+    },
+    {
+      "time": 26.312,
+      "bar": 12,
+      "score_x": 500,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 4,
+      "midi": 37
+    },
+    {
+      "time": 26.887,
+      "bar": 12,
+      "score_x": 587,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 4,
+      "midi": 42
+    },
+    {
+      "time": 27.137,
+      "bar": 12,
+      "score_x": 631,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 2,
+      "midi": 40
+    },
+    {
+      "time": 27.413,
+      "bar": 12,
+      "score_x": 677,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "D",
+      "fret": 1,
+      "midi": 39
+    },
+    {
+      "time": 27.712,
+      "bar": 12,
+      "score_x": 722,
+      "split": "calibration",
+      "kind": "groove",
+      "string": "A",
+      "fret": 4,
+      "midi": 37
+    },
+    {
+      "time": 37.112,
+      "bar": 17,
+      "score_x": 954,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 2,
+      "midi": 40
+    },
+    {
+      "time": 37.337,
+      "bar": 17,
+      "score_x": 994,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 2,
+      "midi": 40
+    },
+    {
+      "time": 37.638,
+      "bar": 17,
+      "score_x": 1032,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 1,
+      "midi": 39
+    },
+    {
+      "time": 37.913,
+      "bar": 17,
+      "score_x": 1072,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 1,
+      "midi": 39
+    },
+    {
+      "time": 38.212,
+      "bar": 17,
+      "score_x": 1110,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 0,
+      "midi": 38
+    },
+    {
+      "time": 38.513,
+      "bar": 17,
+      "score_x": 1150,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 0,
+      "midi": 38
+    },
+    {
+      "time": 38.788,
+      "bar": 17,
+      "score_x": 1188,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "A",
+      "fret": 4,
+      "midi": 37
+    },
+    {
+      "time": 39.038,
+      "bar": 17,
+      "score_x": 1228,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "A",
+      "fret": 4,
+      "midi": 37
+    },
+    {
+      "time": 39.337,
+      "bar": 18,
+      "score_x": 1306,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 0,
+      "midi": 38
+    },
+    {
+      "time": 39.638,
+      "bar": 18,
+      "score_x": 1351,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 0,
+      "midi": 38
+    },
+    {
+      "time": 39.938,
+      "bar": 18,
+      "score_x": 1397,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 1,
+      "midi": 39
+    },
+    {
+      "time": 40.212,
+      "bar": 18,
+      "score_x": 1443,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 1,
+      "midi": 39
+    },
+    {
+      "time": 40.388,
+      "bar": 18,
+      "score_x": 1474,
+      "split": "calibration",
+      "kind": "repeat",
+      "string": "D",
+      "fret": 2,
+      "midi": 40
+    },
+    {
+      "time": 70.912,
+      "bar": 32,
+      "score_x": 693,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "D",
+      "fret": 11,
+      "midi": 49
+    },
+    {
+      "time": 71.037,
+      "bar": 32,
+      "score_x": 726,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "D",
+      "fret": 9,
+      "midi": 47
+    },
+    {
+      "time": 71.188,
+      "bar": 32,
+      "score_x": 756,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "A",
+      "fret": 11,
+      "midi": 44
+    },
+    {
+      "time": 71.338,
+      "bar": 32,
+      "score_x": 790,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "A",
+      "fret": 9,
+      "midi": 42
+    },
+    {
+      "time": 71.487,
+      "bar": 32,
+      "score_x": 821,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "D",
+      "fret": 11,
+      "midi": 49
+    },
+    {
+      "time": 71.612,
+      "bar": 32,
+      "score_x": 854,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "D",
+      "fret": 9,
+      "midi": 47
+    },
+    {
+      "time": 71.737,
+      "bar": 32,
+      "score_x": 884,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "A",
+      "fret": 11,
+      "midi": 44
+    },
+    {
+      "time": 71.888,
+      "bar": 32,
+      "score_x": 916,
+      "split": "held_out_phrase",
+      "kind": "fast",
+      "string": "D",
+      "fret": 9,
+      "midi": 47
+    }
+  ],
+  "ghost_events": [
+    {
+      "time": 19.837,
+      "bar": 9,
+      "score_x": 718,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 20.413,
+      "bar": 9,
+      "score_x": 803,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 22.137,
+      "bar": 10,
+      "score_x": 1083,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 22.712,
+      "bar": 10,
+      "score_x": 1170,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 24.413,
+      "bar": 11,
+      "score_x": 1436,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 24.938,
+      "bar": 11,
+      "score_x": 1520,
+      "split": "calibration",
+      "kind": "ghost"
+    },
+    {
+      "time": 26.712,
+      "bar": 12,
+      "score_x": 555,
+      "split": "calibration",
+      "kind": "ghost"
+    }
+  ],
+  "bass_silence": [
+    {
+      "start": 1,
+      "end": 15,
+      "reason": "Seven opening TAB bars have whole-bar bass rests; horn intro is not bass."
+    }
+  ],
+  "chord_windows": [
+    {
+      "start": 19.08,
+      "end": 21.02,
+      "chord": "B"
+    },
+    {
+      "start": 21.34,
+      "end": 23.3,
+      "chord": "G#m7"
+    },
+    {
+      "start": 23.63,
+      "end": 25.58,
+      "chord": "G7"
+    },
+    {
+      "start": 25.91,
+      "end": 27.85,
+      "chord": "F#7"
+    },
+    {
+      "start": 37.17,
+      "end": 37.57,
+      "chord": "E7"
+    },
+    {
+      "start": 37.76,
+      "end": 38.15,
+      "chord": "D#7"
+    },
+    {
+      "start": 38.31,
+      "end": 38.69,
+      "chord": "D7"
+    },
+    {
+      "start": 38.89,
+      "end": 39.24,
+      "chord": "C#7"
+    },
+    {
+      "start": 39.5,
+      "end": 39.86,
+      "chord": "D7"
+    },
+    {
+      "start": 40.04,
+      "end": 40.33,
+      "chord": "C#7"
+    },
+    {
+      "start": 40.52,
+      "end": 40.85,
+      "chord": "E7"
+    },
+    {
+      "start": 46.35,
+      "end": 48.24,
+      "chord": "B"
+    },
+    {
+      "start": 48.62,
+      "end": 50.55,
+      "chord": "Fm7"
+    },
+    {
+      "start": 50.9,
+      "end": 52.31,
+      "chord": "Emaj9"
+    },
+    {
+      "start": 52.63,
+      "end": 52.86,
+      "chord": "D#m7"
+    },
+    {
+      "start": 53.11,
+      "end": 54.01,
+      "chord": "C#m7"
+    },
+    {
+      "start": 54.27,
+      "end": 55.09,
+      "chord": "F#7"
+    }
+  ],
+  "limitation": "Cover fingering/performance is not authoritative for the original. Selected events only; onset tolerance accounts for cursor lead and 120ms pitch windows. Ghosts are assessed as new pitched attacks, not forced pitch labels. No whole-song accuracy claim.",
+  "bass_windows": [
+    [
+      18.8,
+      28
+    ],
+    [
+      37.0,
+      41.6
+    ],
+    [
+      70.85,
+      72.7
+    ]
+  ]
+}

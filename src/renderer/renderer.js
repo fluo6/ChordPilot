@@ -108,6 +108,7 @@ elements.reanalyzeChordsBtn.addEventListener("click", () => reanalyzeSection("ch
 elements.reanalyzeLyricsBtn.addEventListener("click", () => reanalyzeSection("lyrics"));
 elements.reanalyzeAllBtn.addEventListener("click", () => reanalyzeSection("all"));
 elements.analyzeDrumsBtn.addEventListener('click', () => hasDrumStem() ? analyzeDrums() : prepareDrumStems());
+elements.analyzeMelodyBtn.addEventListener('click',()=>hasVocalStem()?analyzeMelody():prepareMelodyStems());
 elements.keyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
 elements.arrangementKeyNativeBtn.addEventListener("click", () => changeKeyWithAudioPreview(resetChartKeyToDetected));
 elements.applyAudioPreviewBtn.addEventListener("click", applyAudioPreview);
@@ -133,6 +134,7 @@ elements.arrangementKeyInput.addEventListener("change", () => {
 elements.tuningReferenceInput.addEventListener("input", () => setTuningReferenceHz(elements.tuningReferenceInput.value));
 elements.tuningResetBtn.addEventListener("click", () => setTuningReferenceHz(440));
 elements.analysisPresetInput.addEventListener("change", () => applyAnalysisPreset(elements.analysisPresetInput.value));
+elements.rhythmEngineInput.addEventListener('change', updateChordTimingControlState);
 elements.chordTimingInput.addEventListener("change", () => {
   updateChordTimingControlState();
   updateAnalysisPresetState();
@@ -148,9 +150,13 @@ elements.chartRendererInput.addEventListener("change", () => {
   renderChartPreview();
 });
 elements.barsPerLineInput.addEventListener('change', () => {
-  state.barsPerLine = Number(elements.barsPerLineInput.value) === 2 ? 2 : 4;
+  if (state.chartRenderer === 'spreadsheet') {
+    state.spreadsheetChart = spreadsheetChartSettings({...state.spreadsheetChart,barsPerLine:elements.barsPerLineInput.value});
+    elements.spreadsheetCopyStatus.textContent = '';
+  } else state.barsPerLine = Number(elements.barsPerLineInput.value) === 2 ? 2 : 4;
   renderChartPreview();
 });
+initializeSpreadsheetChart();
 elements.chartAutoFollowInput.addEventListener('change', () => {
   state.chartAutoFollow = elements.chartAutoFollowInput.checked;
   resumeChartFollow();

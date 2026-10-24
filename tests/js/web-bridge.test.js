@@ -161,6 +161,7 @@ test("web bridge exposes the complete preload method surface", () => {
   assert.deepEqual(Object.keys(bridge).sort(), [
     "analyze",
     "analyzeDrums",
+    "analyzeMelody",
     "analyzeRange",
     "chooseAudio",
     "clearCache",
@@ -179,6 +180,13 @@ test("web bridge exposes the complete preload method surface", () => {
     "showMessage",
     "storageSummary"
   ]);
+});
+
+test('melody bridge sends opaque media ID and explicit force only',async()=>{
+  const runtime=bridgeEnvironment({fetch:async(url,init)=>{runtime.calls.push([url,init]);return response({result:{ok:true,events:[]}});}});
+  await runtime.bridge.analyzeMelody({audioPath:'media-id',force:true,sourcePaths:{vocals:'private.wav'}});
+  assert.equal(runtime.calls[0][0],'/api/analyze-melody');
+  assert.deepEqual(JSON.parse(runtime.calls[0][1].body),{mediaId:'media-id',force:true});
 });
 
 test("web storage bridge uses same-origin management APIs and returns their public shape", async () => {

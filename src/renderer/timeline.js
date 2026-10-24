@@ -102,17 +102,7 @@ function buildLane(lane, options) {
         applyStemMix();
       });
 
-      const volume = document.createElement("input");
-      volume.className = "lane-volume";
-      volume.type = "range";
-      volume.min = "0";
-      volume.max = "1";
-      volume.step = "0.01";
-      volume.value = String(player.volume);
-      volume.title = `${options.name} volume`;
-      volume.addEventListener("input", () => {
-        setStemVolume(player, volume.value);
-      });
+      const volume = createStemVolumeInput(player);
 
       player.soloBtn = soloBtn;
       player.muteBtn = muteBtn;
@@ -399,14 +389,15 @@ function buildBeatLane() {
   body.className = "lane-body beat-body";
 
   const beats = beatTimes();
-  const beatsInBar = beatsPerBar();
+  const downbeats = new Set(state.chart.bars.filter(bar=>!bar.pickup_beats).map(bar=>Number(bar.start).toFixed(3)));
   beats.forEach((time, index) => {
+    const downbeat = downbeats.has(Number(time).toFixed(3));
     const marker = document.createElement("button");
     marker.type = "button";
-    marker.className = index % beatsInBar === 0 ? "beat-marker downbeat" : "beat-marker";
+    marker.className = downbeat ? "beat-marker downbeat" : "beat-marker";
     marker.dataset.index = String(index);
     marker.style.left = `${percentAt(time)}%`;
-    marker.title = index % beatsInBar === 0 ? `Downbeat ${formatSeconds(time)}s` : `Beat ${formatSeconds(time)}s`;
+    marker.title = downbeat ? `Downbeat ${formatSeconds(time)}s` : `Beat ${formatSeconds(time)}s`;
     marker.addEventListener("click", () => {
       elements.audioPlayer.currentTime = Math.max(0, time);
       syncStemTimes({ isSeek: true });

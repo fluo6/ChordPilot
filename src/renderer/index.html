@@ -710,6 +710,14 @@ fresh power(f, t) = max(0, current power(f, t)
             BPM Min
             <input id="minBpmInput" type="number" min="30" max="240" value="60" />
           </label>
+          <label title="Beat This! predicts downbeats from the full mix and requires its optional local model. Onset tracking uses drum/accompaniment attacks.">
+            Beat Tracking
+            <select id="rhythmEngineInput">
+              <option value="onset">Onset tracking</option>
+              <option value="beat_this">Beat This! (optional)</option>
+              <option value="beat_this_steady">Beat This! — steady pulse (experimental)</option>
+            </select>
+          </label>
           <label>
             BPM Max
             <input id="maxBpmInput" type="number" min="60" max="300" value="190" />
@@ -839,6 +847,7 @@ fresh power(f, t) = max(0, current power(f, t)
           <button id="reanalyzeLyricsBtn" type="button" disabled>Reanalyse Lyrics</button>
           <button id="reanalyzeAllBtn" type="button" title="Reanalyse everything and require vocals, drums, bass, and other stems" disabled>Reanalyse All + Stems</button>
           <button id="analyzeDrumsBtn" type="button" title="Optional drum transcription using the prepared drum stem" disabled>Analyse Drums</button>
+          <button id="analyzeMelodyBtn" type="button" title="Optional lead-vocal transcription using the prepared vocals stem" disabled>Analyse Melody</button>
         </div>
       </section>
 
@@ -1054,9 +1063,12 @@ fresh power(f, t) = max(0, current power(f, t)
               <select id="chartRendererInput">
                 <option value="ireal" selected>Chord Chart</option>
                 <option value="table">Editable Table</option>
+                <option value="spreadsheet">Spreadsheet Chart</option>
                 <option value="grid">Measure Grid</option>
                 <option value="bass">Bass Notes / TAB</option>
                 <option value="drums">Drum Sheet</option>
+                <option value="melody">Lead Sheet</option>
+                <option value="numbered">台湾谱 / 简谱</option>
                 <option value="chordpro">ChordPro Text</option>
               </select>
             </label>
@@ -1064,6 +1076,17 @@ fresh power(f, t) = max(0, current power(f, t)
               <select id="barsPerLineInput"><option value="2">2</option><option value="4" selected>4</option></select>
             </label>
             <button data-export="pdf" type="button" title="Export the current chart layout as PDF" disabled>PDF</button>
+          </div>
+          <div id="tableStemMixer" class="table-stem-mixer collapsible-content" role="group" aria-label="Stem volumes" hidden></div>
+          <div id="spreadsheetChartControls" class="spreadsheet-chart-controls collapsible-content" hidden>
+            <label>Beats per cell <select id="spreadsheetBeatsInput"><option value="0.5">½</option><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+            <label>Roots <select id="spreadsheetRootsInput"><option value="letters">Letters (C, D, E)</option><option value="tonic">Numbers (1–7)</option></select></label>
+            <label>Symbols <select id="spreadsheetSymbolsInput"><option value="text">Text (Cm, Cmaj7)</option><option value="jazz">Jazz (C−, CΔ7)</option></select></label>
+            <label>Style <select id="spreadsheetColoursInput"><option value="sections">Section colours</option><option value="plain">Plain</option></select></label>
+            <button id="copySpreadsheetBtn" type="button">Copy styled cells</button>
+            <button id="copySpreadsheetValuesBtn" type="button">Copy values</button>
+            <span class="spreadsheet-copy-hint">Paste normally for styling. For values only, format destination cells as Text / Plain text to preserve slash chords. Blank cells continue the previous chord; → keeps changes within one cell.</span>
+            <span id="spreadsheetCopyStatus" class="spreadsheet-copy-status" role="status" aria-live="polite"></span>
           </div>
           <div id="lyricsReferencePanel" class="lyrics-reference-panel collapsible-content"></div>
           <details id="transcriptionReview" class="transcription-review-panel" hidden>
@@ -1216,6 +1239,7 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./chord-display.js"></script>
     <script src="./bars.js"></script>
     <script src="./chart-layout.js"></script>
+    <script src="./spreadsheet-chart.js"></script>
     <script src="./transcription-review.js"></script>
     <script src="./vendor/vexflow-bravura-4.2.5.js"></script>
     <script src="./chord-notation.js"></script>
@@ -1225,8 +1249,11 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./guitar-view.js"></script>
     <script src="./drum-actions.js"></script>
     <script src="./drum-view.js"></script>
+    <script src="./melody-actions.js"></script>
+    <script src="./melody-view.js"></script>
     <script src="./vendor/alphatab/alphaTab.min.js"></script>
     <script src="./alphatab-score.js"></script>
+    <script src="./numbered-chart.js"></script>
     <script src="./alphatab-renderer.js"></script>
     <script src="./detail-sections.js"></script>
     <script src="./waveform.js"></script>

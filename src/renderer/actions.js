@@ -297,7 +297,7 @@ async function lookupSourceMetadata() {
 }
 
 async function analyzeAudio(settings = {}) {
-  if (!state.audio || state.drumBusy) {
+  if (!state.audio || state.drumBusy || state.melodyBusy) {
     return;
   }
 
@@ -323,6 +323,7 @@ async function analyzeAudio(settings = {}) {
     const result = await window.chordPilot.analyze(sourceAudio.path, mode, options);
     if (state.audio !== sourceAudio || state.chart !== previousChart) return;
     preserveDrumAnalysis(result, previousChart);
+    preserveMelodyAnalysis(result, previousChart);
     state.chart = result;
     ensureChartKeyState(state.chart);
     ensureChartTempoState(state.chart);
@@ -459,7 +460,7 @@ function applyLyricsReferenceToCurrentChart(lyricsResult) {
 }
 
 async function reanalyzeSection(section) {
-  if (state.drumBusy) return;
+  if (state.drumBusy || state.melodyBusy) return;
   if (!state.audio?.path) {
     setStatus("Open a session with audio before reanalysis");
     return;
@@ -506,6 +507,7 @@ async function reanalyzeSection(section) {
     result.title = previousChart?.title || result.title;
     result.lyrics = previousChart?.lyrics;
     preserveDrumAnalysis(result, previousChart);
+    preserveMelodyAnalysis(result, previousChart);
     copyExistingLyricsToBars(result.bars, previousChart?.bars || []);
     applyAnalyzedChart(result, { resetSelection: false });
     setStatus(`Chords refreshed: ${result.bars.length} bars`);
@@ -730,11 +732,14 @@ function buildSessionPayload() {
       waveformView: state.waveformView,
       followTimeCursor: state.followTimeCursor !== false,
       barsPerLine: chartBarsPerLine(),
+      chartRenderer: state.chartRenderer,
+      spreadsheetChart: spreadsheetChartSettings(state.spreadsheetChart),
       chartAutoFollow: Boolean(state.chartAutoFollow),
       detailPaneWidth: state.detailPaneWidth,
       notationUseKeySignature: state.notationUseKeySignature !== false,
       bassStrings: typeof BassTuning==='undefined' ? (state.bassStrings === 5 ? 5 : 4) : BassTuning.normalizeStringCount(state.bassStrings),
       bassNotationMode: ['tab','notation'].includes(state.bassNotationMode) ? state.bassNotationMode : 'both',
+      melodyNotation: melodyNotationSettings(state.melodyNotation),
       detailSectionLayout: state.detailSectionLayout,
       currentTime: elements.audioPlayer.currentTime || 0
     }
@@ -797,6 +802,10 @@ function restoreSessionPayload(session) {
   if (typeof normalizeWaveformView === 'function') state.waveformView = normalizeWaveformView(session.ui?.waveformView);
   state.followTimeCursor = session.ui?.followTimeCursor !== false;
   state.barsPerLine = Number(session.ui?.barsPerLine) === 2 ? 2 : 4;
+  if(['ireal','table','spreadsheet','grid','bass','drums','melody','numbered','chordpro'].includes(session.ui?.chartRenderer)) {
+    state.chartRenderer=session.ui.chartRenderer;
+    if(elements.chartRendererInput)elements.chartRendererInput.value=state.chartRenderer;
+  }
   state.chartAutoFollow = Boolean(session.ui?.chartAutoFollow);
   if (elements.barsPerLineInput) elements.barsPerLineInput.value = String(state.barsPerLine);
   if (elements.chartAutoFollowInput) elements.chartAutoFollowInput.checked = state.chartAutoFollow;
@@ -804,6 +813,8 @@ function restoreSessionPayload(session) {
   state.notationUseKeySignature = session.ui?.notationUseKeySignature !== false;
   state.bassStrings = typeof BassTuning==='undefined' ? (session.ui?.bassStrings === 5 ? 5 : 4) : BassTuning.normalizeStringCount(session.ui?.bassStrings);
   state.bassNotationMode = ['tab','notation'].includes(session.ui?.bassNotationMode) ? session.ui.bassNotationMode : 'both';
+  state.melodyNotation=melodyNotationSettings(session.ui?.melodyNotation);
+  state.spreadsheetChart=spreadsheetChartSettings(session.ui?.spreadsheetChart);
   if (typeof normalizeDetailSectionLayout === 'function') {
     state.detailSectionLayout = normalizeDetailSectionLayout(session.ui?.detailSectionLayout);
     applyDetailSectionLayout();

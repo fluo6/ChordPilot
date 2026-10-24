@@ -165,7 +165,7 @@ function drumText(tag,text,className='') {
 }
 
 function drumControls(container) {
-  const ready=hasDrumStem(),busy=state.drumBusy || state.isAnalyzing || state.study?.busy;
+  const ready=hasDrumStem(),busy=state.drumBusy || state.melodyBusy || state.isAnalyzing || state.study?.busy;
   const controls=drumText('div','','drum-controls');
   const button=drumText('button',state.drumBusy ? 'Working…' : ready ? 'Analyse Drums' : 'Prepare Stems');
   button.type='button';button.disabled=Boolean(busy || !state.audio?.path || !hasChart());

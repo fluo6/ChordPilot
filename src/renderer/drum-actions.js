@@ -3,7 +3,7 @@ function hasDrumStem(chart = state.chart) {
 }
 
 async function runDrumJob(prepare = false, force = false) {
-  if (state.drumBusy || state.isAnalyzing || state.study?.busy || !state.audio?.path || !hasChart()) return;
+  if (state.drumBusy || state.melodyBusy || state.isAnalyzing || state.study?.busy || !state.audio?.path || !hasChart()) return;
   const chart = state.chart, audioPath = state.audio.path;
   const current = () => state.chart === chart && state.audio?.path === audioPath;
   const label = prepare ? 'Preparing stems' : 'Analysing drums';
@@ -18,6 +18,7 @@ async function runDrumJob(prepare = false, force = false) {
       chart.stems = stems;
       // A newly prepared stem may differ from the one used by an older result.
       if (chart.drums) chart.drums = {...chart.drums, stale:true};
+      if (chart.melody) chart.melody = {...chart.melody, stale:true};
       renderStems(stems);
       setStatus('Stems ready. Select Analyse Drums to create the drum sheet.');
     } else {

@@ -10,6 +10,7 @@ function clearStems() {
   state.soloStem = null;
   state.useStemMixPlayback = false;
   elements.audioPlayer.muted = false;
+  renderTableStemMixer();
 }
 
 function enableStemMixPlayback() {
@@ -79,7 +80,47 @@ function createStemPlayers(stemsResult, previousMix = stemMixSnapshot()) {
   if (previousMix.soloStem && state.stemPlayers.some((player) => player.stem.name === previousMix.soloStem)) {
     state.soloStem = previousMix.soloStem;
   }
+  renderTableStemMixer();
   return state.stemPlayers.length > 0;
+}
+
+function createStemVolumeInput(player, output = null) {
+  const input = document.createElement("input");
+  input.className = "lane-volume";
+  input.type = "range";
+  input.min = "0";
+  input.max = "1";
+  input.step = "0.01";
+  input.value = String(player.volume);
+  input.title = `${player.stem.name} volume`;
+  input.setAttribute("aria-label", input.title);
+  input.setAttribute("aria-valuetext", `${Math.round(player.volume * 100)}%`);
+  if (output) output.textContent = `${Math.round(player.volume * 100)}%`;
+  // Rebuilt timeline lanes must not retain detached sliders.
+  player.volumeControls = (player.volumeControls || []).filter(control => control.input.isConnected);
+  player.volumeControls.push({ input, output });
+  input.addEventListener("input", () => setStemVolume(player, input.value));
+  return input;
+}
+
+function renderTableStemMixer() {
+  const mixer = elements.tableStemMixer;
+  if (!mixer) return;
+  mixer.replaceChildren();
+  mixer.hidden = !state.stemPlayers.length;
+  if (mixer.hidden) return;
+  const title = document.createElement("strong");
+  title.textContent = "Stem volumes";
+  mixer.append(title);
+  state.stemPlayers.forEach(player => {
+    const label = document.createElement("label");
+    label.className = "table-stem-volume";
+    const name = document.createElement("span");
+    name.textContent = player.stem.name;
+    const output = document.createElement("output");
+    label.append(name, createStemVolumeInput(player, output), output);
+    mixer.append(label);
+  });
 }
 
 function ensureStemPlayersForTimeline(stemsResult) {
@@ -120,6 +161,12 @@ function setStemVolume(player, value) {
   }
   const volume = Number(value);
   player.volume = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0;
+  player.volumeControls = (player.volumeControls || []).filter(control => control.input.isConnected);
+  player.volumeControls.forEach(({ input, output }) => {
+    input.value = String(player.volume);
+    input.setAttribute("aria-valuetext", `${Math.round(player.volume * 100)}%`);
+    if (output) output.textContent = `${Math.round(player.volume * 100)}%`;
+  });
   enableStemMixPlayback();
   applyMasterVolume();
   if (!elements.audioPlayer.paused) {

@@ -682,8 +682,11 @@ function createChordPilotServices({
   }
 
   function runBackend(args, input) {
-    const candidates = args[0] === 'analyze-drums' && configuredEnv.CHORDPILOT_DRUM_PYTHON
-      ? [{command:configuredEnv.CHORDPILOT_DRUM_PYTHON, prefix:[backendScript], env:{PYTHONHOME:'',PYTHONPATH:''}}]
+    const melodyVenv=path.join(appRoot,'.tool-cache','melody','venv',process.platform==='win32'?'Scripts':'bin',process.platform==='win32'?'python.exe':'python');
+    const optionalPython=args[0]==='analyze-melody'?(configuredEnv.CHORDPILOT_MELODY_PYTHON||(fs.existsSync(melodyVenv)?melodyVenv:null)):
+      args[0]==='analyze-drums'?configuredEnv.CHORDPILOT_DRUM_PYTHON:null;
+    const candidates = optionalPython
+      ? [{command:optionalPython, prefix:[backendScript], env:{PYTHONHOME:'',PYTHONPATH:''}}]
       : Array.isArray(pythonCandidates) ? pythonCandidates : [];
     const errors = [];
 
@@ -750,7 +753,7 @@ function createChordPilotServices({
             // Retrying another interpreter would hide the error and repeat expensive work.
             try {
               const failure = JSON.parse(stdout);
-              if (['analyze-drums','prepare-stems'].includes(args[0]) && failure?.ok === false && failure.error) { reject(new Error(failure.error)); return; }
+              if (['analyze-drums','analyze-melody','prepare-stems'].includes(args[0]) && failure?.ok === false && failure.error) { reject(new Error(failure.error)); return; }
             } catch (_) { /* Interpreter startup failures still try the next candidate. */ }
             const message = `${candidate.command}: ${stderr || `exited with code ${code}`}`;
             errors.push(message);
@@ -832,6 +835,15 @@ function createChordPilotServices({
     return result;
   }
 
+  async function analyzeMelody({audioPath,sourcePaths,force=false,language='auto'} = {}) {
+    const sources=sourcePaths || resolveStudySourcePaths(audioPath,['vocals']);
+    if(!sources.vocals || !fs.existsSync(sources.vocals))throw new Error('Vocal stem is unavailable. Prepare stems first.');
+    const selectedLanguage=['en','zh','yue','ja'].includes(language)?language:'auto';
+    const result=await runBackend(['analyze-melody',sources.vocals,'--language',selectedLanguage,...(force?['--force']:[])]);
+    if(!result?.ok || !Array.isArray(result.events))throw new Error(result?.error || 'Melody transcription failed.');
+    return result;
+  }
+
   async function exportChart({ chart, format, outputPath } = {}) {
     const inputPath = path.join(
       tempDir,
@@ -891,6 +903,7 @@ function createChordPilotServices({
     analyze,
     analyzeRange,
     analyzeDrums,
+    analyzeMelody,
     prepareStems,
     resolveStudySourcePaths,
     exportChart,

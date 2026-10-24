@@ -711,6 +711,7 @@ function updateAnalysisPresetState() {
 
 function collectAnalysisOptions() {
   return {
+    rhythm_engine: elements.rhythmEngineInput?.value || 'onset',
     chord_timing: elements.chordTimingInput.value || "auto",
     chord_grid: elements.chordGridInput.value || "beat",
     chord_stability: elements.chordStabilityInput?.value || "detailed",
@@ -721,7 +722,7 @@ function collectAnalysisOptions() {
     min_bpm: Number(elements.minBpmInput.value) || 60,
     max_bpm: Number(elements.maxBpmInput.value) || 190,
     beat_offset: Number(elements.beatOffsetInput.value) || 0,
-    bar_phase: Number(elements.barPhaseInput?.value) || 0,
+    bar_phase: elements.rhythmEngineInput?.value?.startsWith('beat_this') ? 0 : Number(elements.barPhaseInput?.value) || 0,
     onset_frame: Number(elements.onsetFrameInput.value) || 2048,
     onset_hop: Number(elements.onsetHopInput.value) || 512,
     chroma_low_hz: Number(elements.chromaLowInput.value) || 65,
@@ -739,6 +740,7 @@ function collectAnalysisOptions() {
 }
 
 function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
+  if (elements.rhythmEngineInput) elements.rhythmEngineInput.value = ['beat_this','beat_this_steady'].includes(options.rhythm_engine) ? options.rhythm_engine : 'onset';
   elements.chordTimingInput.value = options.chord_timing || (legacyDefaults ? "legacy" : "auto");
   elements.chordGridInput.value = options.chord_grid || "beat";
   if (elements.chordStabilityInput) elements.chordStabilityInput.value = options.chord_stability || "detailed";
@@ -768,6 +770,11 @@ function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
 }
 
 function updateChordTimingControlState() {
+  const modelRhythm = elements.rhythmEngineInput?.value?.startsWith('beat_this');
+  [elements.barPhaseInput, elements.onsetFrameInput, elements.onsetHopInput].forEach(input => {
+    if (input) input.disabled = modelRhythm;
+  });
+  [elements.minBpmInput,elements.maxBpmInput].forEach(input=>{if(input)input.disabled=elements.rhythmEngineInput?.value==='beat_this';});
   if (elements.chordGridInput) elements.chordGridInput.disabled = elements.chordTimingInput?.value === "legacy";
   if (elements.chordStabilityInput) elements.chordStabilityInput.disabled = elements.chordTimingInput?.value !== "auto";
   if (elements.tailReductionInput) elements.tailReductionInput.disabled = elements.chordTimingInput?.value === "legacy";
@@ -834,10 +841,14 @@ function updateButtons() {
     elements.mergeChordEventsBtn.disabled = !chartReady || selectedEventIndex >= selectedEvents.length - 1;
   }
   elements.deleteBarBtn.disabled = !chartReady || state.selectedIndex < 0;
-  const canReanalyze = Boolean(state.audio?.path) && !state.isAnalyzing && !state.drumBusy;
+  const canReanalyze = Boolean(state.audio?.path) && !state.isAnalyzing && !state.drumBusy && !state.melodyBusy;
   elements.reanalyzeChordsBtn.disabled = !canReanalyze;
   elements.reanalyzeLyricsBtn.disabled = !canReanalyze || !chartReady;
   elements.reanalyzeAllBtn.disabled = !canReanalyze;
+  if(elements.analyzeMelodyBtn){
+    elements.analyzeMelodyBtn.disabled=!canReanalyze||!chartReady||Boolean(state.study?.busy);
+    elements.analyzeMelodyBtn.textContent=state.melodyBusy?'Analysing Melody…':hasVocalStem()?'Analyse Melody':'Prepare Vocal Stem';
+  }
   if (elements.analyzeDrumsBtn) {
     elements.analyzeDrumsBtn.disabled = !canReanalyze || !chartReady || Boolean(state.study?.busy);
     elements.analyzeDrumsBtn.textContent = state.drumBusy ? 'Analysing Drums…' : typeof hasDrumStem === 'function' && hasDrumStem() ? 'Analyse Drums' : 'Prepare Drum Stem';
@@ -949,7 +960,7 @@ function formatTimelineTransportTime(value) {
 }
 
 function timelineBeatLabel(bar, index, time) {
-  const beats = beatsPerBar();
+  const beats = beatsPerBar(bar);
   const start = Number(bar?.start) || 0;
   const tempo = Number(state.chart?.tempo) || 120;
   const fallbackLength = (60 / tempo) * beats;

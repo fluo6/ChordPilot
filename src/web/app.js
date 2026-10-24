@@ -378,6 +378,17 @@ function createWebApp({
     res.json({result:redactLocationMetadata(result)});
   }));
 
+  app.post('/api/analyze-melody',asyncRoute(async(req,res)=>{
+    const media=await resolveMedia(req.body?.mediaId);
+    storage.resolveStudySources(media.id,['vocals']);
+    const result=await queue.enqueue('Vocal melody transcription',async()=>{
+      const sourcePaths=storage.resolveStudySources(media.id,['vocals']);
+      try{return await services.analyzeMelody({audioPath:media.path,sourcePaths,force:req.body?.force===true,language:req.body?.language});}
+      catch(error){throw new HttpError(422,'MELODY_ANALYSIS_FAILED',sanitizePublicLogText(error.message || 'Melody transcription failed.'));}
+    });
+    res.json({result:redactLocationMetadata(result)});
+  }));
+
   app.post("/api/analyze", asyncRoute(async (req, res) => {
     const media = await resolveMedia(req.body?.mediaId);
     const queuedAt = Date.now();

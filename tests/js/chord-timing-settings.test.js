@@ -9,7 +9,7 @@ test("analysis timing options default to Auto/beat and round-trip through contro
     analysisPresetInput: control("general"), analysisPresetHint: {},
     chordTimingInput: control("auto"), chordGridInput: control("beat"), chordStabilityInput: control("detailed"),
     tailReductionInput: control("0"), tailHalfLifeInput: control("0.5"), overtoneWeightingInput: control("50"),
-    analysisKeyInput: control(), minBpmInput: control("60"), maxBpmInput: control("190"), beatOffsetInput: control("0"), barPhaseInput: control("0"),
+    rhythmEngineInput: control("onset"), analysisKeyInput: control(), minBpmInput: control("60"), maxBpmInput: control("190"), beatOffsetInput: control("0"), barPhaseInput: control("0"),
     onsetFrameInput: control("2048"), onsetHopInput: control("512"), chromaLowInput: control("65"), chromaHighInput: control("1800"),
     alternativesInput: control("6"), chordSourceInput: control("auto"), demucsModelInput: control("htdemucs"), useCacheInput: control(),
     simplifyChordsInput: control(), lyricsEnabledInput: control(), lyricsSourceInput: control("auto"), lyricsModelInput: control("tiny"), lyricsLanguageInput: control()
@@ -20,6 +20,18 @@ test("analysis timing options default to Auto/beat and round-trip through contro
   applyAnalysisOptions({bar_phase:2,beat_offset:.5});
   assert.equal(collectAnalysisOptions().bar_phase,2);
   assert.equal(collectAnalysisOptions().beat_offset,.5);
+  applyAnalysisOptions({rhythm_engine:'beat_this',bar_phase:2});
+  assert.equal(collectAnalysisOptions().rhythm_engine,'beat_this');
+  assert.equal(collectAnalysisOptions().bar_phase,0);
+  applyAnalysisOptions({rhythm_engine:'beat_this_steady',min_bpm:60,max_bpm:90,bar_phase:2});
+  assert.equal(collectAnalysisOptions().rhythm_engine,'beat_this_steady');
+  assert.equal(collectAnalysisOptions().bar_phase,0);
+  assert.equal(elements.minBpmInput.disabled,false);
+  assert.equal(elements.maxBpmInput.disabled,false);
+  assert.equal(elements.barPhaseInput.disabled,true);
+  assert.equal(elements.barPhaseInput.disabled,true);
+  applyAnalysisOptions({rhythm_engine:'onset'});
+  assert.equal(elements.barPhaseInput.disabled,false);
   assert.equal(collectAnalysisOptions().chord_stability, "detailed");
   assert.equal(collectAnalysisOptions().overtone_weighting, .5);
   applyAnalysisOptions({ overtone_weighting: .8 });

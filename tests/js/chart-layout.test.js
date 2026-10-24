@@ -2,6 +2,14 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {loadScript,plain}=require('./helpers/load-script');
 
+test('a short inferred measure uses its own beat count and measured anchors',()=>{
+  const {chordBeatLayout}=loadScript('src/renderer/chart-layout.js',['chordBeatLayout']);
+  const model=chordBeatLayout({start:4,time_signature:'2/4'},5,{time_signature:'4/4',beat_times:[4,4.51,5,5.5]});
+  assert.equal(model.beats,2);assert.deepEqual(plain(model.anchors),[4,4.51,5]);
+  const {bassRhythm}=loadScript('src/renderer/bass-view.js',['bassRhythm']);
+  assert.equal(bassRhythm([],{start:4,time_signature:'2/4'},5,{time_signature:'4/4',beat_times:[4,4.51,5]}).beats,2);
+});
+
 test('one density setting groups measures consistently without changing chart data',()=>{
   const state={barsPerLine:2,chart:{bars:Array.from({length:11},(_,i)=>({number:i+1,start:i*2,section:i<5?'Intro':'Verse',chord:'C'}))}};
   const original=JSON.stringify(state.chart);

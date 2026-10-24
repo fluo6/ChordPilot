@@ -85,6 +85,18 @@ function makeServices(t, overrides = {}) {
   return { root, options, services: createChordPilotServices(options) };
 }
 
+test('optional melody resolves only the registered vocals stem and preserves session data',async t=>{
+  let args;
+  const {root,services}=makeServices(t,{pythonCandidates:[{command:'python'}],spawnImpl(_command,value){args=value;return fakeChild({stdout:JSON.stringify({ok:true,events:[]})});}});
+  const audioPath=path.join(root,'song.wav'),vocals=path.join(root,'vocals.wav');fs.writeFileSync(audioPath,'audio');fs.writeFileSync(vocals,'voice');
+  await assert.rejects(services.analyzeMelody({audioPath}),/unavailable/);
+  const melody={ok:true,events:[{start:0,end:1,midi:72}],fingerprint:'test'};
+  const session=path.join(root,'melody-session.json');fs.writeFileSync(session,JSON.stringify({audio:{path:audioPath},chart:{melody,stems:{ok:true,stems:[{name:'vocals',path:vocals}]}}}));
+  const loaded=await services.readSessionFile(session);assert.deepEqual(loaded.session.chart.melody,melody);
+  await services.analyzeMelody({audioPath,force:true});
+  assert.ok(args.includes('analyze-melody'));assert.ok(args.includes(vocals));assert.ok(args.includes('--force'));assert.ok(!args.includes('analyze'));
+});
+
 test("preview filters clamp tempo and preserve pitch", () => {
   assert.match(buildAudioPreviewFilter(2, 1.25), /asetrate=/);
   assert.match(buildAudioPreviewFilter(0, 9), /atempo=2/);

@@ -14,14 +14,15 @@
     // This avoids a worker-side engraving exception without changing source
     // pitches, durations, ties, or the existing ChordPilot renderer's TAB view.
     const effectiveMode=fixture.kind==='bass'&&fixture.mode!=='notation'&&unsupported.length?'notation':fixture.mode;
-    score.title='';track.name=fixture.kind==='bass'?'Bass':'Drums';track.shortName='';
+    const pitched=fixture.kind!=='drums';
+    score.title='';track.name=fixture.kind==='bass'?'Bass':fixture.kind==='melody'?'Lead vocal':'Drums';track.shortName='';
     score.addTrack(track);track.addStaff(staff);
     track.playbackInfo.program=fixture.kind==='bass'?33:0;
     track.defaultSystemsLayout=barsPerLine;score.defaultSystemsLayout=barsPerLine;
     staff.isPercussion=fixture.kind==='drums';
-    staff.showTablature=!staff.isPercussion&&effectiveMode!=='notation';
+    staff.showTablature=fixture.kind==='bass'&&effectiveMode!=='notation';
     staff.showStandardNotation=staff.isPercussion||effectiveMode!=='tab';
-    if(!staff.isPercussion){
+    if(fixture.kind==='bass'){
       staff.stringTuning=new m.Tuning('Bass',bassTuning.configFor(fixture.strings).midi,false);
       staff.displayTranspositionPitch=-12;
     }
@@ -33,6 +34,12 @@
       const master=new m.MasterBar(),bar=new m.Bar(),voice=new m.Voice();
       const model=source.model;
       master.timeSignatureNumerator=model.beats;master.timeSignatureDenominator=model.beatValue;
+      if(source.bar?.pickup_beats){
+        const signature=/^(\d+)\/(2|4|8|16)$/.exec(source.bar.time_signature||fixture.chart?.time_signature||'4/4');
+        if(signature&&model.beats<Number(signature[1])){
+          master.timeSignatureNumerator=Number(signature[1]);master.timeSignatureDenominator=Number(signature[2]);master.isAnacrusis=true;
+        }
+      }
       master.isRepeatStart=Boolean(source.bar?.repeat_start);
       master.repeatCount=Math.max(0,Number(source.bar?.repeat_end)||0);
       if(source.section && source.section!==previousSection){
@@ -41,16 +48,16 @@
         if(index)track.addLineBreaks(index);previousSection=source.section;
       }
       score.addMasterBar(master);staff.addBar(bar);bar.addVoice(voice);
-      bar.clef=staff.isPercussion?m.Clef.Neutral:m.Clef.F4;
+      bar.clef=staff.isPercussion?m.Clef.Neutral:fixture.kind==='melody'?m.Clef.G2:m.Clef.F4;
       bar.keySignature=staff.isPercussion?0:keyFifths[fixture.key] ?? 0;
       model.events.forEach((event,eventIndex)=>{
         const beat=new m.Beat();voice.addBeat(beat);beat.duration=Number(event.duration);beat.dots=event.dots;
         if(event.triplet){beat.tupletNumerator=3;beat.tupletDenominator=2;}
         const next=model.events[eventIndex+1];
-        const pulse=fixture.kind==='bass'?model.unitDenominator/model.beatValue:1;
-        const silent=e=>fixture.kind==='bass'?e.sourceIndex===null:!e.instruments.length;
+        const pulse=pitched?model.unitDenominator/model.beatValue:1;
+        const silent=e=>pitched?e.sourceIndex===null:!e.instruments.length;
         if(!next || silent(event) || silent(next) || Math.floor(event.offset/pulse)!==Math.floor(next.offset/pulse))beat.beamingMode=m.BeatBeamingMode.ForceSplitToNext;
-        if(fixture.kind==='bass' && event.sourceIndex!==null){
+        if(pitched && event.sourceIndex!==null){
           const note=new m.Note();
           if(event.position){note.string=fixture.strings+1-event.position.string;note.fret=event.position.fret;}
           else{
@@ -58,6 +65,7 @@
             // pitch-only Note fields let the rest of the score keep its TAB.
             note.string=-1;note.fret=-1;note.tone=((event.midi%12)+12)%12;note.octave=Math.floor(event.midi/12);
             const transcription=fixture.measures[index].notes?.[event.sourceIndex];
+            if(fixture.kind==='bass')
             diagnostics.push({kind:'unplayable-tab-note',bar:source.number||index+1,midi:event.midi,
               pitch:bassTuning.pitchName(event.midi),sourceIndex:event.sourceIndex,
               start:transcription?.start,end:transcription?.end,frequencyHz:transcription?.frequency_hz,
@@ -77,7 +85,7 @@
             const note=new m.Note();note.percussionArticulation=articulation;beat.addNote(note);
           }
         } else {previousNote=null;previousEvent=null;}
-        const quarters=fixture.kind==='bass'?event.units*4/model.unitDenominator:
+        const quarters=pitched?event.units*4/model.unitDenominator:
           event.beats*4/model.beatValue;
         audit.push({bar:index,event:eventIndex,beat,source:event,quarters});
       });
@@ -88,12 +96,12 @@
     for(const entry of audit){
       const {beat,source:event,quarters}=entry;
       if(Math.abs(beat.playbackDuration/960-quarters)>1e-8)throw Error(`Duration changed in bar ${entry.bar+1}: ${beat.playbackDuration/960} != ${quarters}`);
-      if(fixture.kind==='bass' && event.sourceIndex!==null){
+      if(pitched && event.sourceIndex!==null){
         const note=beat.notes[0];
-        if(note.realValue!==event.midi || note.displayValue!==event.midi+12)throw Error(`Pitch/octave changed in bar ${entry.bar+1}`);
+        if(note.realValue!==event.midi || note.displayValue!==event.midi+(fixture.kind==='bass'?12:0))throw Error(`Pitch/octave changed in bar ${entry.bar+1}`);
         if(event.position){
           if(note.string!==fixture.strings+1-event.position.string || note.fret!==event.position.fret)throw Error('Bass fingering changed');
-        }else if(!note.isPiano||note.string!==-1||note.fret!==-1)throw Error('Unplayable bass note was not retained as a pitch-only notation note');
+        }else if(!note.isPiano||note.string!==-1||note.fret!==-1)throw Error('Pitch-only note was not retained in standard notation');
       }
       if(fixture.kind==='drums' && beat.notes.map(note=>note.percussionArticulation).join(',')!==event.instruments.map(key=>drumMap[key]).join(','))
         throw Error(`Drum articulation changed in bar ${entry.bar+1}`);
@@ -109,17 +117,20 @@
     const strings=kind==='bass'?bassTuning.recommendedStringCount(detectedNotesByBar.flat()):bassTuning.normalizeStringCount(state.bassStrings);
     if(kind==='bass')state.bassStrings=strings;
     const bass=kind==='bass'?(strings===4?detectedNotesByBar:bassChartNotes(bassChart,strings)):null;
+    const melodySettings=kind==='melody'?melodyNotationSettings(state.melodyNotation):null;
+    const voiceReview=chart.melody?.voice_review?.melody_fingerprint===chart.melody?.fingerprint?chart.melody?.voice_review:null;
     const measures=bars.map((bar,index)=>{
       const end=ends[index];
-      const model=kind==='bass'?bassRhythm(bass[index],bar,end,chart):drumRhythm(drumBarEvents(chart,bar,end),bar,end,chart);
+      const notes=kind==='melody'?melodyBarNotes(chart,bar,end):kind==='bass'?bass[index]:undefined;
+      const model=kind==='melody'?melodyRhythm(notes,bar,end,chart,melodySettings):kind==='bass'?bassRhythm(notes,bar,end,chart):drumRhythm(drumBarEvents(chart,bar,end),bar,end,chart);
       if(!model)throw Error(`Could not prepare bar ${bar.number || index+1} for notation.`);
       return {number:bar.number || index+1,start:Number(bar.start),end,section:String(bar.section || '').trim(),bar,
-        notes:kind==='bass'?bass[index]:undefined,model,
-        chords:chordEventsForBar(index).map(event=>({chord:event.chord,start:event.start,end:event.end}))};
+        notes,model,reviewIssues:kind==='melody'?melodyQualityDiagnostics(model,notes,voiceReview):[],
+        chords:kind==='melody'?melodyChordEvents(chordEventsForBar(index),melodySettings.cleanChords):chordEventsForBar(index).map(event=>({chord:event.chord,start:event.start,end:event.end}))};
     });
     const key=typeof notationKeySignature==='function'?notationKeySignature(chart,state.notationUseKeySignature!==false):'';
     return {kind,strings,key,keyLabel:chartKeyText(chart)||chart.key||chart.detected_key||'C',
-      mode:state.bassNotationMode||'both',tempo:chart.tempo||0,title:chart.title||'',chart,measures};
+      mode:kind==='melody'?'notation':state.bassNotationMode||'both',melodySettings,tempo:chart.tempo||0,title:chart.title||'',chart,measures};
   }
   function timeToTick(fixture,time){
     let ticks=0;

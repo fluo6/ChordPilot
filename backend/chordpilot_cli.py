@@ -38,6 +38,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     drums_parser = subparsers.add_parser("analyze-drums")
     drums_parser.add_argument("stem_path")
     drums_parser.add_argument("--force", action="store_true")
+    melody_parser = subparsers.add_parser('analyze-melody')
+    melody_parser.add_argument('stem_path')
+    melody_parser.add_argument('--force', action='store_true')
+    melody_parser.add_argument('--language', default='auto')
     stems_parser = subparsers.add_parser("prepare-stems")
     stems_parser.add_argument("audio_path")
 
@@ -58,6 +62,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         elif args.command == "prepare-stems":
             from chordpilot_stems import run_demucs
             respond(run_demucs(Path(args.audio_path)))
+        elif args.command == 'analyze-melody':
+            from chordpilot_melody import analyze_melody
+            respond(analyze_melody(args.stem_path, args.force, args.language))
         else:
             parser.print_help(sys.stderr)
             return 2
