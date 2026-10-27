@@ -58,7 +58,8 @@ function spreadsheetChartModel() {
   let section = '', lastSection = null;
   chartRows(settings.barsPerLine).forEach(group => {
     section = clean(group.find(item => item.section)?.section || section);
-    const changed = section !== lastSection;
+    const sectionKey=group[0]?.sectionId || section;
+    const changed = sectionKey !== lastSection;
     if (changed && rows.length) rows.push({ spacer: true, cells: Array.from({ length: columns }, () => ({ text: '' })) });
     if (!colours.has(section)) colours.set(section, spreadsheetSectionColour(section, colours.size));
     const cells = [{ text: changed ? section : '', section: true }];
@@ -69,7 +70,7 @@ function spreadsheetChartModel() {
       }
     }
     rows.push({ cells, colour: settings.colours ? colours.get(section) : '#ffffff' });
-    lastSection = section;
+    lastSection = sectionKey;
   });
   return { rows, columns, settings };
 }

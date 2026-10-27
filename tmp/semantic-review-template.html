@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChordPilot · Structure model comparison</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4f6f8;--panel:#fff;--ink:#1a2630;--muted:#536575;--line:#d7e0e7;--active:#e4edf4;--intro:#60a68b;--verse:#6497cc;--chorus:#c178a8;--bridge:#d6a461;--outro:#93a4a8;--inst:#a48ccc;--unknown:#87959e}
+@media(prefers-color-scheme:dark){:root{--bg:#151b20;--panel:#1e272f;--ink:#e9eff4;--muted:#aabac7;--line:#394954;--active:#2b3d4c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:30px 22px 60px}h1{font-size:28px;letter-spacing:-.5px;margin:0 0 6px}h2{font-size:22px;margin:0}p{margin:4px 0 16px}.muted{color:var(--muted)}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:12px;color:var(--muted)}button,select,a{font:inherit}button,select{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 11px}button{cursor:pointer}button:hover,button[aria-pressed=true]{background:var(--active)}button[aria-pressed=true]{border-color:var(--ink)}:focus-visible{outline:3px solid var(--verse);outline-offset:3px}a{color:var(--ink);text-underline-offset:3px}.songs{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px}.head{display:flex;justify-content:space-between;gap:20px}.method{margin:18px 0 6px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}.method select{max-width:100%}.sequence{margin:12px 0 4px;font-weight:500;overflow-wrap:anywhere}.player{position:sticky;top:0;background:var(--panel);padding-top:14px;z-index:2}audio{width:100%}.timeline{height:64px;display:flex;gap:3px;margin-top:10px}.timeline button{border:0;background:color-mix(in srgb,var(--role) 32%,var(--panel));flex-basis:0;min-width:7px;padding:4px 0;border-radius:4px;overflow:hidden;font-size:12px;white-space:nowrap}.timeline button[aria-current=true]{background:color-mix(in srgb,var(--role) 60%,var(--panel));box-shadow:inset 0 -4px var(--ink)}.axis{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0 12px}.now{font-size:13px;color:var(--muted);min-height:21px;font-variant-numeric:tabular-nums}.scroll{overflow:auto;margin-top:14px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap}th{font-size:12px;color:var(--muted);font-weight:500;text-align:left}th,td{padding:11px 8px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{text-align:right;padding-right:0}td button{font-size:12px;padding:5px 8px}tr[aria-current=true]{background:var(--active)}.badge{border-radius:4px;padding:3px 8px;background:color-mix(in srgb,var(--role) 28%,var(--panel))}.note{font-size:13px;color:var(--muted);margin-top:20px}.sources{font-size:13px;color:var(--muted);margin-top:20px}.raw{font-size:13px;white-space:nowrap}@media(max-width:650px){main{padding:20px 12px}.panel{padding:16px 12px}h1{font-size:24px}.head{display:block}.raw{display:block;margin-top:8px}.timeline button{font-size:11px}.songs button{font-size:13px}}
+</style>
+<main><div class="eyebrow">ChordPilot / Pretrained model experiment</div><h1>Song form from the audio</h1><p class="muted">Compare untouched model predictions with the previous acoustic-group baseline.</p><nav id="songs" class="songs" aria-label="Recording"></nav>
+<section class="panel"><div class="head"><div><h2 id="title"></h2><div id="meta" class="muted"></div></div><a id="raw" class="raw">Raw prediction</a></div>
+<div class="method"><label for="method">Detector</label><select id="method"></select></div><div id="description" class="muted"></div><div id="sequence" class="sequence"></div>
+<div class="player"><audio id="audio" controls preload="metadata"></audio><div id="now" class="now" role="status"></div><div id="timeline" class="timeline" aria-label="Predicted sections"></div><div class="axis"><span>0:00</span><span id="duration"></span></div></div>
+<p class="muted" style="font-size:13px">Click a section to play its start. “Hear transition” starts 3 seconds before it. Bar hints use the nearest saved bar; source timestamps are unchanged.</p>
+<div class="scroll"><table><thead><tr><th>#</th><th id="role-heading">Predicted role</th><th>From</th><th>To</th><th>Length</th><th>Near bar</th><th>Listen</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p id="provenance" class="note"></p></section>
+<p class="note">These are experimental predictions, not verified song forms. All-In-One has no pre-chorus or post-chorus class. “Start” and “End” are its padding labels. Repeated Verse/Chorus rows remain separate model intervals. No user boundaries, lyric tags or web text enter model inference.</p>
+<p class="sources">Waste of Time reference: <a href="https://9m88baba.bandcamp.com/track/waste-of-time">artist’s song page</a> · <a href="https://www.shazam.com/song/1669885342/waste-of-time">section-tagged lyrics</a>. These provide context, not a timestamped ground truth.</p></main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const data=JSON.parse(document.getElementById('data').textContent);
+  const el=id=>document.getElementById(id),audio=el('audio');
+  const names={inst:'Instrumental',intro:'Intro',verse:'Verse',chorus:'Chorus',bridge:'Bridge',outro:'Outro',break:'Break',solo:'Solo',start:'Start',end:'End'};
+  const name=x=>names[x] || x || 'Unknown';
+  const color=x=>`var(--${['intro','verse','chorus','bridge','outro','inst'].includes(x)?x:'unknown'})`;
+  const fmt=x=>`${Math.floor(Math.max(0,x)/60)}:${(Math.max(0,x)%60).toFixed(2).padStart(5,'0')}`;
+  let index=0,track,variant,selected=-2;
+  function update(){
+    if(!variant)return;
+    const time=audio.currentTime,i=variant.segments.findIndex(s=>s.start<=time&&time<s.end);
+    el('now').textContent=`${fmt(time)} / ${fmt(track.duration)}`+(i>=0?` · ${name(variant.segments[i].label)} · occurrence ${i+1}`:'');
+    if(i===selected)return;selected=i;
+    for(const node of [...el('timeline').children,...el('rows').children])node.setAttribute('aria-current',String(Number(node.dataset.index)===i));
+  }
+  function play(time){audio.currentTime=Math.max(0,time);audio.play().catch(()=>{el('now').textContent='Press the player Play button to listen.';});update();}
+  function render(){
+    variant=track.variants.find(v=>v.id===el('method').value);selected=-2;
+    el('description').textContent=variant.description;
+    el('sequence').textContent=variant.segments.map(s=>name(s.label)).join(' → ');
+    el('raw').href=variant.raw;
+    el('role-heading').textContent=variant.id==='builtin'?'Acoustic group':'Predicted role';
+    el('provenance').textContent=variant.provenance;
+    el('timeline').replaceChildren();el('rows').replaceChildren();
+    variant.segments.forEach((s,i)=>{
+      const button=document.createElement('button');button.dataset.index=i;button.textContent=name(s.label);button.style.flexGrow=s.end-s.start;button.style.setProperty('--role',color(s.label));button.title=`${name(s.label)} · ${fmt(s.start)}–${fmt(s.end)}`;button.setAttribute('aria-label',button.title+', play');button.addEventListener('click',()=>play(s.start));el('timeline').append(button);
+      const row=document.createElement('tr');row.dataset.index=i;
+      [String(i+1),name(s.label),fmt(s.start),fmt(s.end),`${(s.end-s.start).toFixed(2)}s`,String(s.start_bar)].forEach((value,j)=>{const td=document.createElement('td');if(j===1){const badge=document.createElement('span');badge.className='badge';badge.textContent=value;badge.style.setProperty('--role',color(s.label));td.append(badge);}else td.textContent=value;row.append(td);});
+      const td=document.createElement('td'),listen=document.createElement('button');listen.textContent=i?'Hear transition':'Play opening';listen.setAttribute('aria-label',`${listen.textContent}, occurrence ${i+1}`);listen.addEventListener('click',()=>play(s.start-3));td.append(listen);row.append(td);el('rows').append(row);
+    });update();
+  }
+  function choose(i){
+    audio.pause();index=i;track=data.tracks[i];
+    el('title').textContent=track.title;el('meta').textContent=`${track.artist} · ${fmt(track.duration)}`;el('duration').textContent=fmt(track.duration);
+    el('method').replaceChildren();for(const v of track.variants){const option=document.createElement('option');option.value=v.id;option.textContent=v.title;el('method').append(option);}
+    for(const button of el('songs').children)button.setAttribute('aria-pressed',String(Number(button.dataset.index)===i));
+    audio.src=track.media;audio.load();render();history.replaceState(null,'','#'+track.id);
+  }
+  data.tracks.forEach((t,i)=>{const b=document.createElement('button');b.dataset.index=i;b.textContent=t.title;b.addEventListener('click',()=>choose(i));el('songs').append(b);});
+  el('method').addEventListener('change',render);audio.addEventListener('timeupdate',update);
+  audio.addEventListener('error',()=>{el('now').textContent='Audio could not load.';});
+  const initial=data.tracks.findIndex(t=>t.id===location.hash.slice(1));choose(initial<0?0:initial);
+})();
+</script></html>

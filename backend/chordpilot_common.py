@@ -93,16 +93,6 @@ CHORD_QUALITIES["mmaj9"] = {"intervals": [0, 3, 7, 11, 14], "third": 3,
 
 MAJOR_SCALE_INTERVALS = {0, 2, 4, 5, 7, 9, 11}
 MINOR_SCALE_INTERVALS = {0, 2, 3, 5, 7, 8, 10}
-SECTION_PLAN = [
-    ("Intro", 4),
-    ("Verse", 8),
-    ("Chorus", 8),
-    ("Verse", 8),
-    ("Chorus", 8),
-    ("Bridge", 8),
-    ("Chorus", 8),
-    ("Outro", 4),
-]
 BACKEND_CACHE_VERSION = "2026-10-13-beat-spectrum-v1"
 CHORD_TIMING_ALGORITHM_VERSION = "sub-bar-v24"
 STEM_NAMES = ["vocals", "drums", "bass", "other"]
@@ -129,6 +119,7 @@ DEFAULT_ANALYSIS_OPTIONS = {
     "demucs_model": "htdemucs",
     "require_stems": False,
     "use_cache": True,
+    "structure_enabled": False,
     "lyrics_enabled": False,
     "lyrics_source": "auto",
     "lyrics_model": "tiny",
@@ -226,6 +217,7 @@ def normalize_analysis_options(raw: dict[str, Any] | None = None) -> dict[str, A
     options["demucs_model"] = str(raw.get("demucs_model") or options["demucs_model"]).strip() or "htdemucs"
     options["require_stems"] = bool(raw.get("require_stems", options["require_stems"]))
     options["use_cache"] = bool(raw.get("use_cache", options["use_cache"]))
+    options['structure_enabled'] = raw.get('structure_enabled') is True
     options["lyrics_enabled"] = bool(raw.get("lyrics_enabled", options["lyrics_enabled"]))
     lyrics_source = str(raw.get("lyrics_source") or options["lyrics_source"]).strip().lower().replace("-", "_")
     if lyrics_source not in {"auto", "full_mix", "vocals"}:

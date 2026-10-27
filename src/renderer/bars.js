@@ -189,6 +189,7 @@ function updateActiveBarFromPlayback() {
 }
 
 function renderBars() {
+  if(typeof SongStructure!=='undefined')SongStructure.ensure(state.chart);
   if (typeof syncCompactWorkspace === "function") syncCompactWorkspace();
   elements.barsBody.innerHTML = "";
   if (elements.chartPreview) {
@@ -223,7 +224,7 @@ function renderBars() {
 
     const sectionCell = document.createElement("td");
     sectionCell.appendChild(createInput(bar.section, (value) => {
-      bar.section = value;
+      if(typeof SongStructure==='undefined'||!SongStructure.editBar(state.chart,index,value))bar.section=value;
       renderTimeline();
     }));
 
@@ -285,8 +286,7 @@ function renderBars() {
 
     const startCell = document.createElement("td");
     startCell.appendChild(createInput(formatSeconds(bar.start), (value) => {
-      bar.start = Number(value) || 0;
-      renderTimeline();
+      if(updateBarStart(state.chart.bars.indexOf(bar),value))renderBars();
     }));
 
     const lyricsCell = document.createElement("td");
@@ -328,12 +328,13 @@ function chartRows(measuresPerRow = typeof chartBarsPerLine === 'function' ? cha
   let lastSection = null;
   state.chart.bars.forEach((bar, index) => {
     const section = String(bar.section || "").trim();
-    if (section && lastSection !== null && section !== lastSection && current.length) {
+    const sectionId=bar.section_id || section;
+    if (section && lastSection !== null && sectionId !== lastSection && current.length) {
       rows.push(current);
       current = [];
     }
-    lastSection = section || lastSection;
-    current.push({ bar, index, section });
+    lastSection = sectionId || lastSection;
+    current.push({ bar, index, section, sectionId });
     if (current.length >= measuresPerRow) {
       rows.push(current);
       current = [];
@@ -658,8 +659,8 @@ function renderMeasureGridPreview(container) {
   grid.className = "measure-grid-chart";
   let lastSection='';
   chartRows().forEach((row) => {
-    if(row[0].section && row[0].section!==lastSection) {
-      const section=document.createElement('h3');section.className='chart-section-label';section.textContent=row[0].section;grid.append(section);lastSection=row[0].section;
+    if(row[0].section && row[0].sectionId!==lastSection) {
+      const section=document.createElement('h3');section.className='chart-section-label';section.textContent=row[0].section;grid.append(section);lastSection=row[0].sectionId;
     }
     const rowEl = document.createElement("div");
     rowEl.className = "measure-grid-row";
@@ -707,10 +708,10 @@ function renderIrealPreview(container) {
   chartRows().forEach((row) => {
     const rowEl = document.createElement("div");
     rowEl.className = "ireal-row";
-    if(row[0].section && row[0].section!==lastSection) {
+    if(row[0].section && row[0].sectionId!==lastSection) {
       const section=document.createElement('span');
       section.className='ireal-section-label';section.textContent=row[0].section;
-      section.title=row[0].section;rowEl.append(section);lastSection=row[0].section;
+      section.title=row[0].section;rowEl.append(section);lastSection=row[0].sectionId;
     }
     row.forEach(({ bar, index }) => {
       const measure = document.createElement("button");
@@ -758,7 +759,8 @@ function renderChordProPreview(container) {
   chartRows().forEach(row=>{
     const system=document.createElement('span');system.className='chordpro-system';
     const section=row.find(item=>item.section)?.section;
-    if(section && section!==lastSection) {system.append(document.createTextNode(`[${section}]\n`));lastSection=section;}
+    const sectionKey=row[0].sectionId || section;
+    if(section && sectionKey!==lastSection) {system.append(document.createTextNode(`[${section}]\n`));lastSection=sectionKey;}
     row.forEach(({bar,index})=>{
       const timing=chordBeatLayout(bar,barEndTime(index),state.chart,chordEventsForBar(index));
       const measure=document.createElement('span');measure.className='chordpro-measure';measure.dataset.index=String(index);
@@ -922,6 +924,7 @@ function updateDetailPane() {
   if (document.activeElement !== elements.detailSectionInput) {
     elements.detailSectionInput.value = bar.section || "";
   }
+  if(typeof renderSongStructureControls==='function')renderSongStructureControls();
   if (document.activeElement !== elements.detailChordInput) {
     elements.detailChordInput.value = display.chord || "";
   }
@@ -1466,6 +1469,18 @@ function selectBar(index, seek, eventIndex = 0) {
   updateRowState({ scroll: true });
 }
 
+function updateBarStart(index,value) {
+  const bar=state.chart?.bars?.[index],start=Number(value);
+  if(!bar || !Number.isFinite(start) || start<0 || start>=state.chart.duration || state.chart.bars.some(item=>item!==bar && item.start===start))return false;
+  if(typeof SongStructure!=='undefined')SongStructure.ensure(state.chart);
+  const selected=state.chart.bars[state.selectedIndex],active=state.chart.bars[state.activeIndex];
+  bar.start=start;state.chart.bars.sort((left,right)=>Number(left.start)-Number(right.start));renumberBars();
+  if(selected)state.selectedIndex=state.chart.bars.indexOf(selected);
+  if(active)state.activeIndex=state.chart.bars.indexOf(active);
+  if(typeof SongStructure!=='undefined')SongStructure.project(state.chart,true);
+  return true;
+}
+
 function updateSelectedBarFromDetail(field, value) {
   const bar = getSelectedBar();
   if (!bar) {
@@ -1473,14 +1488,11 @@ function updateSelectedBarFromDetail(field, value) {
   }
 
   if (field === "section") {
-    bar.section = value;
+    if(typeof SongStructure==='undefined'||!SongStructure.editBar(state.chart,state.selectedIndex,value))bar.section=value;
   } else if (field === "chord") {
     applySelectedChordCorrection("chord", value);
   } else if (field === "start") {
-    bar.start = Number(value) || 0;
-    state.chart.bars.sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0));
-    renumberBars();
-    state.selectedIndex = state.chart.bars.indexOf(bar);
+    updateBarStart(state.selectedIndex,value);
   } else if (field === "repeat_start") {
     bar.repeat_start = Boolean(value);
   } else if (field === "repeat_end") {

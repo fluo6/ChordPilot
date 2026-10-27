@@ -786,6 +786,10 @@ fresh power(f, t) = max(0, current power(f, t)
             Cache
             <input id="useCacheInput" type="checkbox" checked />
           </label>
+          <label class="checkbox-label" title="Experimental audio-derived section boundaries and repeated A/B groups. Musical roles remain unknown until you name them.">
+            Detect Song Structure (experimental)
+            <input id="structureEnabledInput" type="checkbox" />
+          </label>
           <label class="checkbox-label" title="Show simpler labels for extensions. Full detected chords are preserved in saved results and exports.">
             Simplify Chords
             <input id="simplifyChordsInput" type="checkbox" checked />
@@ -1254,6 +1258,7 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./web-bridge.js"></script>
     <script src="./study-model.js"></script>
     <script src="./state.js"></script>
+    <script src="./song-structure.js"></script>
     <script src="./transpose.js"></script>
     <script src="./shell.js"></script>
     <script src="./formatters.js"></script>
@@ -1289,6 +1294,7 @@ fresh power(f, t) = max(0, current power(f, t)
     <script src="./study-playback.js"></script>
     <script src="./keyboard.js"></script>
     <script src="./renderer.js"></script>
+    <script src="./song-structure-ui.js"></script>
     <script src="./compact-workspace.js"></script>
     <script src="./chart-workspace.js"></script>
     <script src="./analysis-workspace.js"></script>

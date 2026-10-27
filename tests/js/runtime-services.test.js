@@ -7,6 +7,17 @@ const { EventEmitter } = require("node:events");
 
 const { createChordPilotServices, buildAudioPreviewFilter, normalizeYoutubeUrl } = require("../../src/runtime/chordpilot-services");
 
+test('structure refresh invokes only its backend command with source-time grid data',async t=>{
+  let args,input;const {root,services}=makeServices(t,{pythonCandidates:[{command:'python'}],spawnImpl(command,value){args=value;const child=fakeChild({stdout:JSON.stringify({version:1,analysis:{status:'estimated',segments:[]},manual_segments:null})});child.stdin.write=value=>{input=value;};return child;}});
+  assert.equal(typeof services.analyzeStructure,'function');
+  const audioPath=path.join(root,'song.wav');fs.writeFileSync(audioPath,'audio');
+  const result=await services.analyzeStructure({audioPath,grid:{duration:8,bars:[{start:0,section:'manual text'},{start:4}]}});
+  assert.equal(result.version,1);assert.ok(args.includes('analyze-structure'));assert.ok(!args.includes('analyze'));
+  assert.equal(args[args.indexOf('--grid')+1],'-');
+  assert.deepEqual(JSON.parse(input),{duration:8,bars:[{start:0},{start:4}]});
+  await assert.rejects(services.analyzeStructure({audioPath,grid:{duration:8,bars:[{start:NaN}]}}),/grid|finite/i);
+});
+
 test("range analysis sends exact inputs to backend and resolves only registered desktop stems", async (t) => {
   let args;
   const { root, services } = makeServices(t, {

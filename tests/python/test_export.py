@@ -26,6 +26,16 @@ CHART = {
 
 
 class ExportTests(unittest.TestCase):
+    def test_effective_structure_overrides_stale_bar_labels_and_retains_same_name_headings(self):
+        chart = {'duration': 4, 'bars': [{'number':1,'start':0,'section':'Wrong','chord':'C'},
+                                      {'number':2,'start':2,'section':'Wrong','chord':'G'}],
+                 'structure': {'version':1,'analysis':{'segments':[]},'manual_segments':[
+                     {'id':'v1','start':0,'end':2,'label':'Verse'},
+                     {'id':'v2','start':2,'end':4,'label':'Verse'}]}}
+        self.assertEqual(render_txt(chart).count('[Verse]'), 2)
+        xml = ET.fromstring(render_musicxml(chart))
+        self.assertEqual([x.text for x in xml.findall('.//rehearsal')], ['Verse','Verse'])
+
     def test_pickup_keeps_short_duration_before_full_measure(self):
         chart={'time_signature':'4/4','duration':3,'beat_times':[0,.5,1,1.5,2,2.5],
                'bars':[{'start':0,'pickup_beats':2,'chord':'C'},{'start':1,'chord':'G'}]}

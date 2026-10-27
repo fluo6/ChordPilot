@@ -7,7 +7,7 @@ See [TODO.md](TODO.md) for open work, deferred features, known limitations and t
 ## Features
 
 - Select MP3/WAV audio from the desktop app.
-- Run a Python analysis backend to estimate key, BPM, time signature, bars, chords, and rough sections.
+- Run a Python analysis backend to estimate key, BPM, time signature, bars and chords, with optional experimental song-structure detection.
 - Detect and edit supported chord changes inside a measure, with Auto changes, Fixed grid, and Legacy one-chord-per-bar timing modes.
 - Choose fast full-mix analysis or high-quality Demucs stem separation, using accompaniment for chord tones and Bass for root/inversion evidence.
 - View estimated bass rhythm in score/TAB, preserving separately measured same-pitch reattacks after a short mute. Fast notes, effects and suggested fingerings still need listening checks; see the [paired Sir Duke benchmark](docs/superpowers/validation/2026-10-19-sir-duke-bass-benchmark.md).
@@ -17,6 +17,30 @@ See [TODO.md](TODO.md) for open work, deferred features, known limitations and t
 - Edit key, tempo, time signature, section names, bar numbers, chord symbols, repeats, and notes.
 - Split, merge, add, duplicate, and delete bars while listening to the audio.
 - Export cleaned charts to TXT, CSV, JSON, and MusicXML.
+
+## Song structure
+
+New charts start unlabelled rather than receiving a fixed Intro/Verse/Chorus
+template. To detect likely boundaries and repeated **A/B groups**, enable
+**Settings → Sources & stems → Detect Song Structure (experimental)** before
+analysis. For an existing chart, open **Bar detail → Bar Settings → Song
+structure → Detect sections**. This refresh uses the original full mix and
+keeps the current chords, lyrics, stems and bar timing.
+
+Name an occurrence, choose a musical role, set its repeated group, start a
+section at the selected bar, or join it with the previous section. Musical role
+and repeated group are independent: two occurrences can share group A while
+having different names. Existing per-bar Section edits still apply to that
+bar's time range. Automatic evidence stays separate from manual corrections;
+**Use detected sections** explicitly switches back to the estimate.
+
+Sections are saved as source-time intervals in `chart.structure`. Legacy section
+names are retained when opening old sessions. Reanalysis preserves same-source
+edits, and changing the bar grid marks the automatic timing basis stale.
+Automatic verse/chorus naming is not implemented yet. Full-song boundary/group
+accuracy is unmeasured, so detection remains off by default; see the
+[staged design](docs/superpowers/specs/2026-10-25-song-structure-design.md) and
+[validation report](docs/superpowers/validation/2026-10-25-song-structure.md).
 
 ## Chord timing
 

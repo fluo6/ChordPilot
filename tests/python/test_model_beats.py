@@ -136,7 +136,7 @@ class ModelBeatTests(unittest.TestCase):
                                                 downbeat_times=downbeats)
         self.assertEqual([b['start'] for b in bars], [1.04, 2.4, 5.1, 7.76])
         self.assertEqual(bars[0]['pickup_beats'], 2)
-        self.assertEqual(bars[0]['section'], 'Pickup')
+        self.assertEqual(bars[0]['section'], 'Unlabelled')
 
     def test_missing_quarter_beat_is_interpolated_without_moving_model_downbeats(self):
         from chordpilot_beats import metrical_grid

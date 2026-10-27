@@ -173,8 +173,9 @@
       const system=document.createElement('div');system.className='alpha-chart-system';system.dataset.systemIndex=String(systemIndex);system.style.position='absolute';system.style.pointerEvents='none';
       place(system,systemBounds.realBounds);nodes.append(system);
       const firstIndex=systemBounds.bars[0]?.index,section=fixture.measures[firstIndex]?.section||'';
-      const previousSection=firstIndex>0?fixture.measures[firstIndex-1]?.section||'':'';
-      if(section&&section!==previousSection){
+      const sectionKey=fixture.measures[firstIndex]?.sectionId || section;
+      const previousSection=firstIndex>0?fixture.measures[firstIndex-1]?.sectionId||fixture.measures[firstIndex-1]?.section||'':'';
+      if(section&&sectionKey!==previousSection){
         const label=document.createElement('div');label.className='alpha-chart-section-label';label.textContent=section;
         place(label,{x:systemBounds.realBounds.x,y:Math.max(0,systemBounds.realBounds.y-24),w:Math.min(220,systemBounds.realBounds.w),h:20});
         nodes.append(label);runtime.sectionNodes.push({node:label,index:firstIndex});
@@ -342,7 +343,7 @@
     let fixture;
     try{fixture=AlphaTabScore.buildFixture(kind);}catch(error){return showAlphaTabError(container,error);}
     const measures=fixture.measures.map(source=>[
-      source.number,source.start,source.end,source.section,Boolean(source.bar?.repeat_start),source.bar?.repeat_end,
+      source.number,source.start,source.end,source.section,source.sectionId,Boolean(source.bar?.repeat_start),source.bar?.repeat_end,
       source.model.beats,source.model.beatValue,source.model.unitDenominator,source.model.anchors,
       source.model.events.map(event=>[event.offset,event.units,event.beats,event.duration,event.dots,event.triplet,event.sourceIndex,event.midi,
         event.position?.string,event.position?.fret,event.tieToNext,event.tieToFollowingBar,event.tieFromPrevious,event.instruments,

@@ -82,6 +82,11 @@ test("chart rows split on capacity and section changes", () => {
   assert.deepEqual(plain(b.chartRows(1)).map((row) => row.map((item) => item.index)), [[0], [1], [2], [3]]);
 });
 
+test('chart rows retain adjacent same-name section occurrences',()=>{
+  const c=structuredClone(chart);c.bars.forEach((bar,index)=>{bar.section='Verse';bar.section_id=index<2?'v1':'v2';});
+  assert.deepEqual(plain(load(c).chartRows(4)).map(row=>row.map(item=>item.index)),[[0,1],[2,3]]);
+});
+
 test("highest confidence chord chooses alternatives and falls back cleanly", () => {
   const b = load();
   const bar = { chord: " C ", confidence: 0.3, alternatives: [{ chord: "Am", score: 0.7 }, { chord: "", score: 1 }] };

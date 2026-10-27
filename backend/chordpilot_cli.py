@@ -23,6 +23,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     analyze_parser.add_argument("--mode", choices=["fast", "high-quality"], default="fast")
     analyze_parser.add_argument("--options", default="{}")
 
+    structure_parser = subparsers.add_parser('analyze-structure')
+    structure_parser.add_argument('audio_path')
+    structure_parser.add_argument('--grid', default='{}')
+
     study_parser = subparsers.add_parser("analyze-range")
     study_parser.add_argument("audio_path")
     study_parser.add_argument("--sources", required=True)
@@ -52,6 +56,12 @@ def main(argv: Iterable[str] | None = None) -> int:
             respond(self_test())
         elif args.command == "analyze":
             respond(analyze(args.audio_path, args.mode, json.loads(args.options or "{}")))
+        elif args.command == 'analyze-structure':
+            from chordpilot_structure import analyze_structure
+            text = sys.stdin.read(2 * 1024 * 1024 + 1) if args.grid == '-' else args.grid
+            if len(text) > 2 * 1024 * 1024:
+                raise ValueError('Structure grid is too large.')
+            respond(analyze_structure(args.audio_path,json.loads(text)))
         elif args.command == "analyze-range":
             respond(analyze_range(args.audio_path, json.loads(args.sources), args.start, args.end, json.loads(args.options)))
         elif args.command == "export":

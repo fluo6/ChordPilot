@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChordPilot · Song structure review</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f7fa;--panel:#fff;--ink:#19242e;--muted:#526475;--line:#dae1e8;--active:#e2edf3;--a:#1d9488;--b:#8976cf;--c:#d5a83f;--d:#cf7183;--e:#5597cf;--f:#8a9b53;--g:#bf8a55;--h:#77858b;--i:#bd6eb4;--j:#70a8a2}
+@media(prefers-color-scheme:dark){:root{--bg:#151b20;--panel:#1d252d;--ink:#e7edf2;--muted:#a9b7c3;--line:#394650;--active:#2a3e4a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}main{max-width:1100px;margin:auto;padding:32px 24px 64px}h1{font-size:28px;margin:0 0 4px;letter-spacing:-.6px}h2{font-size:22px;margin:0}p{margin:6px 0 18px}.muted{color:var(--muted)}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:12px;color:var(--muted);margin-bottom:8px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;margin-top:20px}button,select,a{font:inherit}button,select{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 12px}button{cursor:pointer}button:hover,button[aria-pressed=true]{background:var(--active)}button:focus-visible,a:focus-visible,select:focus-visible{outline:3px solid var(--a);outline-offset:3px}.songs{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.songs button[aria-pressed=true]{border-color:var(--ink)}.heading{display:flex;justify-content:space-between;gap:16px;align-items:start}.downloads{display:flex;gap:15px;flex-wrap:wrap;font-size:13px}a{color:var(--ink);text-underline-offset:3px}.sequence{font:500 18px/1.6 ui-monospace,monospace;letter-spacing:1px;margin:8px 0 4px}.player{position:sticky;top:0;z-index:2;background:var(--panel);padding:16px 0 14px}audio{width:100%;display:block}.now{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:13px;margin:8px 0 0;min-height:20px;color:var(--muted)}.timeline{display:flex;gap:3px;height:60px;margin-top:14px}.timeline button{border:0;border-radius:5px;background:color-mix(in srgb,var(--group) 32%,var(--panel));min-width:12px;padding:4px 0;overflow:hidden;white-space:nowrap;font-weight:600}.timeline button[aria-current=true]{box-shadow:inset 0 -4px var(--ink);background:color-mix(in srgb,var(--group) 65%,var(--panel))}.axis{display:flex;justify-content:space-between;margin-top:4px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}.table-wrap{overflow:auto;margin-top:18px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;white-space:nowrap}th{text-align:left;font-size:12px;color:var(--muted);font-weight:500}th,td{padding:12px 8px;border-bottom:1px solid var(--line)}tbody tr[aria-current=true]{background:var(--active)}td:first-child,th:first-child{padding-left:0}td:last-child,th:last-child{text-align:right;padding-right:0}td button{font-size:13px;padding:5px 9px}.badge{display:inline-block;min-width:30px;text-align:center;background:color-mix(in srgb,var(--group) 28%,var(--panel));border-radius:5px;padding:2px 7px;font-weight:500}.foot{margin-top:24px;font-size:13px;color:var(--muted)}.error{color:var(--d)}@media(max-width:650px){main{padding:20px 12px}.panel{padding:16px 12px}.heading{display:block}.downloads{margin-top:12px}.songs button{font-size:13px;padding:7px 9px}h1{font-size:25px}.timeline{height:50px}}
+</style>
+<main>
+  <div class="eyebrow">ChordPilot / Experimental structure detection</div>
+  <h1>Listen through the detected song form</h1>
+  <p class="muted">Fresh headless runs on five existing recordings. A/B letters describe estimated musical similarity; verse and chorus names are unassigned.</p>
+  <nav class="songs" aria-label="Choose recording" id="songs"></nav>
+  <section class="panel" aria-labelledby="track-title">
+    <div class="heading"><div><h2 id="track-title"></h2><div id="track-meta" class="muted"></div></div><div class="downloads"><a id="session-link" download>Session copy</a><a id="report-link">Raw result</a></div></div>
+    <div id="sequence" class="sequence" aria-label="Group sequence"></div>
+    <div class="player"><audio id="audio" controls preload="metadata"></audio><div class="now"><span id="current">Ready</span><span id="play-error" class="error" role="status"></span></div><div id="timeline" class="timeline" aria-label="Detected sections; click to play"></div><div class="axis"><span>0:00</span><span id="duration"></span></div></div>
+    <p class="muted" style="font-size:13px;margin:6px 0 0">Click a colored section to play from its start. “Hear boundary” starts 3 seconds before a transition. Bar numbers use each saved grid.</p>
+    <div class="table-wrap"><table><thead><tr><th>Section</th><th>Group</th><th>Start</th><th>End</th><th>Length</th><th>Starts at</th><th>Listen</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="foot" id="provenance"></div>
+  </section>
+  <p class="foot">Session copies contain the new automatic structure and updated section headings. Original sessions are untouched. Chords, drums, lyrics and bar times are retained. No independently annotated reference was used; section counts and group matches are not accuracy scores.</p>
+</main>
+<script id="review-data" type="application/json">__REVIEW_DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const data = JSON.parse(document.getElementById('review-data').textContent);
+  const el = id => document.getElementById(id);
+  const audio = el('audio');
+  const fmt = value => {const t=Math.max(0,Math.round(value*10)/10);return `${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,'0')}`;};
+  const palette = group => `var(--${group && group.length === 1 ? group.toLowerCase() : 'h'},var(--h))`;
+  let track, selected = -1;
+  function seek(time) {
+    el('play-error').textContent = '';
+    audio.currentTime = Math.max(0, time);
+    audio.play().catch(() => {el('play-error').textContent = 'Press the audio Play button to listen.';});
+    update();
+  }
+  function update() {
+    if (!track) return;
+    const i = track.segments.findIndex(row => row.start <= audio.currentTime && (audio.currentTime < row.end || audio.currentTime === track.duration && row.end === track.duration));
+    el('current').textContent = `${fmt(audio.currentTime)} / ${fmt(track.duration)}` + (i >= 0 ? ` · Section ${i+1} · Group ${track.segments[i].group || 'unknown'}` : '');
+    if (i === selected) return;
+    selected = i;
+    for (const node of el('timeline').children) node.setAttribute('aria-current',String(Number(node.dataset.index)===i));
+    for (const node of el('rows').children) node.setAttribute('aria-current',String(Number(node.dataset.index)===i));
+  }
+  function select(index) {
+    audio.pause();
+    track = data.tracks[index];selected = -2;
+    el('track-title').textContent = track.title;
+    el('track-meta').textContent = `${track.artist} · ${fmt(track.duration)} · ${track.segments.length} sections · ${track.groups.length} groups`;
+    el('duration').textContent = fmt(track.duration);
+    el('sequence').textContent = track.segments.map(row=>row.group || '?').join(' — ');
+    el('session-link').href = track.session;
+    el('report-link').href = track.report;
+    el('play-error').textContent = '';
+    el('timeline').replaceChildren();el('rows').replaceChildren();
+    track.segments.forEach((row, i) => {
+      const mark = document.createElement('button');
+      mark.textContent = row.group || '?';mark.dataset.index = i;
+      mark.style.flex = `${row.end-row.start} 1 0`;
+      mark.style.setProperty('--group',palette(row.group));
+      mark.title = `Section ${i+1}: ${row.group || 'unknown'}, ${fmt(row.start)}–${fmt(row.end)}`;
+      mark.setAttribute('aria-label',mark.title + ', play');
+      mark.addEventListener('click',()=>seek(row.start));el('timeline').append(mark);
+      const tr = document.createElement('tr');tr.dataset.index = i;
+      [String(i+1),row.group || '?',fmt(row.start),fmt(row.end),`${(row.end-row.start).toFixed(1)}s`,`Bar ${row.start_bar}`].forEach((text,j)=>{
+        const td = document.createElement('td');
+        if(j===1){const badge=document.createElement('span');badge.className='badge';badge.textContent=text;badge.style.setProperty('--group',palette(row.group));td.append(badge);}
+        else td.textContent=text;
+        tr.append(td);
+      });
+      const td=document.createElement('td');const button=document.createElement('button');
+      button.textContent=i ? 'Hear boundary' : 'Play opening';
+      button.setAttribute('aria-label',`${button.textContent}, section ${i+1}`);
+      button.addEventListener('click',()=>seek(row.start-3));td.append(button);tr.append(td);el('rows').append(tr);
+    });
+    for(const button of el('songs').children) button.setAttribute('aria-pressed',String(Number(button.dataset.index)===index));
+    el('provenance').textContent=`${data.algorithm} · ${track.status} · ${track.elapsed_seconds.toFixed(2)}s run · ${track.grid_basis || 'Grid provenance unavailable'}`;
+    audio.src=track.media;audio.load();update();
+    history.replaceState(null,'','#'+track.id);
+  }
+  data.tracks.forEach((item,i)=>{
+    const button=document.createElement('button');button.textContent=item.title;button.dataset.index=i;button.addEventListener('click',()=>select(i));el('songs').append(button);
+  });
+  audio.addEventListener('timeupdate',update);
+  audio.addEventListener('error',()=>{el('play-error').textContent='Audio could not load. Keep the media folder alongside this page.';});
+  const requested=data.tracks.findIndex(item=>item.id===location.hash.slice(1));
+  select(requested<0?0:requested);
+})();
+</script>
+</html>

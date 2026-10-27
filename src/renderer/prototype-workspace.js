@@ -101,6 +101,7 @@ function prototypeRows(container, rows) {
   for(const [name,value] of rows){const row=prototypeElement('div','prototype-property');row.append(prototypeElement('span','prototype-muted',name),prototypeElement('span','',String(value??'—')));container.append(row);}
 }
 function prototypeSections() {
+  if(typeof SongStructure!=='undefined')return SongStructure.navigation(state.chart);
   const sections=[];
   for(const [index,bar] of (state.chart?.bars||[]).entries()) {
     const name=String(bar.section||'').trim()||'Song';const previous=sections.at(-1);
@@ -197,8 +198,8 @@ function renderPrototypeTimeline() {
   row.append(label,body);host.append(row);
   const sectionRow=prototypeElement('div','timeline-lane prototype-section-lane'),sectionBody=prototypeElement('div','lane-body');sectionRow.append(prototypeElement('div','lane-label'),sectionBody);
   prototypeSections().forEach((section,index)=>{
-    const start=state.chart.bars[section.index].start,end=barEndTime(section.end-1);
-    const band=prototypeButton(section.name,()=>selectBar(section.index,true));band.style.left=`${percentAt(start)}%`;band.style.width=`${Math.max(.1,percentAt(end)-percentAt(start))}%`;band.dataset.colour=String(index%4);sectionBody.append(band);
+    const start=section.start ?? state.chart.bars[section.index].start,end=section.stop ?? barEndTime(section.end-1);
+    const band=prototypeButton(section.name,()=>{selectBar(section.index,false);elements.audioPlayer.currentTime=start/(Number(state.audioPreview?.tempoRate)||1);syncStemTimes({isSeek:true});});band.style.left=`${percentAt(start)}%`;band.style.width=`${Math.max(.1,percentAt(end)-percentAt(start))}%`;band.dataset.colour=String(section.group ? [...section.group].reduce((n,c)=>n+c.charCodeAt(0),0)%4 : index%4);band.title=`${section.name} · ${formatSeconds(start)}–${formatSeconds(end)} s`;sectionBody.append(band);
   });host.append(sectionRow);
 }
 function preparePrototypeStudyResult() {
@@ -266,7 +267,7 @@ function renderPrototypeStudyTimeline() {
     const events=barChordEvents(bar,barEndTime(index));
     events.forEach((event,eventIndex)=>{const button=prototypeButton(displayChordSymbol(event.chord,false),()=>openChordEventStudy(index,eventIndex));position(button,event.start??bar.start,event.end??barEndTime(index));button.classList.toggle('active-control',(event.start??bar.start)<=state.study.draft.start&&(event.end??barEndTime(index))>state.study.draft.start);button.title=`Bar ${bar.number||index+1}: ${event.chord}`;chords.append(button);});
   });
-  prototypeSections().forEach((section,index)=>{const label=prototypeElement('span','',section.name);position(label,state.chart.bars[section.index].start,barEndTime(section.end-1));label.dataset.colour=String(index%4);sections.append(label);});
+  prototypeSections().forEach((section,index)=>{const label=prototypeElement('span','',section.name);position(label,section.start ?? state.chart.bars[section.index].start,section.stop ?? barEndTime(section.end-1));label.dataset.colour=String(section.group ? [...section.group].reduce((n,c)=>n+c.charCodeAt(0),0)%4 : index%4);sections.append(label);});
   for(const time of state.chart.beat_times||[]){const tick=prototypeElement('span');position(tick,time);tick.classList.toggle('downbeat',state.chart.bars.some(bar=>Math.abs(bar.start-time)<.02));beats.append(tick);}
   strip.append(ruler,sections,chords,beats);syncPrototypeStudyTimelineScroll();syncPrototypeStudyCursor(elements.audioPlayer.currentTime*(Number(state.audioPreview?.tempoRate)||1));
 }

@@ -11,25 +11,34 @@ import chordpilot_analysis as analysis
 
 
 class AnalysisUtilityTests(unittest.TestCase):
+    def test_structure_failure_keeps_successful_chords_and_reports_unavailability(self):
+        builtin={'duration':4,'tempo':120,'key':'G','bars':[{'number':1,'start':0,'chord':'G'}]}
+        with patch.object(analysis,'estimate_builtin',return_value=builtin), \
+             patch.object(analysis,'analyze_structure',side_effect=RuntimeError('feature extraction failed')), \
+             patch.object(analysis,'waveform_peaks',return_value=[]), patch.object(analysis,'append_history'), \
+             patch.object(analysis.Path,'is_file',return_value=True), patch.object(analysis,'source_identity',return_value={'source_hash':'current-content'}):
+            result=analysis.analyze('missing.wav','fast',{'structure_enabled':True,'use_cache':False})
+        self.assertEqual(result['bars'][0]['chord'],'G')
+        self.assertEqual(result['structure']['analysis']['status'],'unavailable')
+        self.assertIn('feature extraction failed',result['structure']['analysis']['diagnostics'])
+        self.assertEqual(result['structure']['analysis'].get('source_hash'),'current-content')
+
     def test_parse_beats_per_bar(self):
         self.assertEqual(analysis.parse_beats_per_bar("7/8"), 7)
         self.assertEqual(analysis.parse_beats_per_bar("0/4"), 1)
         self.assertEqual(analysis.parse_beats_per_bar("bad"), 4)
 
-    def test_expand_sections_repeats_plan_to_exact_length(self):
-        self.assertEqual(analysis.expand_sections(0), [])
-        self.assertEqual(analysis.expand_sections(4), ["Intro"] * 4)
-        sections = analysis.expand_sections(100)
-        self.assertEqual(len(sections), 100)
-        self.assertEqual(sections[:4], ["Intro"] * 4)
-        self.assertIn("Bridge", sections)
+    def test_drafts_do_not_invent_song_form_or_repeat_signs(self):
+        bars = analysis.build_bars(100, 120, "4/4", None)
+        self.assertTrue(all(bar.section == "Unlabelled" for bar in bars))
+        self.assertTrue(all(not bar.repeat_start and not bar.repeat_end for bar in bars))
 
     def test_build_bars_uses_grid_and_caps_count(self):
         bars = analysis.build_bars(10, 120, "4/4", None)
         self.assertEqual(len(bars), 8)
         self.assertEqual([bar.number for bar in bars], list(range(1, 9)))
         self.assertEqual([bar.start for bar in bars[:3]], [0.0, 2.0, 4.0])
-        self.assertEqual(bars[4].repeat_start, True)
+        self.assertEqual(bars[4].repeat_start, False)
         self.assertEqual(len(analysis.build_bars(10000, 60, "4/4", None)), 160)
 
     def test_build_bars_uses_sufficient_beat_grid(self):

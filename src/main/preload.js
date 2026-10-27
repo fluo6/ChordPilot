@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("chordPilot", {
   showMessage: (payload) => ipcRenderer.invoke("app:message", payload),
   analyze: (audioPath, mode = "fast", options = {}) => ipcRenderer.invoke("chart:analyze", { audioPath, mode, options }),
   analyzeRange: (payload) => ipcRenderer.invoke("study:analyzeRange", payload),
+  analyzeStructure: (payload) => ipcRenderer.invoke('structure:analyze', payload),
   analyzeDrums: (payload) => ipcRenderer.invoke("drums:analyze", payload),
   analyzeMelody: (payload) => ipcRenderer.invoke("melody:analyze", payload),
   prepareStems: (audioPath) => ipcRenderer.invoke("audio:prepareStems", audioPath),

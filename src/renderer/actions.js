@@ -324,6 +324,7 @@ async function analyzeAudio(settings = {}) {
     if (state.audio !== sourceAudio || state.chart !== previousChart) return;
     preserveDrumAnalysis(result, previousChart);
     preserveMelodyAnalysis(result, previousChart);
+    if(typeof SongStructure!=='undefined'){SongStructure.bindSource(result,sourceAudio.path);SongStructure.preserve(result,previousChart);}
     state.chart = result;
     ensureChartKeyState(state.chart);
     ensureChartTempoState(state.chart);
@@ -371,6 +372,7 @@ function preserveDrumAnalysis(chart, previousChart) {
 }
 
 function applyAnalyzedChart(chart, options = {}) {
+  if(typeof SongStructure!=='undefined'){SongStructure.ensure(chart);SongStructure.bindSource(chart,state.audio?.path);}
   state.chart = chart;
   ensureChartKeyState(state.chart);
   ensureChartTempoState(state.chart);
@@ -509,6 +511,7 @@ async function reanalyzeSection(section) {
     preserveDrumAnalysis(result, previousChart);
     preserveMelodyAnalysis(result, previousChart);
     copyExistingLyricsToBars(result.bars, previousChart?.bars || []);
+    if(typeof SongStructure!=='undefined'){SongStructure.bindSource(result,state.audio?.path);SongStructure.preserve(result,previousChart,true);}
     applyAnalyzedChart(result, { resetSelection: false });
     setStatus(`Chords refreshed: ${result.bars.length} bars`);
   }
@@ -519,7 +522,7 @@ function addBar() {
   const selected = getSelectedBar();
   const bar = selected ? cloneBar(selected) : {
     number: state.chart.bars.length + 1,
-    section: "Verse",
+    section: "Unlabelled",
     chord: "C",
     repeat_start: false,
     repeat_end: 0,
@@ -708,6 +711,7 @@ async function exportAudioTrack(source) {
 
 function buildSessionPayload() {
   syncMetaToState();
+  if(typeof SongStructure!=='undefined')SongStructure.bindSource(state.chart,state.audio?.path);
   return {
     app: "ChordPilot",
     version: 1,
@@ -787,6 +791,7 @@ function restoreSessionPayload(session) {
   state.studies = normalizeStudies(session.studies);
   state.audio = session.audio || null;
   state.chart = session.chart || null;
+  if(typeof SongStructure!=='undefined'){SongStructure.ensure(state.chart);SongStructure.bindSource(state.chart,state.audio?.path);}
   state.audioPreview = null;
   state.audioPreviewBusy = false;
   ensureChartKeyState(state.chart);

@@ -7,6 +7,7 @@ from chordpilot_chords import *
 from chordpilot_lyrics import generate_lyrics_reference, apply_lyrics_to_bars
 from chordpilot_stems import run_demucs
 from chordpilot_bass import bass_note_events, bass_reference_from_events
+from chordpilot_structure import empty_structure, project_sections, analyze_structure, source_identity, STRUCTURE_VERSION
 from chordpilot_timing import analysis_cell_bounds, group_chord_cells, stabilize_chord_cells
 from chordpilot_spectrum import spectral_power_for_crop, spectrum_from_power, reduce_sustain_tail, apply_tail_to_chroma, detected_pitches_for_crop, attenuate_detected_pitches, reduce_overtones, apply_overtone_weighting, voicing_frames_for_crop
 
@@ -220,7 +221,6 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
         starts = [index * seconds_per_bar for index in range(max(8, int(math.ceil(duration / seconds_per_bar))))]
 
     starts = [start for start in starts if start < duration]
-    sections = expand_sections(len(starts))
     bars = []
     for index, start in enumerate(starts):
         end = min(duration, starts[index + 1] if index + 1 < len(starts) else duration)
@@ -233,7 +233,7 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
         bars.append(
             {
                 "number": index + 1,
-                "section": sections[index],
+                "section": "Unlabelled",
                 "chord": chord,
                 "start": round(float(start), 3),
                 "repeat_start": False,
@@ -260,7 +260,6 @@ def estimate_bars_from_audio(audio: Any, sr: int, tempo: int, time_signature: st
         phase = 0
     if bars and phase and beat_times:
         bars[0]['pickup_beats'] = min(phase, len(beat_times))
-        bars[0]['section'] = 'Pickup'
     return bars
 
 def select_high_quality_chord_source(source_path: Path, stem_paths: dict[str, Path], options: dict[str, Any]) -> tuple[Path, str]:
@@ -683,17 +682,16 @@ def build_bars(duration: float, tempo: int, time_signature: str, beat_times: lis
         starts = [round(index * seconds_per_bar, 3) for index in range(estimated_count)]
 
     bars: list[Bar] = []
-    section_names = expand_sections(len(starts))
 
     for index, start in enumerate(starts):
         bars.append(
             Bar(
                 number=index + 1,
-                section=section_names[index],
+                section="Unlabelled",
                 chord=CHORD_CYCLE[index % len(CHORD_CYCLE)],
                 start=round(float(start), 3),
-                repeat_start=index in {4, 20},
-                repeat_end=2 if index in {11, 27} else 0,
+                repeat_start=False,
+                repeat_end=0,
                 confidence=0.45,
             )
         )
@@ -705,15 +703,6 @@ def parse_beats_per_bar(time_signature: str) -> int:
         return max(1, int(str(time_signature).split("/")[0]))
     except Exception:
         return 4
-
-def expand_sections(count: int) -> list[str]:
-    names: list[str] = []
-    while len(names) < count:
-        for section, length in SECTION_PLAN:
-            names.extend([section] * length)
-            if len(names) >= count:
-                break
-    return names[:count]
 
 def has_complete_stems(payload: dict[str, Any]) -> bool:
     stems_result = payload.get("stems")
@@ -735,6 +724,7 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
     known_key = str(options.get("known_key") or "").strip()
     normalized_mode = "high-quality" if mode in {"high-quality", "hq", "stems"} else "fast"
     cache_mode = f"{normalized_mode}-{options_cache_suffix(options)}-waveform-v2-spectrum-v3-tail-v1-pitches-v1-overtones-v1-low-reference-v2-bass-f0-v2-rhythm-v2"
+    cache_mode += f'-structure-{STRUCTURE_VERSION}'
     if options['rhythm_engine'] == 'beat_this_steady':
         cache_mode += '-steady-v2'
     log(f"analyze: {path}")
@@ -815,7 +805,6 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
         bars_payload = [asdict(bar) for bar in bars]
         if bars_payload and options['bar_phase'] and librosa_result.get('beat_times'):
             bars_payload[0]['pickup_beats'] = min(options['bar_phase'], len(librosa_result['beat_times']))
-            bars_payload[0]['section'] = 'Pickup'
         chord_engine = f"unavailable: {builtin_result.get('error', 'missing analyzer')}"
         confidence_note = "no chord estimate"
 
@@ -846,6 +835,23 @@ def analyze(path_text: str, mode: str = "fast", raw_options: dict[str, Any] | No
         },
         "bars": bars_payload,
     }
+
+    payload['structure'] = empty_structure(payload['duration'], 'not_analyzed' if builtin_result.get('bars') else 'unavailable',
+        str(builtin_result['error']) if builtin_result.get('error') else None)
+    if path.is_file():
+        try:
+            payload['structure']['analysis'].update(source_identity(path))
+        except OSError as exc:
+            payload['structure']['analysis']['diagnostics'].append(f'Could not verify source identity: {exc}')
+    if options.get('structure_enabled') and builtin_result.get('bars'):
+        try:
+            payload['structure'] = analyze_structure(path, {'duration':payload['duration'],'bars':bars_payload,'bar_alignment':payload['analysis_engine']['bar_alignment']})
+        except Exception as exc:
+            log(f'structure: unavailable - {exc}')
+            identity={key:value for key,value in payload['structure']['analysis'].items() if key in {'source_hash','source_fingerprint'}}
+            payload['structure'] = empty_structure(payload['duration'],'unavailable',str(exc))
+            payload['structure']['analysis'].update(identity)
+    project_sections(payload)
 
     if stems_result is not None:
         payload["stems"] = stems_result

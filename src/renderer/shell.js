@@ -756,6 +756,7 @@ function collectAnalysisOptions() {
     chord_source: elements.chordSourceInput.value || "auto",
     demucs_model: elements.demucsModelInput.value || "htdemucs",
     use_cache: elements.useCacheInput.checked,
+    structure_enabled: Boolean(elements.structureEnabledInput?.checked),
     simplify_chords: elements.simplifyChordsInput.checked,
     lyrics_enabled: elements.lyricsEnabledInput.checked,
     lyrics_source: elements.lyricsSourceInput.value || "auto",
@@ -786,6 +787,7 @@ function applyAnalysisOptions(options = {}, { legacyDefaults = false } = {}) {
   elements.chordSourceInput.value = options.chord_source || "auto";
   elements.demucsModelInput.value = options.demucs_model || "htdemucs";
   elements.useCacheInput.checked = options.use_cache !== false;
+  if(elements.structureEnabledInput)elements.structureEnabledInput.checked=options.structure_enabled===true;
   elements.simplifyChordsInput.checked = options.simplify_chords !== false;
   elements.lyricsEnabledInput.checked = Boolean(options.lyrics_enabled);
   elements.lyricsSourceInput.value = options.lyrics_source || "auto";
@@ -894,6 +896,7 @@ function renumberBars() {
   state.chart.bars.forEach((bar, index) => {
     bar.number = index + 1;
   });
+  if(typeof SongStructure!=='undefined') {SongStructure.ensure(state.chart);SongStructure.project(state.chart,true);}
 }
 
 function getBarLabel(index) {

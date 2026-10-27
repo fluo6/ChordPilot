@@ -42,10 +42,11 @@
       }
       master.isRepeatStart=Boolean(source.bar?.repeat_start);
       master.repeatCount=Math.max(0,Number(source.bar?.repeat_end)||0);
-      if(source.section && source.section!==previousSection){
+      const sectionKey=source.sectionId || source.bar?.section_id || source.section;
+      if(source.section && sectionKey!==previousSection){
         // Section names are drawn in ChordPilot's overlay above each system so
         // alphaTab does not place marker text inside the music staff.
-        if(index)track.addLineBreaks(index);previousSection=source.section;
+        if(index)track.addLineBreaks(index);previousSection=sectionKey;
       }
       score.addMasterBar(master);staff.addBar(bar);bar.addVoice(voice);
       bar.clef=staff.isPercussion?m.Clef.Neutral:fixture.kind==='melody'?m.Clef.G2:m.Clef.F4;
@@ -124,7 +125,7 @@
       const notes=kind==='melody'?melodyBarNotes(chart,bar,end):kind==='bass'?bass[index]:undefined;
       const model=kind==='melody'?melodyRhythm(notes,bar,end,chart,melodySettings):kind==='bass'?bassRhythm(notes,bar,end,chart):drumRhythm(drumBarEvents(chart,bar,end),bar,end,chart);
       if(!model)throw Error(`Could not prepare bar ${bar.number || index+1} for notation.`);
-      return {number:bar.number || index+1,start:Number(bar.start),end,section:String(bar.section || '').trim(),bar,
+      return {number:bar.number || index+1,start:Number(bar.start),end,section:String(bar.section || '').trim(),sectionId:bar.section_id || bar.section,bar,
         notes,model,reviewIssues:kind==='melody'?melodyQualityDiagnostics(model,notes,voiceReview):[],
         chords:kind==='melody'?melodyChordEvents(chordEventsForBar(index),melodySettings.cleanChords):chordEventsForBar(index).map(event=>({chord:event.chord,start:event.start,end:event.end}))};
     });

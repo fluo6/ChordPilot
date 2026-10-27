@@ -197,6 +197,7 @@ ipcMain.handle("study:analyzeRange", async (_event, payload) => {
 
 ipcMain.handle('drums:analyze', async (_event, payload) => services.analyzeDrums({audioPath:payload?.audioPath,force:payload?.force === true}));
 ipcMain.handle('melody:analyze', async (_event,payload)=>services.analyzeMelody({audioPath:payload?.audioPath,force:payload?.force===true,language:payload?.language}));
+ipcMain.handle('structure:analyze',async(_event,payload)=>services.analyzeStructure({audioPath:payload?.audioPath,grid:payload?.grid}));
 ipcMain.handle('audio:prepareStems', async (_event, audioPath) => services.prepareStems({audioPath}));
 
 ipcMain.handle('clipboard:spreadsheetChart', (_event, payload) => {

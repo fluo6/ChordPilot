@@ -179,7 +179,8 @@ function renderNumberedChart(container) {
     let lastSection = '';
     rows.forEach(group => {
       const system = text('div', '', 'numbered-chart-row'), section = group.find(item => item.section)?.section || lastSection;
-      if (section && section !== lastSection) system.append(text('h3', section));
+      const sectionKey=group[0]?.sectionId || section;
+      if (section && sectionKey !== lastSection) system.append(text('h3', section));
       system.append(numberedChartSystem(group, fixture.measures, key, width));
       const lyrics = text('div', '', 'numbered-chart-lyrics');
       lyrics.style.gridTemplateColumns = `repeat(${chartBarsPerLine()}, minmax(0, 1fr))`;
@@ -190,7 +191,7 @@ function renderNumberedChart(container) {
         const line = text('span', words);line.title = 'Lyrics by bar; syllable-to-note alignment is not estimated.';lyrics.append(line);
       });
       if (lyrics.textContent.trim()) system.append(lyrics);
-      sheet.append(system);lastSection = section;
+      sheet.append(system);lastSection = sectionKey;
     });
   } catch (error) {
     sheet.append(text('p', `Could not prepare the numbered melody: ${error.message}. The original notes are retained; review the Lead Sheet and melody evidence.`, 'numbered-chart-warning'));

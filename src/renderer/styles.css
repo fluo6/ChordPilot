@@ -3939,3 +3939,12 @@ td input {
     #barDetailInspector { height:390px; max-height:390px; flex-shrink:0; }
   }
 }
+/* Section occurrences share the existing inspector and compact form controls. */
+.song-structure-controls { grid-column:1 / -1; box-sizing:border-box; width:100%; min-width:0; margin:12px 0 0; padding:8px; border:1px solid #40515b; border-radius:4px; }
+.song-structure-controls legend { padding:0 4px; font-weight:600; }
+.song-structure-controls p { font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
+.song-structure-controls form { display:grid; gap:7px; }
+.song-structure-controls label { display:grid; gap:3px; font-size:11px; }
+.song-structure-controls input,.song-structure-controls select { box-sizing:border-box; width:100%; min-width:0; }
+.song-structure-actions { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.song-structure-actions button { white-space:normal; }

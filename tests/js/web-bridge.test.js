@@ -163,6 +163,7 @@ test("web bridge exposes the complete preload method surface", () => {
     "analyzeDrums",
     "analyzeMelody",
     "analyzeRange",
+    "analyzeStructure",
     "chooseAudio",
     "clearCache",
     "deleteSession",

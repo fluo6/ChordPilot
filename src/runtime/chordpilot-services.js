@@ -753,7 +753,7 @@ function createChordPilotServices({
             // Retrying another interpreter would hide the error and repeat expensive work.
             try {
               const failure = JSON.parse(stdout);
-              if (['analyze-drums','analyze-melody','prepare-stems'].includes(args[0]) && failure?.ok === false && failure.error) { reject(new Error(failure.error)); return; }
+              if (['analyze-drums','analyze-melody','analyze-structure','prepare-stems'].includes(args[0]) && failure?.ok === false && failure.error) { reject(new Error(failure.error)); return; }
             } catch (_) { /* Interpreter startup failures still try the next candidate. */ }
             const message = `${candidate.command}: ${stderr || `exited with code ${code}`}`;
             errors.push(message);
@@ -796,6 +796,16 @@ function createChordPilotServices({
     );
     rememberStudySources(audioPath, chart);
     return chart;
+  }
+
+  async function analyzeStructure({audioPath,grid} = {}) {
+    if(typeof audioPath!=='string'||!fs.existsSync(audioPath))throw Error('Original audio is unavailable.');
+    if(!grid || !Number.isFinite(grid.duration) || grid.duration<0 || !Array.isArray(grid.bars) || grid.bars.length>32768
+      || grid.bars.some(bar=>!bar || !Number.isFinite(bar.start)))throw Error('Structure grid needs finite duration and bar times.');
+    const input=JSON.stringify({duration:grid.duration,bars:grid.bars.map(bar=>({start:bar.start})),
+      ...(typeof grid.bar_alignment==='string'?{bar_alignment:grid.bar_alignment.slice(0,160)}:{})});
+    if(Buffer.byteLength(input)>2*1024*1024)throw Error('Structure grid is too large.');
+    return runBackend(['analyze-structure',audioPath,'--grid','-'],input);
   }
 
   function rememberStudySources(audioPath, chart) {
@@ -901,6 +911,7 @@ function createChordPilotServices({
     processAudioPreview,
     exportAudioTrack,
     analyze,
+    analyzeStructure,
     analyzeRange,
     analyzeDrums,
     analyzeMelody,

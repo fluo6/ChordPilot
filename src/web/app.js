@@ -364,6 +364,15 @@ function createWebApp({
     res.json({stems});
   }));
 
+  app.post('/api/analyze-structure',asyncRoute(async(req,res)=>{
+    const media=await resolveMedia(req.body?.mediaId);
+    const result=await queue.enqueue('Song structure',async()=>{
+      try{return await services.analyzeStructure({audioPath:media.path,grid:req.body?.grid});}
+      catch(error){throw new HttpError(422,'STRUCTURE_ANALYSIS_FAILED',sanitizePublicLogText(error.message || 'Structure analysis failed.'));}
+    });
+    res.json({result:redactLocationMetadata(result)});
+  }));
+
   app.post('/api/analyze-drums', asyncRoute(async (req,res) => {
     const media = await resolveMedia(req.body?.mediaId);
     storage.resolveStudySources(media.id,['drums']);

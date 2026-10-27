@@ -148,6 +148,7 @@ const elements = {
   chordSourceInput: document.getElementById("chordSourceInput"),
   demucsModelInput: document.getElementById("demucsModelInput"),
   useCacheInput: document.getElementById("useCacheInput"),
+  structureEnabledInput: document.getElementById('structureEnabledInput'),
   simplifyChordsInput: document.getElementById("simplifyChordsInput"),
   lyricsEnabledInput: document.getElementById("lyricsEnabledInput"),
   lyricsSourceInput: document.getElementById("lyricsSourceInput"),

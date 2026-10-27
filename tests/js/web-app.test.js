@@ -12,6 +12,17 @@ const { createStorage } = require("../../src/web/storage");
 const { createLogBroker, createSerialQueue } = require("../../src/web/work-queue");
 const { createChordPilotServices } = require("../../src/runtime/chordpilot-services");
 
+test('structure route resolves the registered full mix and never trusts a supplied source path',async t=>{
+  const calls=[];const runtime=await startTestServer(t,{services:{async analyzeStructure(payload){calls.push(payload);return {version:1,analysis:{status:'estimated',segments:[{id:'a',start:0,end:2,group:'A',role:null}],source_path:payload.audioPath},manual_segments:null};}}});
+  const song=await uploadFixture(runtime,'structure.wav',studyWav([220]));
+  const response=await postJson(runtime,'/api/analyze-structure',{mediaId:song.id,audioPath:'attacker.wav',grid:{duration:2,bars:[{start:0}]}});
+  assert.equal(response.status,200,JSON.stringify(response.body));assert.equal(calls.length,1);
+  assert.notEqual(calls[0].audioPath,'attacker.wav');assert.ok(fs.existsSync(calls[0].audioPath));
+  assert.equal(response.body.result.analysis.source_path,undefined);
+  const invalid=await postJson(runtime,'/api/analyze-structure',{mediaId:'missing',audioPath:calls[0].audioPath,grid:{}});
+  assert.notEqual(invalid.status,200);assert.equal(calls.length,1);
+});
+
 function studyWav(frequencies, seconds = 2) {
   const sr = 22050; const count = sr * seconds; const bytes = Buffer.alloc(44 + count * 2);
   bytes.write("RIFF", 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write("WAVEfmt ", 8);

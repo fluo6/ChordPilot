@@ -27,7 +27,8 @@ def decoded_wav_cache_path(path: Path, target_sr: int) -> Path:
     return cache_root() / "decoded" / f"{cache_key(path)}-{target_sr}.wav"
 
 def analysis_cache_path(path: Path, mode: str = "fast") -> Path:
-    return cache_root() / "analysis" / f"{cache_key(path)}-{mode}.json"
+    revision = hashlib.sha256(mode.encode('utf8')).hexdigest()[:20]
+    return cache_root() / "analysis" / f"{cache_key(path)}-{revision}.json"
 
 def read_analysis_cache(path: Path, mode: str = "fast") -> dict[str, Any] | None:
     cache_path = analysis_cache_path(path, mode)

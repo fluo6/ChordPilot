@@ -139,6 +139,10 @@
 
   browserWindow.chordPilot = {
     isWebRuntime: true,
+    async analyzeStructure(payload = {}) {
+      const {result}=await postJson('/api/analyze-structure',{mediaId:mediaId(payload.audioPath),grid:payload.grid});
+      return result;
+    },
 
     async analyzeDrums(payload = {}) {
       const result = await postJson('/api/analyze-drums',{mediaId:mediaId(payload.audioPath),force:payload.force === true});

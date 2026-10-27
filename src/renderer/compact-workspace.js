@@ -48,23 +48,26 @@ function syncCompactWorkspace() {
   elements.arrangementResizeHandle?.setAttribute('aria-valuenow', String(Math.round(Number.parseFloat(elements.editorView.style.getPropertyValue('--detail-pane-width')) || state.detailPaneWidth)));
   const nav = byId('chartSectionNav');
   if (nav) {
-    const sections = [];
+    let sections = [];
     let previous = '';
     (state.chart?.bars || []).forEach((bar, index) => {
       const section = String(bar.section || '').trim();
-      if (section && section !== previous) sections.push({section, index, number: bar.number || index + 1});
-      previous = section;
+      const key=bar.section_id || section;
+      if (section && key !== previous) sections.push({section, index, number: bar.number || index + 1});
+      previous = key;
     });
+    if(typeof SongStructure!=='undefined')sections=SongStructure.navigation(state.chart).map(item=>({section:item.name,index:item.index,number:state.chart.bars[item.index]?.number || item.index+1,start:item.start,end:item.end,id:item.id}));
     const signature = JSON.stringify(sections);
     if (nav.dataset.sections !== signature) {
       nav.replaceChildren();
-      for (const {section, index, number} of sections) {
+      for (const {section, index, number,start,end} of sections) {
         const button = document.createElement('button');
         button.type = 'button'; button.textContent = `${section} · ${number}`;
         button.dataset.index=String(index);
-        button.dataset.endIndex=String(sections.find(next=>next.index>index)?.index ?? state.chart.bars.length);
+        button.dataset.endIndex=String(end ?? sections.find(next=>next.index>index)?.index ?? state.chart.bars.length);
         button.addEventListener('click', () => {
-          selectBar(index, true);
+          selectBar(index,!Number.isFinite(start));
+          if(Number.isFinite(start)){elements.audioPlayer.currentTime=start/(Number(state.audioPreview?.tempoRate)||1);syncStemTimes({isSeek:true});}
           const target = elements.chartPreview.querySelector(`[data-index="${index}"]`)
             || elements.barsBody.querySelector(`[data-index="${index}"]`);
           target?.scrollIntoView({block: 'nearest', inline: 'nearest'});

@@ -17,6 +17,15 @@ import chordpilot_stems as stems
 
 
 class CacheTests(unittest.TestCase):
+    def test_long_algorithm_revisions_round_trip_without_windows_path_overflow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'analysis').mkdir();source=root/'song.wav';source.write_bytes(b'audio')
+            with patch.object(cache,'cache_root',return_value=root):
+                mode='fast-'+('algorithm-revision-'*20)
+                cache.write_analysis_cache(source,{'title':'Song','analysis_engine':{}},mode)
+                self.assertEqual(cache.read_analysis_cache(source,mode)['title'],'Song')
+                self.assertNotEqual(cache.analysis_cache_path(source,mode),cache.analysis_cache_path(source,mode+'next'))
+
     def test_cache_root_uses_configured_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             configured = Path(directory) / "persistent-cache"

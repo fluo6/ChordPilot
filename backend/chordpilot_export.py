@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from chordpilot_common import *
+from chordpilot_structure import project_sections
 from chordpilot_chords import parse_candidate_symbol
 
 def bar_chord_events(chart: dict[str, Any], index: int) -> list[dict[str, Any]]:
@@ -136,6 +137,7 @@ def export_chart(chart_path: str, format_name: str, output_path: str) -> dict[st
     return {"ok": True, "path": str(destination), "format": format_key}
 
 def render_txt(chart: dict[str, Any]) -> str:
+    project_sections(chart)
     lines = [
         chart.get("title", "Untitled"),
         f"Key: {chart.get('key', 'C')}  Tempo: {chart.get('tempo', 120)}  Time: {chart.get('time_signature', '4/4')}",
@@ -144,8 +146,9 @@ def render_txt(chart: dict[str, Any]) -> str:
     current_section = None
     for bar_index, bar in enumerate(chart.get("bars", [])):
         section = bar.get("section") or "Section"
-        if section != current_section:
-            current_section = section
+        section_id = bar.get('section_id') or section
+        if section_id != current_section:
+            current_section = section_id
             lines.extend(["", f"[{section}]"])
         repeat_start = "|:" if bar.get("repeat_start") else "|"
         repeat_end = f" x{bar.get('repeat_end')}" if bar.get("repeat_end") else ""
@@ -159,6 +162,7 @@ def render_txt(chart: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 def write_csv(chart: dict[str, Any], destination: Path) -> None:
+    project_sections(chart)
     has_timed_events = any(has_valid_stored_events(chart, index) for index, _ in enumerate(chart.get("bars", [])))
     fields = ["number", "section", "chord", "lyrics", "start"]
     if has_timed_events:
@@ -182,6 +186,7 @@ def write_csv(chart: dict[str, Any], destination: Path) -> None:
                 writer.writerow(row)
 
 def render_musicxml(chart: dict[str, Any]) -> str:
+    project_sections(chart)
     score = ET.Element("score-partwise", version="3.1")
     movement = ET.SubElement(score, "movement-title")
     movement.text = chart.get("title", "Untitled")
@@ -212,6 +217,10 @@ def render_musicxml(chart: dict[str, Any]) -> str:
             ET.SubElement(clef, "sign").text = "G"
             ET.SubElement(clef, "line").text = "2"
 
+        previous = chart['bars'][index-2] if index > 1 else {}
+        if bar.get('section') and (bar.get('section_id') or bar['section']) != (previous.get('section_id') or previous.get('section')):
+            direction = ET.SubElement(measure, 'direction', placement='above')
+            ET.SubElement(ET.SubElement(direction, 'direction-type'), 'rehearsal').text = bar['section']
         events = bar_chord_events(chart, index - 1)
         for event in events:
             harmony = chord_to_harmony(event["chord"])

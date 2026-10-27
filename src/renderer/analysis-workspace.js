@@ -83,7 +83,7 @@ function analysisDefaultTrackHeight() {
   });
   elements.analysisModeInput.addEventListener('change',()=>{mode.value=elements.analysisModeInput.value;});
   const groups=[
-    ['Sources & stems',[modeLabel,'chordSourceInput','demucsModelInput','useCacheInput'],false],
+    ['Sources & stems',[modeLabel,'chordSourceInput','demucsModelInput','useCacheInput','structureEnabledInput'],false],
     ['Timing & key',['rhythmEngineInput','analysisKeyInput','minBpmInput','maxBpmInput','beatOffsetInput','barPhaseInput','onsetFrameInput','onsetHopInput'],false],
     ['Chords & filtering',['chordTimingInput','chordGridInput','chordStabilityInput','alternativesInput','chromaLowInput','chromaHighInput','tailReductionInput','tailHalfLifeInput','overtoneWeightingInput','simplifyChordsInput'],false],
     ['Lyrics',['lyricsEnabledInput','lyricsSourceInput','lyricsModelInput','lyricsLanguageInput'],false]
