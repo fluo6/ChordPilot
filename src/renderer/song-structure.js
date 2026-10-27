@@ -91,7 +91,7 @@ const SongStructure = (() => {
     row.label = String(text); row.origin='manual'; delete row.evidence; project(chart); return true;
   }
   function setDetails(chart,id,{label:text,role,group}) {
-    const roles=['intro','verse','pre_chorus','chorus','post_chorus','bridge','solo','instrumental','breakdown','outro'];
+    const roles=['intro','verse','pre_chorus','chorus','post_chorus','bridge','interlude','solo','instrumental','breakdown','outro'];
     if(role && !roles.includes(role) || group && !/^[A-Z]{1,4}$/.test(group))return false;
     const row=manual(chart)?.find(row=>row.id===id);if(!row)return false;
     row.label=String(text || '');row.role=role || null;row.group=group || null;row.origin='manual';delete row.evidence;

@@ -209,6 +209,13 @@ for track in data['tracks']:
         'provenance':'Audio-derived role refinement using original model scores and ordered SSL recurrence. '
                      'No supplied sequence, title rules or reference timestamps in inference. '
                      'Full-mix similarity does not isolate lead-vocal melody. Original predictions and sessions preserved.'})
+# Additional recordings extend the listening page without changing frozen cohorts.
+additional=ROOT/'outputs/song-structure/additional-song-candidates/review-tracks.json'
+if additional.exists():
+    for track in json.loads(additional.read_text(encoding='utf-8'))['tracks']:
+        assert track['id'] not in {t['id'] for t in data['tracks']}
+        data['tracks'].append(track)
+
 template=template.replace('audio.load();render();history',
     "audio.load();const requestedMethod=new URLSearchParams(location.search).get('method');"
     "if(track.variants.some(v=>v.id===requestedMethod))el('method').value=requestedMethod;render();history")

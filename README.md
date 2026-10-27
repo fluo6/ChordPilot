@@ -34,6 +34,12 @@ having different names. Existing per-bar Section edits still apply to that
 bar's time range. Automatic evidence stays separate from manual corrections;
 **Use detected sections** explicitly switches back to the estimate.
 
+In **Bar detail → Bar Settings → Song structure**, the **Section name** menu
+applies immediately to the selected occurrence. Choose **Interlude** for a
+connecting passage, or retain **Instrumental** as a broader description. Save
+the session to keep your choice; the detected evidence remains available for
+reset. Free-text names use **Mixed roles, groups and custom names**.
+
 Sections are saved as source-time intervals in `chart.structure`. Legacy section
 names are retained when opening old sessions. Reanalysis preserves same-source
 edits, and changing the bar grid marks the automatic timing basis stale.

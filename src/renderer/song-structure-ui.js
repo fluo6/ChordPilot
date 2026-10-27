@@ -29,6 +29,17 @@ async function refreshSongStructure() {
   }
 }
 
+function setSelectedSongSectionRole(role) {
+  const chart=state.chart,form=document.getElementById('songStructureForm');
+  if(!form || form._chart!==chart || form._id!==chart?.bars?.[state.selectedIndex]?.section_id
+    || state.isAnalyzing || state.drumBusy || state.melodyBusy || state.study?.busy)return false;
+  const row=SongStructure.segments(chart).find(item=>item.id===form._id);
+  if(!row || !SongStructure.setDetails(chart,row.id,{label:'',role,group:row.group}))return false;
+  SongStructure.setDisplayMode(chart,'roles');
+  document.getElementById('songSectionName').value='';
+  renderBars();return true;
+}
+
 function setupSongStructureControls() {
   const host=elements.detailSectionInput?.closest('.detail-section-content') || elements.detailSectionInput?.closest('label')?.parentElement;
   if(!host || document.getElementById('songStructureControls'))return;
@@ -46,16 +57,19 @@ function setupSongStructureControls() {
   const status=node('p');status.id='songStructureStatus';status.setAttribute('aria-live','polite');panel.append(status);
   const form=node('form');form.id='songStructureForm';
   const name=node('input');name.id='songSectionName';name.type='text';name.maxLength=160;
-  const nameLabel=node('label','Name this section');nameLabel.append(name);
+  const nameLabel=node('label','Custom name (mixed naming)');nameLabel.append(name);
   const role=node('select');role.id='songSectionRole';
-  for(const value of ['', 'intro','verse','pre_chorus','chorus','post_chorus','bridge','solo','instrumental','breakdown','outro']){
+  for(const value of ['', 'intro','verse','pre_chorus','chorus','post_chorus','bridge','interlude','solo','instrumental','breakdown','outro']){
     const option=node('option',value ? value.replace(/_/g,' ').replace(/^./,c=>c.toUpperCase()) : 'Unknown');option.value=value;role.append(option);
   }
-  const roleLabel=node('label','Musical role');roleLabel.append(role);
+  const roleLabel=node('label','Section name');roleLabel.append(role);
+  role.title='Applies immediately to this section. Saved with the session; Use detected sections restores the estimates.';
+  role.addEventListener('change',()=>setSelectedSongSectionRole(role.value));
+  panel.append(roleLabel);
   const group=node('input');group.id='songSectionGroup';group.type='text';group.maxLength=4;group.pattern='[A-Za-z]{1,4}';
   group.title='Repeated group, such as A or B. Leave blank for unknown.';
   const groupLabel=node('label','Repeated group');groupLabel.append(group);
-  const apply=node('button','Apply to this section');apply.type='submit';form.append(nameLabel,roleLabel,groupLabel,apply);
+  const apply=node('button','Apply to this section');apply.type='submit';form.append(nameLabel,groupLabel,apply);
   form.addEventListener('submit',event=>{
     event.preventDefault();if(form._chart!==state.chart || form._id!==state.chart?.bars[state.selectedIndex]?.section_id)return;
     if(SongStructure.setDetails(state.chart,form._id,{label:name.value,role:role.value,group:group.value.trim().toUpperCase()}))renderBars();
@@ -80,6 +94,7 @@ function renderSongStructureControls() {
   const row=rows.find(item=>item.id===bar?.section_id),busy=state.isAnalyzing||state.drumBusy||state.melodyBusy||state.study?.busy;
   const form=document.getElementById('songStructureForm');
   panel.disabled=Boolean(busy);form.hidden=!row;
+  document.getElementById('songSectionRole').disabled=!row || Boolean(busy);
   const analysis=chart?.structure?.version===1 ? chart.structure.analysis : null;
   const evidence=row?.evidence;
   const score=evidence?.repeat_score;

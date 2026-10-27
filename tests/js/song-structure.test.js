@@ -226,3 +226,38 @@ test('structure-only refresh preserves the current naming choice without creatin
   assert.deepEqual(c.bars.map(b=>b.section),['A','B']);
   assert.equal(c.structure.manual_segments,null);
 });
+
+test('an Interlude edit survives reopening and resetting restores the detected Instrumental',()=>{
+  const s=api(),c=detectedChart();c.structure.analysis.segments[0].role='instrumental';
+  c.structure.analysis.raw_segments=[{label:'inst',start:0,end:4}];
+  const original=JSON.stringify(c.structure.analysis);
+  s.setDisplayMode(c,'roles');
+  assert.equal(s.setDetails(c,'a',{label:'',role:'interlude',group:'A'}),true);
+  assert.equal(c.bars[0].section,'Interlude');
+  const saved=JSON.parse(JSON.stringify(c));s.ensure(saved);
+  assert.equal(saved.bars[0].section,'Interlude');
+  assert.equal(JSON.stringify(saved.structure.analysis),original);
+  s.useDetected(saved);
+  assert.equal(saved.bars[0].section,'Instrumental');
+  assert.equal(saved.structure.manual_segments,null);
+});
+
+test('the section-name menu applies only to the selected occurrence and rejects stale or busy edits',()=>{
+  const s=api(),c=detectedChart();s.project(c);
+  const original=JSON.stringify(c.structure.analysis);
+  const state={chart:c,selectedIndex:0},form={_chart:c,_id:'a'},name={value:'Old custom name'};
+  let renders=0;
+  const {setSelectedSongSectionRole}=loadScript('src/renderer/song-structure-ui.js',['setSelectedSongSectionRole'],{
+    SongStructure:s,state,document:{getElementById:id=>id==='songStructureForm'?form:id==='songSectionName'?name:null},
+    renderBars:()=>renders++});
+  assert.equal(typeof setSelectedSongSectionRole,'function');
+  assert.equal(setSelectedSongSectionRole('interlude'),true);
+  assert.equal(c.bars[0].section,'Interlude');assert.equal(name.value,'');assert.equal(renders,1);
+  assert.equal(s.segments(c)[1].role,null);assert.equal(JSON.stringify(c.structure.analysis),original);
+  const after=JSON.stringify(c);state.selectedIndex=1;
+  assert.equal(setSelectedSongSectionRole('chorus'),false);assert.equal(JSON.stringify(c),after);
+  state.selectedIndex=0;state.isAnalyzing=true;
+  assert.equal(setSelectedSongSectionRole('chorus'),false);assert.equal(JSON.stringify(c),after);
+  state.isAnalyzing=false;form._chart=detectedChart();
+  assert.equal(setSelectedSongSectionRole('chorus'),false);assert.equal(JSON.stringify(c),after);
+});
